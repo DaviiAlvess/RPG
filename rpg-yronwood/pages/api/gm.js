@@ -3,9 +3,12 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
-  // ATENÇÃO: Evite deixar sua chave exposta diretamente no código se for subir para o GitHub!
-  // O ideal é usar apenas process.env.GEMINI_KEY
-  const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyBkpkyOUhCrNp1b7EMOuRIHk7iWzQCptWw";
+  // A chave agora é puxada SOMENTE da variável de ambiente da Vercel
+  const GEMINI_KEY = process.env.GEMINI_KEY;
+
+  if (!GEMINI_KEY) {
+    return res.status(500).json({ error: "Chave da API não configurada no servidor." });
+  }
 
   try {
     const contents = messages.map((m) => ({
@@ -13,9 +16,9 @@ export default async function handler(req, res) {
       parts: [{ text: m.content }],
     }));
 
-    // AQUI ESTÁ A MUDANÇA: gemini-1.5-flash em vez de gemini-pro
+    // Alterado para o modelo atualizado e ativo (2.5-flash)
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     } catch (error1) {
       console.warn("Falha na Chave 1:", error1.message, "-> Tentando a Chave 2...");
       
-      // TENTATIVA 2 (Se a 1 falhar)
+      
       text = await attemptFetch(GEMINI_KEY_2);
     }
 

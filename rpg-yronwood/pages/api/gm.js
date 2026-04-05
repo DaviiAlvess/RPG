@@ -3,11 +3,14 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
+ 
   const chavesDisponiveis = [
     process.env.GEMINI_KEY_1,
     process.env.GEMINI_KEY_2,
     process.env.GEMINI_KEY_3,
-    process.env.GEMINI_KEY_4
+    process.env.GEMINI_KEY_4,
+    process.env.GEMINI_KEY_5, // Quinta chave
+    process.env.GEMINI_KEY_6  // Sexta chave
   ].filter(Boolean);
 
   if (chavesDisponiveis.length === 0) {

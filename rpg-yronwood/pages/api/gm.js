@@ -3,11 +3,14 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
-  // 1. Pega as duas chaves das variáveis de ambiente
-  const GEMINI_KEY_1 = process.env.GEMINI_KEY_1;
-  const GEMINI_KEY_2 = process.env.GEMINI_KEY_2;
+  const chavesDisponiveis = [
+    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_2,
+    process.env.GEMINI_KEY_3,
+    process.env.GEMINI_KEY_4
+  ].filter(Boolean);
 
-  if (!GEMINI_KEY_1 && !GEMINI_KEY_2) {
+  if (chavesDisponiveis.length === 0) {
     return res.status(500).json({ error: "Nenhuma chave de API configurada no servidor." });
   }
 
@@ -25,10 +28,8 @@ export default async function handler(req, res) {
     }
   });
 
-  // 2. Função isolada para tentar fazer a requisição com uma chave específica
+  // 2. Função que faz a tentativa
   const attemptFetch = async (key) => {
-    if (!key) throw new Error("Chave ausente");
-    
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
       {
@@ -40,38 +41,38 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    if (data.error) {
-      // Força um erro para que o try/catch principal consiga interceptar e pular para a próxima chave
-      throw new Error(data.error.message);
-    }
-
-    if (!data.candidates || !data.candidates[0]) {
-      throw new Error("Sem resposta do Gemini.");
-    }
+    if (data.error) throw new Error(data.error.message);
+    if (!data.candidates || !data.candidates[0]) throw new Error("Sem resposta do Gemini.");
 
     return data.candidates[0].content.parts[0].text;
   };
 
-  // 3. Sistema de Fallback (Rotação de Chaves)
+  // 3. Sistema de Rotação Automática (Iterando sobre o Array)
   try {
-    let text;
-    
-    try {
-      // TENTATIVA 1
-      text = await attemptFetch(GEMINI_KEY_1);
-    } catch (error1) {
-      console.warn("Falha na Chave 1:", error1.message, "-> Tentando a Chave 2...");
-      
-      
-      text = await attemptFetch(GEMINI_KEY_2);
+    let text = null;
+    let lastError = null;
+
+    // O código vai testar chave por chave...
+    for (let i = 0; i < chavesDisponiveis.length; i++) {
+      try {
+        text = await attemptFetch(chavesDisponiveis[i]);
+        // Se deu certo, ele para o loop na mesma hora e segue o jogo!
+        break; 
+      } catch (error) {
+        console.warn(`Falha na Chave ${i + 1}: ${error.message}. Tentando a próxima...`);
+        lastError = error;
+      }
     }
 
-    // Se chegou aqui, uma das duas funcionou
+    // Se o loop terminou e o 'text' ainda é nulo, significa que TODAS as chaves falharam.
+    if (!text) {
+      throw lastError || new Error("Todas as chaves falharam.");
+    }
+
     res.status(200).json({ text });
     
   } catch (finalError) {
-    // Se a TENTATIVA 2 também falhar, o erro é finalmente enviado para o jogador ver
-    console.error("Erro em ambas as chaves:", finalError.message);
+    console.error("Erro geral da API:", finalError.message);
     res.status(500).json({ error: finalError.message });
   }
 }

@@ -3,8 +3,7 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
-  const GEMINI_KEY = process.env.GEMINI_KEY;
-  if (!GEMINI_KEY) return res.status(500).json({ error: "Chave não configurada no servidor." });
+  const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyBkpkyOUhCrNp1b7EMOuRIHk7iWzQCptWw";
 
   try {
     const contents = messages.map((m) => ({
@@ -13,7 +12,7 @@ export default async function handler(req, res) {
     }));
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -29,7 +28,7 @@ export default async function handler(req, res) {
     );
 
     const data = await response.json();
-    
+
     if (data.error) {
       console.error("Gemini error:", JSON.stringify(data.error));
       return res.status(500).json({ error: data.error.message });

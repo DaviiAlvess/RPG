@@ -13,23 +13,37 @@ export default async function handler(req, res) {
     }));
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
+          generationConfig: {
+            maxOutputTokens: 1000,
+            temperature: 0.9,
+          }
         }),
       }
     );
 
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    
+    if (data.error) {
+      console.error("Gemini error:", JSON.stringify(data.error));
+      return res.status(500).json({ error: data.error.message });
+    }
+
+    if (!data.candidates || !data.candidates[0]) {
+      console.error("No candidates:", JSON.stringify(data));
+      return res.status(500).json({ error: "Sem resposta do Gemini." });
+    }
 
     const text = data.candidates[0].content.parts[0].text;
     res.status(200).json({ text });
   } catch (e) {
+    console.error("Handler error:", e.message);
     res.status(500).json({ error: e.message });
   }
 }

@@ -3,6 +3,8 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
+  // ATENÇÃO: Evite deixar sua chave exposta diretamente no código se for subir para o GitHub!
+  // O ideal é usar apenas process.env.GEMINI_KEY
   const GEMINI_KEY = process.env.GEMINI_KEY || "AIzaSyBkpkyOUhCrNp1b7EMOuRIHk7iWzQCptWw";
 
   try {
@@ -11,8 +13,9 @@ export default async function handler(req, res) {
       parts: [{ text: m.content }],
     }));
 
+    // AQUI ESTÁ A MUDANÇA: gemini-1.5-flash em vez de gemini-pro
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },

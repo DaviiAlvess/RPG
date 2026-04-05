@@ -3,12 +3,8 @@ export default async function handler(req, res) {
 
   const { messages, systemPrompt } = req.body;
 
-  // A chave agora é puxada SOMENTE da variável de ambiente da Vercel
   const GEMINI_KEY = process.env.GEMINI_KEY;
-
-  if (!GEMINI_KEY) {
-    return res.status(500).json({ error: "Chave da API não configurada no servidor." });
-  }
+  if (!GEMINI_KEY) return res.status(500).json({ error: "Chave não configurada no servidor." });
 
   try {
     const contents = messages.map((m) => ({
@@ -16,39 +12,24 @@ export default async function handler(req, res) {
       parts: [{ text: m.content }],
     }));
 
-    // Alterado para o modelo atualizado e ativo (2.5-flash)
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents,
-          generationConfig: {
-            maxOutputTokens: 1000,
-            temperature: 0.9,
-          }
         }),
       }
     );
 
     const data = await response.json();
-
-    if (data.error) {
-      console.error("Gemini error:", JSON.stringify(data.error));
-      return res.status(500).json({ error: data.error.message });
-    }
-
-    if (!data.candidates || !data.candidates[0]) {
-      console.error("No candidates:", JSON.stringify(data));
-      return res.status(500).json({ error: "Sem resposta do Gemini." });
-    }
+    if (data.error) return res.status(500).json({ error: data.error.message });
 
     const text = data.candidates[0].content.parts[0].text;
     res.status(200).json({ text });
   } catch (e) {
-    console.error("Handler error:", e.message);
     res.status(500).json({ error: e.message });
   }
 }

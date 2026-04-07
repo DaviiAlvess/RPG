@@ -114,25 +114,23 @@ export default function RPG() {
 
   // Auto mode
   const [autoMode, setAutoMode]         = useState(false);
-  const [autoWaiting, setAutoWaiting]   = useState(false); // aguardando intervenção
-  const [pendingOptions, setPending]    = useState([]);    // opções da última resposta
-  const [autoDelay, setAutoDelay]       = useState(3);     // segundos entre turnos
+  const [autoWaiting, setAutoWaiting]   = useState(false); 
+  const [pendingOptions, setPending]    = useState([]);    
+  const [autoDelay, setAutoDelay]       = useState(3);     
   const [countdown, setCountdown]       = useState(0);
 
   const bottomRef  = useRef(null);
   const taRef      = useRef(null);
   const sending    = useRef(false);
-  const autoRef    = useRef(false);        // ref síncrona do autoMode
+  const autoRef    = useRef(false);        
   const timerRef   = useRef(null);
   const cdRef      = useRef(null);
 
   useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
 
-  // Mantém ref sincronizada com estado
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
 
-  // Cleanup ao sair da tela de jogo
   useEffect(() => {
     if (view !== "play") { clearAuto(); }
   }, [view]);
@@ -177,7 +175,6 @@ export default function RPG() {
     timerRef.current = setTimeout(() => {
       setAutoWaiting(false);
       if (!autoRef.current) return;
-      // Escolhe opção aleatória entre as 3
       const chosen = options[Math.floor(Math.random() * options.length)];
       sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
     }, autoDelay * 1000);
@@ -285,7 +282,6 @@ export default function RPG() {
 
       setPending(options);
 
-      // Se modo auto ativo, agenda próximo turno
       if (autoRef.current && options.length > 0) {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
       }
@@ -300,12 +296,6 @@ export default function RPG() {
     if (!input.trim() || sending.current || !active) return;
     clearAuto();
     sendMsg(input, msgs, disp, active, campLore, false);
-  };
-
-  const handleOptionClick = (opt) => {
-    if (sending.current || !active) return;
-    clearAuto();
-    sendMsg(opt, msgs, disp, active, campLore, false);
   };
 
   const resetChat = () => {
@@ -346,8 +336,7 @@ export default function RPG() {
       <div className="hfoot">
         <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
       </div>
-      <style jsx global>{GST}</style>
-      <style jsx>{HOME_ST}</style>
+      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST }} />
     </div>
   );
 
@@ -431,8 +420,7 @@ export default function RPG() {
         </>}
       </div>
 
-      <style jsx global>{GST}</style>
-      <style jsx>{CREATE_ST}</style>
+      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST }} />
     </div>
   );
 
@@ -552,8 +540,7 @@ export default function RPG() {
         >⚔</button>
       </div>
 
-      <style jsx global>{GST}</style>
-      <style jsx>{PLAY_ST}</style>
+      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST }} />
     </div>
   );
 }

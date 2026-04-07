@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
   const m = text.match(/IMAGE_PROMPT:\s*(.+)/i);
   return m ? m[1].trim() : null;
+};
+const extractOptions = (text) => {
+  const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
+  return matches.slice(-3).map(m => m[2].trim());
 };
 const cleanText = (t) => t.replace(/IMAGE_PROMPT:\s*.+/gi, "").trim();
 const generateImage = (prompt, world) => {
@@ -14,7 +18,7 @@ const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
 
-// ─── Aparência — opções ───────────────────────────────────────────────
+// ─── Aparência ────────────────────────────────────────────────────────
 const APP_OPTIONS = {
   body:      ["Magro",       "Atlético",   "Médio",        "Robusto",    "Gordo"],
   height:    ["Muito baixo", "Baixo",      "Médio",        "Alto",       "Muito alto"],
@@ -35,7 +39,6 @@ const APP_LABELS = {
 const DEFAULT_APP = Object.fromEntries(Object.keys(APP_OPTIONS).map((k) => [k, APP_OPTIONS[k][2]]));
 const HAIR_COLORS = { "Preto": "#0a0a0a", "Castanho": "#5c3317", "Loiro": "#c8a84b", "Ruivo": "#8b2500", "Branco/Grisalho": "#a0a0a0" };
 const EYE_COLORS  = { "Castanhos": "#5c3317", "Verdes": "#2d6a4f", "Azuis": "#1a4a7a", "Cinzas": "#607080", "Pretos": "#0a0a14" };
-
 const buildAppearance = (a) =>
   `Aparência: corpo ${a.body?.toLowerCase()}, estatura ${a.height?.toLowerCase()}, pele ${a.skin?.toLowerCase()}, cabelo ${a.hairLen?.toLowerCase()} ${a.hairColor?.toLowerCase()} ${a.hairStyle?.toLowerCase()}, olhos ${a.eyeColor?.toLowerCase()} ${a.eyeShape?.toLowerCase()}, rosto ${a.face?.toLowerCase()}${a.extras && a.extras !== "Nenhum" ? `, marca especial: ${a.extras?.toLowerCase()}` : ""}.`;
 
@@ -63,18 +66,18 @@ const buildPrompt = (c, loreExtra) =>
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
     ``,
     `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
-    c.charAge       ? `Idade: ${c.charAge} anos.`          : "",
-    c.charBg        ? `História: ${c.charBg}`              : "",
-    c.charPersonality ? `Personalidade: ${c.charPersonality}` : "",
-    c.charSkills    ? `Habilidades: ${c.charSkills}`       : "",
-    c.appearance    ? buildAppearance(c.appearance)        : "",
+    c.charAge         ? `Idade: ${c.charAge} anos.`             : "",
+    c.charBg          ? `História: ${c.charBg}`                 : "",
+    c.charPersonality ? `Personalidade: ${c.charPersonality}`   : "",
+    c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
+    c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
     `REGRAS ABSOLUTAS:`,
     `- Narre SEMPRE em português brasileiro, com linguagem épica e cinematográfica`,
     `- Crie tensão dramática real — escolhas têm consequências permanentes`,
     `- Descreva cenários com riqueza sensorial: sons, cheiros, texturas, clima`,
     `- Respeite rigorosamente o lore, personagens, poderes e eventos do universo`,
-    `- No final de CADA resposta, ofereça exatamente 3 opções numeradas de ação`,
+    `- No final de CADA resposta, ofereça exatamente 3 opções numeradas de ação (formato: "1. opção")`,
     c.useImages
       ? `- Ao final de cada cena: IMAGE_PROMPT: [prompt em inglês, cinematográfico, foco em cenário/atmosfera, sem nomes, no text]`
       : `- NÃO inclua IMAGE_PROMPT nas respostas`,
@@ -82,16 +85,16 @@ const buildPrompt = (c, loreExtra) =>
   ].filter(Boolean).join("\n");
 
 // ─── Storage ──────────────────────────────────────────────────────────
-const IDX_KEY = "rpg-idx-v3"; // mantido para preservar campanhas antigas
+const IDX_KEY = "rpg-idx-v3";
 const campKey = (id) => `rpg-camp-${id}`;
 
 // ═════════════════════════════════════════════════════════════════════
 export default function RPG() {
-  const [view, setView]       = useState("home");
-  const [idx, setIdx]         = useState([]);
-  const [active, setActive]   = useState(null);
-  const [step, setStep]       = useState(0);
-  const [form, setForm]       = useState({
+  const [view, setView]     = useState("home");
+  const [idx, setIdx]       = useState([]);
+  const [active, setActive] = useState(null);
+  const [step, setStep]     = useState(0);
+  const [form, setForm]     = useState({
     world: "", worldBg: "", isKnownIP: false,
     charName: "", charTitle: "", charAge: "",
     charBg: "", charPersonality: "", charSkills: "",
@@ -99,52 +102,113 @@ export default function RPG() {
   });
 
   // Play
-  const [msgs, setMsgs]           = useState([]);
-  const [disp, setDisp]           = useState([]);
-  const [input, setInput]         = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [statusText, setStatus]   = useState("");
-  const [sceneImg, setSceneImg]   = useState(null);
-  const [imgOk, setImgOk]         = useState(false);
-  const [showChar, setShowChar]   = useState(false);
-  const [campLore, setCampLore]   = useState("");
+  const [msgs, setMsgs]         = useState([]);
+  const [disp, setDisp]         = useState([]);
+  const [input, setInput]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [statusText, setStatus] = useState("");
+  const [sceneImg, setSceneImg] = useState(null);
+  const [imgOk, setImgOk]       = useState(false);
+  const [showChar, setShowChar] = useState(false);
+  const [campLore, setCampLore] = useState("");
 
-  const bottomRef = useRef(null);
-  const taRef     = useRef(null);
-  const sending   = useRef(false);
+  // Auto mode
+  const [autoMode, setAutoMode]         = useState(false);
+  const [autoWaiting, setAutoWaiting]   = useState(false); // aguardando intervenção
+  const [pendingOptions, setPending]    = useState([]);    // opções da última resposta
+  const [autoDelay, setAutoDelay]       = useState(3);     // segundos entre turnos
+  const [countdown, setCountdown]       = useState(0);
 
+  const bottomRef  = useRef(null);
+  const taRef      = useRef(null);
+  const sending    = useRef(false);
+  const autoRef    = useRef(false);        // ref síncrona do autoMode
+  const timerRef   = useRef(null);
+  const cdRef      = useRef(null);
+
+  useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
+
+  // Mantém ref sincronizada com estado
+  useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
+
+  // Cleanup ao sair da tela de jogo
   useEffect(() => {
-    try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {}
-  }, []);
+    if (view !== "play") { clearAuto(); }
+  }, [view]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [disp, loading]);
-
-  // ─── Storage helpers ──────────────────────────────────────────────
+  // ─── Storage ─────────────────────────────────────────────────────────
   const saveIdx  = (l) => { try { localStorage.setItem(IDX_KEY, JSON.stringify(l)); } catch {} };
   const saveCamp = (id, d) => { try { localStorage.setItem(campKey(id), JSON.stringify(d)); } catch {} };
   const readCamp = (id) => { try { return JSON.parse(localStorage.getItem(campKey(id))); } catch { return null; } };
 
-  // ─── Lore fetch ───────────────────────────────────────────────────
+  // ─── Lore fetch ───────────────────────────────────────────────────────
   const fetchLore = async (world) => {
     try {
       const res = await fetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ useLoreSearch: true, world }),
       });
-      const data = await res.json();
-      return data.lore || "";
+      return (await res.json()).lore || "";
     } catch { return ""; }
   };
 
-  // ─── Home ─────────────────────────────────────────────────────────
+  // ─── Auto mode helpers ────────────────────────────────────────────────
+  const clearAuto = () => {
+    clearTimeout(timerRef.current);
+    clearInterval(cdRef.current);
+    setCountdown(0);
+    setAutoWaiting(false);
+  };
+
+  const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
+    if (!autoRef.current || !options.length) return;
+
+    setAutoWaiting(true);
+    setCountdown(autoDelay);
+
+    cdRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(cdRef.current); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+
+    timerRef.current = setTimeout(() => {
+      setAutoWaiting(false);
+      if (!autoRef.current) return;
+      // Escolhe opção aleatória entre as 3
+      const chosen = options[Math.floor(Math.random() * options.length)];
+      sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
+    }, autoDelay * 1000);
+  }, [autoDelay]);
+
+  const toggleAuto = () => {
+    const next = !autoMode;
+    setAutoMode(next);
+    autoRef.current = next;
+    if (!next) {
+      clearAuto();
+    }
+  };
+
+  const intervene = () => {
+    clearAuto();
+    setAutoMode(false);
+    autoRef.current = false;
+    setAutoWaiting(false);
+    setPending([]);
+  };
+
+  // ─── Home ─────────────────────────────────────────────────────────────
   const openCamp = (s) => {
     const data = readCamp(s.id);
     if (!data) return;
     setActive(data); setMsgs(data.msgs || []); setDisp(data.disp || []);
     setSceneImg(data.img || null); setImgOk(!!data.img);
-    setCampLore(data.lore || ""); setShowChar(false); setView("play");
+    setCampLore(data.lore || ""); setShowChar(false);
+    setAutoMode(false); setAutoWaiting(false); setPending([]);
+    setView("play");
     if (!data.msgs?.length) doStart(data, data.lore || "");
   };
 
@@ -156,7 +220,7 @@ export default function RPG() {
     try { localStorage.removeItem(campKey(id)); } catch {}
   };
 
-  // ─── Create ───────────────────────────────────────────────────────
+  // ─── Create ───────────────────────────────────────────────────────────
   const startCreate = () => {
     setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true });
     setStep(0); setView("create");
@@ -166,34 +230,35 @@ export default function RPG() {
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     let lore = "";
-    if (form.isKnownIP) {
-      setStatus("🔍 Buscando lore oficial de " + form.world + "...");
-      lore = await fetchLore(form.world);
-    } else {
-      setStatus("⚗️ Preparando mundo...");
-    }
+    if (form.isKnownIP) { setStatus("🔍 Buscando lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
+    else { setStatus("⚗️ Preparando mundo..."); }
     const id = uid();
     const camp = { id, ...form, lore, msgs: [], disp: [], img: null, createdAt: Date.now() };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
     setIdx(next); saveIdx(next); saveCamp(id, camp);
     setActive(camp); setCampLore(lore); setShowChar(false);
+    setAutoMode(false); setAutoWaiting(false); setPending([]);
     setLoading(false); doStart(camp, lore);
   };
 
-  // ─── Game ─────────────────────────────────────────────────────────
+  // ─── Game ─────────────────────────────────────────────────────────────
   const doStart = (camp, lore) => sendMsg(
     `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro desafio ou dilema que o personagem enfrenta.`,
-    [], [], camp, lore
+    [], [], camp, lore, false
   );
 
-  const sendMsg = async (text, baseMsgs, baseDisp, camp, lore) => {
+  const sendMsg = async (text, baseMsgs, baseDisp, camp, lore, isAuto = false) => {
     if (!text.trim() || sending.current) return;
-    sending.current = true; setLoading(true); setStatus("✦ O MESTRE TECE O DESTINO ✦");
+    sending.current = true;
+    setLoading(true);
+    setStatus(isAuto ? "⚡ MODO AUTO — MESTRE NARRANDO ✦" : "✦ O MESTRE TECE O DESTINO ✦");
     setInput(""); taRef.current?.blur();
+
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
-    const newDisp = [...baseDisp, { type: "user", text }];
+    const newDisp = [...baseDisp, { type: isAuto ? "auto" : "user", text }];
     setMsgs(newMsgs); setDisp(newDisp);
+
     try {
       const res = await fetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -201,29 +266,53 @@ export default function RPG() {
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
+
       const raw = data.text;
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
+      const options = extractOptions(clean);
+
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
       setMsgs(finalMsgs); setDisp(finalDisp);
+
       let newImg = camp.img || null;
       if (imgPrompt) { setImgOk(false); newImg = generateImage(imgPrompt, camp.world); setSceneImg(newImg); }
+
       const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, updatedAt: Date.now() };
       setActive(updated); saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
+
+      setPending(options);
+
+      // Se modo auto ativo, agenda próximo turno
+      if (autoRef.current && options.length > 0) {
+        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
+      }
     } catch {
       setDisp((prev) => [...prev, { type: "error", text: "Erro ao contatar o Mestre. Tente novamente." }]);
     }
+
     sending.current = false; setLoading(false); setStatus("");
   };
 
-  const handleSend = () => { if (!input.trim() || sending.current || !active) return; sendMsg(input, msgs, disp, active, campLore); };
+  const handleSend = () => {
+    if (!input.trim() || sending.current || !active) return;
+    clearAuto();
+    sendMsg(input, msgs, disp, active, campLore, false);
+  };
+
+  const handleOptionClick = (opt) => {
+    if (sending.current || !active) return;
+    clearAuto();
+    sendMsg(opt, msgs, disp, active, campLore, false);
+  };
 
   const resetChat = () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
+    clearAuto(); setAutoMode(false); autoRef.current = false;
     const updated = { ...active, msgs: [], disp: [], img: null };
-    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
+    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null); setPending([]);
     saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
@@ -258,24 +347,7 @@ export default function RPG() {
         <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
       </div>
       <style jsx global>{GST}</style>
-      <style jsx>{`
-        .root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto}
-        .hh{text-align:center;padding:40px 20px 20px;border-bottom:1px solid #180e00;flex-shrink:0}
-        .hh-icon{font-size:28px;margin-bottom:10px}
-        .hh-title{font-size:19px;font-weight:bold;color:#d4a843;letter-spacing:6px}
-        .hh-sub{font-size:8px;letter-spacing:5px;color:#2c1900;margin-top:6px}
-        .list{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
-        .empty{text-align:center;padding-top:60px}
-        .e-icon{font-size:44px;margin-bottom:14px;opacity:.25}
-        .e-txt{color:#2c1900;font-size:13px;line-height:2.4}
-        .card{display:flex;align-items:center;background:linear-gradient(135deg,#0c0700,#100900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px 12px 14px 16px;cursor:pointer;gap:10px;-webkit-tap-highlight-color:transparent}
-        .c-world{font-size:14px;color:#c4a060;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
-        .c-char{font-size:11px;color:#6b4a1a}
-        .c-date{font-size:9px;color:#2c1900;margin-top:3px;letter-spacing:1px}
-        .c-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:10px;flex-shrink:0}
-        .hfoot{flex-shrink:0;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom));border-top:1px solid #180e00}
-        .btn-new{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit}
-      `}</style>
+      <style jsx>{HOME_ST}</style>
     </div>
   );
 
@@ -298,7 +370,6 @@ export default function RPG() {
       </div>
 
       <div className="cr-body">
-        {/* ── Passo 0: Mundo ── */}
         {step === 0 && <>
           <div className="cr-lbl">PASSO 1 — O MUNDO</div>
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
@@ -315,7 +386,6 @@ export default function RPG() {
           <button className="btn-next" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>PRÓXIMO →</button>
         </>}
 
-        {/* ── Passo 1: Personagem ── */}
         {step === 1 && <>
           <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
           <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder="ex: Naruto, V, Geralt..." />
@@ -327,7 +397,6 @@ export default function RPG() {
           <button className="btn-next" disabled={!form.charName.trim()} onClick={() => setStep(2)}>PRÓXIMO →</button>
         </>}
 
-        {/* ── Passo 2: Aparência ── */}
         {step === 2 && <>
           <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
           <div className="app-preview">
@@ -363,37 +432,7 @@ export default function RPG() {
       </div>
 
       <style jsx global>{GST}</style>
-      <style jsx>{`
-        .root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto}
-        .cr-head{display:flex;align-items:center;justify-content:space-between;padding:14px 12px;border-bottom:1px solid #180e00;flex-shrink:0}
-        .btn-back{background:transparent;border:1px solid #180e00;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit}
-        .cr-steps{display:flex;align-items:center}
-        .cr-dot{width:8px;height:8px;border-radius:50%;background:#180e00;border:1px solid #2a1800;transition:all .3s;display:inline-block}
-        .cr-dot.on{background:#8b5a14;border-color:#d4a843}
-        .cr-ln{width:22px;height:1px;background:#180e00;display:inline-block}
-        .btn-pres{background:transparent;border:1px solid #2a1800;border-radius:4px;color:#8b5a14;font-size:9px;padding:6px 10px;cursor:pointer;font-family:inherit}
-        .cr-body{flex:1;overflow-y:auto;padding:20px 14px 20px;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
-        .cr-lbl{font-size:9px;letter-spacing:5px;color:#4a2c00;margin-bottom:18px;text-align:center}
-        .ip-hint{background:#0c0700;border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:12px;font-size:11px;color:#6b4a1a;line-height:1.8;margin-bottom:12px}
-        .ip-hint strong{color:#c4a060}
-        .btn-next{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit;margin-top:10px;flex-shrink:0}
-        .btn-next:disabled{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
-        .app-preview{display:flex;gap:12px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;margin-bottom:16px;align-items:flex-start}
-        .app-avatar{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
-        .av-hair{width:40px;height:10px;border-radius:4px 4px 0 0}
-        .av-body{width:40px;height:48px;background:#1a0e00;border:1px solid #2a1800;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#4a2c00;font-weight:bold}
-        .av-eyes{display:flex;gap:6px;margin-top:6px}
-        .av-eye{width:10px;height:7px;border-radius:50%;border:1px solid #0a0600}
-        .app-summary{flex:1;display:flex;flex-direction:column;gap:1px}
-        .app-sum-row{display:flex;justify-content:space-between;font-size:10px;line-height:1.8}
-        .app-sum-key{color:#2c1900}
-        .app-sum-val{color:#8b5a14}
-        .app-section{margin-bottom:14px}
-        .app-section-label{font-size:9px;letter-spacing:2px;color:#4a2c00;text-transform:uppercase;margin-bottom:7px}
-        .chips{display:flex;flex-wrap:wrap;gap:6px}
-        .chip{background:#0a0600;border:1px solid #180e00;border-radius:16px;color:#3a2410;font-size:11px;padding:5px 12px;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:all .15s}
-        .chip.on{background:#2a0d00;border-color:#8b5a14;color:#d4a843}
-      `}</style>
+      <style jsx>{CREATE_ST}</style>
     </div>
   );
 
@@ -401,6 +440,7 @@ export default function RPG() {
   const c = active || {};
   return (
     <div className="root">
+      {/* Header */}
       <div className="header">
         {c.useImages && sceneImg && (
           <div className="si-wrap">
@@ -410,7 +450,7 @@ export default function RPG() {
           </div>
         )}
         <div className="tbar">
-          <button className="btn-sm" onClick={() => setView("home")}>⌂</button>
+          <button className="btn-sm" onClick={() => { clearAuto(); setView("home"); }}>⌂</button>
           <div className="tc">
             <div className="t-world">{c.world}</div>
             <div className="t-name">⚔ {c.charName}</div>
@@ -421,77 +461,99 @@ export default function RPG() {
             <button className="btn-sm" onClick={resetChat}>↺</button>
           </div>
         </div>
+
         {showChar && (
           <div className="cpanel">
             <div className="cp-lbl">▸ FICHA</div>
-            {c.charName      && <div><span className="dd">Nome:</span> {c.charName}</div>}
-            {c.charTitle     && <div><span className="dd">Título:</span> {c.charTitle}</div>}
-            {c.charAge       && <div><span className="dd">Idade:</span> {c.charAge}</div>}
-            {c.charBg        && <div><span className="dd">Origem:</span> {c.charBg}</div>}
+            {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
+            {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
+            {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
+            {c.charBg          && <div><span className="dd">Origem:</span> {c.charBg}</div>}
             {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
-            {c.charSkills    && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
-            {c.appearance    && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
+            {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
+            {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
             <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
               {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
-              {campLore      && <span className="badge">🔍 LORE OFICIAL</span>}
+              {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
             </div>
           </div>
         )}
       </div>
 
+      {/* Mensagens */}
       <div className="msgs">
         {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
+
         {disp.map((m, i) => (
           <div key={i}>
-            {m.type === "gm"    && <div className="b-gm"><div className="b-lbl">✦ MESTRE ✦</div>{m.text}</div>}
-            {m.type === "user"  && <div style={{ display: "flex", justifyContent: "flex-end" }}><div className="b-u">{m.text}</div></div>}
+            {m.type === "gm" && (
+              <div className="b-gm">
+                <div className="b-lbl">✦ MESTRE ✦</div>
+                {m.text}
+              </div>
+            )}
+            {m.type === "user" && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="b-u">{m.text}</div>
+              </div>
+            )}
+            {m.type === "auto" && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="b-auto">⚡ {m.text}</div>
+              </div>
+            )}
             {m.type === "error" && <div className="b-err">{m.text}</div>}
           </div>
         ))}
-        {loading && disp.length > 0 && <div className="b-load">{statusText}</div>}
+
+        {loading && disp.length > 0 && (
+          <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
+        )}
+
+        {/* Banner de countdown no modo auto */}
+        {autoWaiting && !loading && (
+          <div className="auto-banner">
+            <div className="auto-banner-top">
+              <span className="auto-dot" />
+              <span>MODO AUTOMÁTICO — próximo turno em <strong>{countdown}s</strong></span>
+            </div>
+            <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
+      {/* Input + botão AUTO */}
       <div className="iarea">
-        <textarea ref={taRef} className="ibox" value={input} rows={2} disabled={loading}
-          placeholder={`O que ${c.charName || "o personagem"} faz?`}
+        {/* Botão AUTO */}
+        <button
+          className={`btn-auto ${autoMode ? "on" : ""}`}
+          onClick={toggleAuto}
+          title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+        >
+          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
+        </button>
+
+        <textarea
+          ref={taRef}
+          className="ibox"
+          value={input}
+          rows={2}
+          disabled={loading || autoWaiting}
+          placeholder={autoMode ? "Auto ligado — aperte AUTO pra intervir" : `O que ${c.charName || "o personagem"} faz?`}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
         />
-        <button className={`i-send ${loading || !input.trim() ? "off" : ""}`} onClick={handleSend} disabled={loading || !input.trim()}>⚔</button>
+        <button
+          className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
+          onClick={handleSend}
+          disabled={loading || !input.trim() || autoWaiting}
+        >⚔</button>
       </div>
 
       <style jsx global>{GST}</style>
-      <style jsx>{`
-        .root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto;overflow:hidden}
-        .header{flex-shrink:0;background:linear-gradient(180deg,#0e0700 0%,#060407 100%);border-bottom:1px solid #180e00}
-        .si-wrap{position:relative;height:175px;overflow:hidden}
-        .si{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s}
-        .si.ok{opacity:.72}
-        .si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
-        .si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-        .tbar{display:flex;align-items:center;gap:8px;padding:10px 12px}
-        .tc{flex:1;text-align:center;min-width:0}
-        .t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-        .t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
-        .btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
-        .cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:175px;overflow-y:auto}
-        .cp-lbl{color:#d4a843;font-size:8px;letter-spacing:3px;margin-bottom:6px}
-        .dd{color:#4a2c00}
-        .badge{font-size:8px;letter-spacing:2px;color:#2c1900;background:#0a0600;border:1px solid #180e00;border-radius:3px;padding:2px 6px}
-        .msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
-        .splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-        .b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}
-        .b-lbl{font-size:7px;letter-spacing:4px;color:#2c1900;margin-bottom:10px}
-        .b-u{background:#0a0600;border:1px solid #180e00;border-right:3px solid #7a4a10;border-radius:6px;padding:10px 12px;font-size:12px;color:#7a5520;max-width:84%;font-style:italic}
-        .b-err{text-align:center;color:#6a1a1a;font-size:11px;padding:8px}
-        .b-load{text-align:center;color:#2c1900;font-size:9px;letter-spacing:4px;padding:12px 0;animation:pulse 2s infinite}
-        .iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:8px;align-items:flex-end}
-        .ibox{flex:1;background:#0c0700;border:1px solid #180e00;border-radius:8px;padding:10px 12px;color:#c4a060;font-size:14px;font-family:inherit;outline:none;resize:none;line-height:1.5;-webkit-appearance:none}
-        .ibox:disabled{opacity:.4}
-        .i-send{background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;width:48px;height:48px;border-radius:8px;cursor:pointer;font-size:18px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
-        .i-send.off{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
-      `}</style>
+      <style jsx>{PLAY_ST}</style>
     </div>
   );
 }
@@ -522,7 +584,7 @@ function Toggle({ title, desc, value, onChange }) {
   );
 }
 
-// ─── Global styles ────────────────────────────────────────────────────
+// ─── Styles ───────────────────────────────────────────────────────────
 const GST = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:#060407;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -530,4 +592,99 @@ textarea::placeholder,input::placeholder{color:#2a1800}
 ::-webkit-scrollbar{width:2px}
 ::-webkit-scrollbar-thumb{background:#2a1800;border-radius:2px}
 @keyframes pulse{0%,100%{opacity:.15}50%{opacity:.85}}
+@keyframes autopulse{0%,100%{opacity:.4}50%{opacity:1}}
+@keyframes cdbar{from{width:100%}to{width:0%}}
+`;
+
+const BASE = `
+.root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto}
+`;
+
+const HOME_ST = BASE + `
+.hh{text-align:center;padding:40px 20px 20px;border-bottom:1px solid #180e00;flex-shrink:0}
+.hh-icon{font-size:28px;margin-bottom:10px}
+.hh-title{font-size:19px;font-weight:bold;color:#d4a843;letter-spacing:6px}
+.hh-sub{font-size:8px;letter-spacing:5px;color:#2c1900;margin-top:6px}
+.list{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
+.empty{text-align:center;padding-top:60px}
+.e-icon{font-size:44px;margin-bottom:14px;opacity:.25}
+.e-txt{color:#2c1900;font-size:13px;line-height:2.4}
+.card{display:flex;align-items:center;background:linear-gradient(135deg,#0c0700,#100900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px 12px 14px 16px;cursor:pointer;gap:10px;-webkit-tap-highlight-color:transparent}
+.c-world{font-size:14px;color:#c4a060;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
+.c-char{font-size:11px;color:#6b4a1a}
+.c-date{font-size:9px;color:#2c1900;margin-top:3px;letter-spacing:1px}
+.c-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:10px;flex-shrink:0}
+.hfoot{flex-shrink:0;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom));border-top:1px solid #180e00}
+.btn-new{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit}
+`;
+
+const CREATE_ST = BASE + `
+.cr-head{display:flex;align-items:center;justify-content:space-between;padding:14px 12px;border-bottom:1px solid #180e00;flex-shrink:0}
+.btn-back{background:transparent;border:1px solid #180e00;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit}
+.cr-steps{display:flex;align-items:center}
+.cr-dot{width:8px;height:8px;border-radius:50%;background:#180e00;border:1px solid #2a1800;transition:all .3s;display:inline-block}
+.cr-dot.on{background:#8b5a14;border-color:#d4a843}
+.cr-ln{width:22px;height:1px;background:#180e00;display:inline-block}
+.btn-pres{background:transparent;border:1px solid #2a1800;border-radius:4px;color:#8b5a14;font-size:9px;padding:6px 10px;cursor:pointer;font-family:inherit}
+.cr-body{flex:1;overflow-y:auto;padding:20px 14px 20px;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
+.cr-lbl{font-size:9px;letter-spacing:5px;color:#4a2c00;margin-bottom:18px;text-align:center}
+.ip-hint{background:#0c0700;border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:12px;font-size:11px;color:#6b4a1a;line-height:1.8;margin-bottom:12px}
+.ip-hint strong{color:#c4a060}
+.btn-next{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit;margin-top:10px;flex-shrink:0}
+.btn-next:disabled{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
+.app-preview{display:flex;gap:12px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;margin-bottom:16px;align-items:flex-start}
+.app-avatar{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
+.av-hair{width:40px;height:10px;border-radius:4px 4px 0 0}
+.av-body{width:40px;height:48px;background:#1a0e00;border:1px solid #2a1800;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#4a2c00;font-weight:bold}
+.av-eyes{display:flex;gap:6px;margin-top:6px}
+.av-eye{width:10px;height:7px;border-radius:50%;border:1px solid #0a0600}
+.app-summary{flex:1;display:flex;flex-direction:column;gap:1px}
+.app-sum-row{display:flex;justify-content:space-between;font-size:10px;line-height:1.8}
+.app-sum-key{color:#2c1900}
+.app-sum-val{color:#8b5a14}
+.app-section{margin-bottom:14px}
+.app-section-label{font-size:9px;letter-spacing:2px;color:#4a2c00;text-transform:uppercase;margin-bottom:7px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:#0a0600;border:1px solid #180e00;border-radius:16px;color:#3a2410;font-size:11px;padding:5px 12px;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:all .15s}
+.chip.on{background:#2a0d00;border-color:#8b5a14;color:#d4a843}
+`;
+
+const PLAY_ST = BASE + `
+.root{overflow:hidden}
+.header{flex-shrink:0;background:linear-gradient(180deg,#0e0700 0%,#060407 100%);border-bottom:1px solid #180e00}
+.si-wrap{position:relative;height:175px;overflow:hidden}
+.si{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s}
+.si.ok{opacity:.72}
+.si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
+.si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
+.tbar{display:flex;align-items:center;gap:8px;padding:10px 12px}
+.tc{flex:1;text-align:center;min-width:0}
+.t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
+.btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
+.cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:175px;overflow-y:auto}
+.cp-lbl{color:#d4a843;font-size:8px;letter-spacing:3px;margin-bottom:6px}
+.dd{color:#4a2c00}
+.badge{font-size:8px;letter-spacing:2px;color:#2c1900;background:#0a0600;border:1px solid #180e00;border-radius:3px;padding:2px 6px}
+.msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
+.splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
+.b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}
+.b-lbl{font-size:7px;letter-spacing:4px;color:#2c1900;margin-bottom:10px}
+.b-u{background:#0a0600;border:1px solid #180e00;border-right:3px solid #7a4a10;border-radius:6px;padding:10px 12px;font-size:12px;color:#7a5520;max-width:84%;font-style:italic}
+.b-auto{background:#0a0600;border:1px solid #1e1400;border-right:3px solid #4a3a00;border-radius:6px;padding:10px 12px;font-size:11px;color:#4a3a10;max-width:84%;font-style:italic}
+.b-err{text-align:center;color:#6a1a1a;font-size:11px;padding:8px}
+.b-load{text-align:center;color:#2c1900;font-size:9px;letter-spacing:4px;padding:12px 0;animation:pulse 2s infinite}
+.b-load.auto-pulse{animation:autopulse 1s infinite;color:#5a4a00}
+.auto-banner{background:#0c0900;border:1px solid #2a1e00;border-left:3px solid #6a5000;border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.auto-banner-top{display:flex;align-items:center;gap:8px;font-size:11px;color:#7a6020}
+.auto-dot{width:7px;height:7px;border-radius:50%;background:#8b6a00;flex-shrink:0;animation:autopulse 1s infinite}
+.auto-banner-top strong{color:#d4a843}
+.btn-intervir{background:#1a1000;border:1px solid #5a4000;border-radius:4px;color:#d4a843;font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:2px;font-family:inherit;-webkit-tap-highlight-color:transparent}
+.iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}
+.btn-auto{background:#0c0700;border:1px solid #180e00;border-radius:6px;color:#2c1900;font-size:8px;letter-spacing:1px;padding:0;width:44px;height:48px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4;white-space:pre;-webkit-tap-highlight-color:transparent;transition:all .2s}
+.btn-auto.on{background:#1a1000;border-color:#6a5000;color:#d4a843;animation:autopulse 1.5s infinite}
+.ibox{flex:1;background:#0c0700;border:1px solid #180e00;border-radius:8px;padding:10px 12px;color:#c4a060;font-size:14px;font-family:inherit;outline:none;resize:none;line-height:1.5;-webkit-appearance:none}
+.ibox:disabled{opacity:.35}
+.i-send{background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;width:48px;height:48px;border-radius:8px;cursor:pointer;font-size:18px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.i-send.off{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
 `;

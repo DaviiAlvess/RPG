@@ -1,6 +1,12 @@
 // pages/api/gm.js
 
-// Índice global para round-robin entre as chaves
+// ── Cooldown de chaves em rate-limit ──────────────────────────────
+// Guarda o timestamp até quando cada chave está de pausa.
+// Em serverless isso vive por instância, mas já ajuda muito.
+const keyCooldown = {};
+const COOLDOWN_MS = 60_000; // 1 minuto de pausa após rate-limit
+
+// Índice global para round-robin base
 let keyIndex = 0;
 
 export default async function handler(req, res) {
@@ -16,20 +22,31 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Campo obrigatório ausente: world." });
   }
 
-  // ── Rotação de chaves ─────────────────────────────────────────────
-  const chaves = [
+  // ── Carrega e filtra chaves disponíveis ───────────────────────────
+  const todasChaves = [
     process.env.GEMINI_KEY_1,
     process.env.GEMINI_KEY_2,
     process.env.GEMINI_KEY_3,
     process.env.GEMINI_KEY_4,
     process.env.GEMINI_KEY_5,
     process.env.GEMINI_KEY_6,
-    process.env.GEMINI_KEY_7, // ← nova chave
+    process.env.GEMINI_KEY_7,
   ].filter(Boolean);
 
-  if (chaves.length === 0) {
+  if (todasChaves.length === 0) {
     return res.status(500).json({ error: "Nenhuma chave de API configurada." });
   }
+
+  // Remove chaves ainda em cooldown
+  const agora = Date.now();
+  const chaves = todasChaves.filter((_, i) => {
+    const liberadaEm = keyCooldown[i];
+    return !liberadaEm || agora >= liberadaEm;
+  });
+
+  // Se TODAS estão em cooldown, usa todas mesmo assim (melhor tentar do que recusar)
+  const chavesParaUsar = chaves.length > 0 ? chaves : todasChaves;
+  const indicesParaUsar = chavesParaUsar.map((k) => todasChaves.indexOf(k));
 
   // ── Chamada ao Gemini com timeout ─────────────────────────────────
   const TIMEOUT_MS = 25_000;
@@ -49,8 +66,9 @@ export default async function handler(req, res) {
         }
       );
 
-      // Rate limit: pula de chave imediatamente
-      if (r.status === 429) throw Object.assign(new Error("Rate limit atingido."), { rateLimited: true });
+      if (r.status === 429) {
+        throw Object.assign(new Error("Rate limit atingido."), { rateLimited: true });
+      }
 
       const data = await r.json();
       if (data.error) throw new Error(`API error ${data.error.code}: ${data.error.message}`);
@@ -62,23 +80,34 @@ export default async function handler(req, res) {
     }
   };
 
-  // ── Rotação round-robin: distribui carga entre as chaves ──────────
+  // ── Rotação round-robin com cooldown ──────────────────────────────
   const comRotacao = async (body) => {
-    const total = chaves.length;
-    const inicio = keyIndex % total; // ponto de partida rotativo
+    const total = indicesParaUsar.length;
+
+    // Ponto de partida: avança o keyIndex global entre chamadas
+    const inicio = keyIndex % total;
     let lastErr = null;
 
     for (let tentativa = 0; tentativa < total; tentativa++) {
-      const idx = (inicio + tentativa) % total;
-      const key = chaves[idx];
+      const slot = (inicio + tentativa) % total;
+      const idx = indicesParaUsar[slot];        // índice real na lista original
+      const key = todasChaves[idx];
 
       try {
         const texto = await callGemini(key, body);
-        keyIndex = (idx + 1) % total; // avança para próxima na chamada seguinte
+        // Sucesso: avança o ponteiro para a próxima chave na próxima chamada
+        keyIndex = (slot + 1) % total;
         return texto;
       } catch (e) {
-        const motivo = e.name === "AbortError" ? "timeout" : e.rateLimited ? "rate-limit" : "erro";
-        console.warn(`Chave ${idx + 1} falhou (${motivo}): ${e.message}`);
+        if (e.rateLimited) {
+          // Coloca a chave em cooldown por 1 minuto
+          keyCooldown[idx] = Date.now() + COOLDOWN_MS;
+          console.warn(`Chave ${idx + 1} em rate-limit — pausada por 60s.`);
+        } else if (e.name === "AbortError") {
+          console.warn(`Chave ${idx + 1} timeout.`);
+        } else {
+          console.warn(`Chave ${idx + 1} erro: ${e.message}`);
+        }
         lastErr = e;
       }
     }
@@ -112,7 +141,7 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
       return res.status(200).json({ lore: lore ?? "" });
     } catch (e) {
       console.error("Erro no lore search:", e.message);
-      return res.status(200).json({ lore: "" }); // falha silenciosa — jogo começa sem lore extra
+      return res.status(200).json({ lore: "" });
     }
   }
 

@@ -1,8 +1,20 @@
 // pages/api/gm.js
+
+// Índice global para round-robin entre as chaves
+let keyIndex = 0;
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
-  const { messages, systemPrompt, useLoreSearch, world } = req.body;
+  const { messages, systemPrompt, useLoreSearch, world } = req.body ?? {};
+
+  // ── Validação básica ──────────────────────────────────────────────
+  if (!useLoreSearch && (!Array.isArray(messages) || !systemPrompt)) {
+    return res.status(400).json({ error: "Campos obrigatórios ausentes: messages, systemPrompt." });
+  }
+  if (useLoreSearch && !world) {
+    return res.status(400).json({ error: "Campo obrigatório ausente: world." });
+  }
 
   // ── Rotação de chaves ─────────────────────────────────────────────
   const chaves = [
@@ -12,36 +24,72 @@ export default async function handler(req, res) {
     process.env.GEMINI_KEY_4,
     process.env.GEMINI_KEY_5,
     process.env.GEMINI_KEY_6,
+    process.env.GEMINI_KEY_7, // ← nova chave
   ].filter(Boolean);
 
   if (chaves.length === 0) {
     return res.status(500).json({ error: "Nenhuma chave de API configurada." });
   }
 
+  // ── Chamada ao Gemini com timeout ─────────────────────────────────
+  const TIMEOUT_MS = 25_000;
+
   const callGemini = async (key, body) => {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
-    );
-    const data = await r.json();
-    if (data.error) throw new Error(data.error.message);
-    if (!data.candidates?.[0]) throw new Error("Sem resposta do Gemini.");
-    return data.candidates[0].content.parts[0].text;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+    try {
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        }
+      );
+
+      // Rate limit: pula de chave imediatamente
+      if (r.status === 429) throw Object.assign(new Error("Rate limit atingido."), { rateLimited: true });
+
+      const data = await r.json();
+      if (data.error) throw new Error(`API error ${data.error.code}: ${data.error.message}`);
+      if (!data.candidates?.[0]) throw new Error("Resposta vazia do Gemini.");
+
+      return data.candidates[0].content.parts[0].text;
+    } finally {
+      clearTimeout(timer);
+    }
   };
 
+  // ── Rotação round-robin: distribui carga entre as chaves ──────────
   const comRotacao = async (body) => {
+    const total = chaves.length;
+    const inicio = keyIndex % total; // ponto de partida rotativo
     let lastErr = null;
-    for (let i = 0; i < chaves.length; i++) {
-      try { return await callGemini(chaves[i], body); }
-      catch (e) { console.warn(`Chave ${i + 1} falhou: ${e.message}`); lastErr = e; }
+
+    for (let tentativa = 0; tentativa < total; tentativa++) {
+      const idx = (inicio + tentativa) % total;
+      const key = chaves[idx];
+
+      try {
+        const texto = await callGemini(key, body);
+        keyIndex = (idx + 1) % total; // avança para próxima na chamada seguinte
+        return texto;
+      } catch (e) {
+        const motivo = e.name === "AbortError" ? "timeout" : e.rateLimited ? "rate-limit" : "erro";
+        console.warn(`Chave ${idx + 1} falhou (${motivo}): ${e.message}`);
+        lastErr = e;
+      }
     }
-    throw lastErr || new Error("Todas as chaves falharam.");
+
+    throw lastErr ?? new Error("Todas as chaves falharam.");
   };
 
   // ══════════════════════════════════════════════════════════════════
   // MODO: Busca de lore com Google Search grounding
   // ══════════════════════════════════════════════════════════════════
-  if (useLoreSearch && world) {
+  if (useLoreSearch) {
     try {
       const loreBody = {
         system_instruction: {
@@ -61,11 +109,10 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
       };
 
       const lore = await comRotacao(loreBody);
-      return res.status(200).json({ lore: lore || "" });
+      return res.status(200).json({ lore: lore ?? "" });
     } catch (e) {
       console.error("Erro no lore search:", e.message);
-      // Falha silenciosa — jogo começa sem lore extra
-      return res.status(200).json({ lore: "" });
+      return res.status(200).json({ lore: "" }); // falha silenciosa — jogo começa sem lore extra
     }
   }
 

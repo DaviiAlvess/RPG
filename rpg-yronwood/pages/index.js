@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import Head from "next/head";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -60,7 +61,7 @@ const PRESET = {
 // ─── System prompt ────────────────────────────────────────────────────
 const buildPrompt = (c, loreExtra) =>
   [
-    `Você é o Mestre de um RPG de texto imersivo ambientado em: ${c.world}.`,
+    `Você é o Mestre de um RPG de texto implacável ambientado no universo de: ${c.world}.`,
     loreExtra
       ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
@@ -72,16 +73,16 @@ const buildPrompt = (c, loreExtra) =>
     c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
-    `REGRAS ABSOLUTAS:`,
-    `- Narre SEMPRE em português brasileiro, com linguagem épica e cinematográfica`,
-    `- Crie tensão dramática real — escolhas têm consequências permanentes`,
-    `- Descreva cenários com riqueza sensorial: sons, cheiros, texturas, clima`,
-    `- Respeite rigorosamente o lore, personagens, poderes e eventos do universo`,
-    `- No final de CADA resposta, ofereça exatamente 3 opções numeradas de ação (formato: "1. opção")`,
+    `DIRETRIZES DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO):`,
+    `1. RITMO ACELERADO E DIRETO: Chega de descrições poéticas gigantes. Seja direto, cru e dinâmico. O texto deve ser rápido de ler. Se for combate, use frases curtas e impactantes. Vá direto ao ponto.`,
+    `2. CHEGA DE CLICHÊS: Não repita fórmulas (ex: "o ar está pesado", "a tensão é palpável"). Aja como um Mestre humano, natural e imprevisível.`,
+    `3. CONSEQUÊNCIAS REAIS E IMPLACÁVEIS: O mundo é perigoso. Se o jogador tomar uma decisão ruim, puna-o. Faça-o perder itens, sofrer dano ou ser traído. Crie tensão real.`,
+    `4. INTERAÇÃO LIVRE: NUNCA force uma lista de opções numeradas. Deixe o jogador livre. Termine a sua narração com uma pergunta instigante ou uma ação imediata.`,
+    `5. DIÁLOGOS VIVOS: Os NPCs devem ter personalidade forte. Eles mentem, têm pressa, são rudes ou tentam enganar o jogador. Eles não são guias de tutorial amigáveis.`,
+    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis do universo de ${c.world}.`,
     c.useImages
-      ? `- Ao final de cada cena: IMAGE_PROMPT: [prompt em inglês, cinematográfico, foco em cenário/atmosfera, sem nomes, no text]`
-      : `- NÃO inclua IMAGE_PROMPT nas respostas`,
-    `- Seja criativo, implacável e justo. Este mundo não perdoa erros.`,
+      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
+      : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
 // ─── Storage ──────────────────────────────────────────────────────────
@@ -149,6 +150,58 @@ export default function RPG() {
       });
       return (await res.json()).lore || "";
     } catch { return ""; }
+  };
+
+  // ─── Export to PDF ────────────────────────────────────────────────────
+  const exportToBook = () => {
+    if (!window.html2pdf) {
+      alert("Carregando o gerador de PDF. Tente novamente em 2 segundos.");
+      return;
+    }
+
+    // Criamos o HTML do livro dinamicamente
+    const element = document.createElement("div");
+    
+    // Geração do conteúdo em formato de leitura agradável
+    const bookContent = disp.map(m => {
+      if (m.type === "gm") {
+        return `<p style="margin-bottom: 24px; line-height: 1.8; font-size: 16px; text-align: justify; color: #111;">${m.text.replace(/\n/g, '<br/>')}</p>`;
+      }
+      if (m.type === "user" || m.type === "auto") {
+        return `<div style="text-align: right; margin-bottom: 24px;">
+                  <span style="font-style: italic; font-size: 15px; color: #444; border-bottom: 1px solid #ccc; padding-bottom: 2px;">
+                    — ${m.text}
+                  </span>
+                </div>`;
+      }
+      return "";
+    }).join("");
+
+    element.innerHTML = `
+      <div style="font-family: 'Georgia', serif; padding: 40px; background: #fff;">
+        <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
+          <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
+          <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
+          <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
+        </div>
+        <div>
+          ${bookContent}
+        </div>
+        <div style="text-align: center; margin-top: 60px; font-size: 18px; color: #000;">
+          <strong>FIM.</strong>
+        </div>
+      </div>
+    `;
+
+    const opt = {
+      margin:       15,
+      filename:     `O_Livro_de_${active.charName.replace(/\s+/g, '_')}.pdf`,
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2 },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    window.html2pdf().set(opt).from(element).save();
   };
 
   // ─── Auto mode helpers ────────────────────────────────────────────────
@@ -241,7 +294,7 @@ export default function RPG() {
 
   // ─── Game ─────────────────────────────────────────────────────────────
   const doStart = (camp, lore) => sendMsg(
-    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro desafio ou dilema que o personagem enfrenta.`,
+    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro desafio imediato ou cena imersiva.`,
     [], [], camp, lore, false
   );
 
@@ -267,7 +320,7 @@ export default function RPG() {
       const raw = data.text;
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
-      const options = extractOptions(clean);
+      const options = extractOptions(clean); // Se não houver opções (devido ao novo prompt), o array volta vazio.
 
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
@@ -282,9 +335,15 @@ export default function RPG() {
 
       setPending(options);
 
+      // O AutoMode pode sofrer se o Mestre parar de gerar opções numeradas.
+      // Se não houver opções geradas, mas o modo automático estiver ligado, ele precisará de intervenção manual
       if (autoRef.current && options.length > 0) {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
+      } else if (autoRef.current && options.length === 0) {
+         // Auto desativado por falta de opções claras
+         intervene();
       }
+
     } catch {
       setDisp((prev) => [...prev, { type: "error", text: "Erro ao contatar o Mestre. Tente novamente." }]);
     }
@@ -311,6 +370,10 @@ export default function RPG() {
   // ═══ HOME ══════════════════════════════════════════════════════════
   if (view === "home") return (
     <div className="root">
+      <Head>
+        <title>Forja de Mundos</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+      </Head>
       <div className="hh">
         <div className="hh-icon">⚔</div>
         <div className="hh-title">FORJA DE MUNDOS</div>
@@ -343,6 +406,10 @@ export default function RPG() {
   // ═══ CREATE ════════════════════════════════════════════════════════
   if (view === "create") return (
     <div className="root">
+      <Head>
+        <title>Novo Personagem</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+      </Head>
       <div className="cr-head">
         <button className="btn-back" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← VOLTAR</button>
         <div className="cr-steps">
@@ -428,6 +495,11 @@ export default function RPG() {
   const c = active || {};
   return (
     <div className="root">
+      <Head>
+        <title>{c.charName} — {c.world}</title>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+      </Head>
+
       {/* Header */}
       <div className="header">
         {c.useImages && sceneImg && (
@@ -452,7 +524,7 @@ export default function RPG() {
 
         {showChar && (
           <div className="cpanel">
-            <div className="cp-lbl">▸ FICHA</div>
+            <div className="cp-lbl">▸ FICHA E OPÇÕES</div>
             {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
             {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
             {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
@@ -460,10 +532,13 @@ export default function RPG() {
             {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
             {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
             {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
-            <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            
+            <div style={{ marginTop: 16, display: "flex", gap: 6, flexWrap: "wrap", borderTop: "1px solid #180e00", paddingTop: 10 }}>
               {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
               {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
             </div>
+
+            <button onClick={exportToBook} className="btn-export">📖 EXPORTAR COMO LIVRO (PDF)</button>
           </div>
         )}
       </div>
@@ -514,7 +589,6 @@ export default function RPG() {
 
       {/* Input + botão AUTO */}
       <div className="iarea">
-        {/* Botão AUTO */}
         <button
           className={`btn-auto ${autoMode ? "on" : ""}`}
           onClick={toggleAuto}
@@ -649,10 +723,12 @@ const PLAY_ST = BASE + `
 .t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
 .btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
-.cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:175px;overflow-y:auto}
+.cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:280px;overflow-y:auto}
 .cp-lbl{color:#d4a843;font-size:8px;letter-spacing:3px;margin-bottom:6px}
 .dd{color:#4a2c00}
 .badge{font-size:8px;letter-spacing:2px;color:#2c1900;background:#0a0600;border:1px solid #180e00;border-radius:3px;padding:2px 6px}
+.btn-export{width:100%;background:transparent;border:1px solid #4a2c00;color:#c4a060;padding:10px;margin-top:14px;border-radius:4px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit;}
+.btn-export:hover{background:#180e00}
 .msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
 .splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
 .b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}

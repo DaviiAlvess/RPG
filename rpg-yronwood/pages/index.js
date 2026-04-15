@@ -58,10 +58,10 @@ const PRESET = {
   useImages: true,
 };
 
-// ─── System prompt ────────────────────────────────────────────────────
+// ─── System prompt (ATUALIZADO COM SUAS DICAS DE OURO) ────────────────
 const buildPrompt = (c, loreExtra) =>
   [
-    `Você é o Mestre de um RPG de texto implacável ambientado no universo de: ${c.world}.`,
+    `Você é o Mestre de um RPG de texto imersivo ambientado no universo de: ${c.world}.`,
     loreExtra
       ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
@@ -73,15 +73,14 @@ const buildPrompt = (c, loreExtra) =>
     c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
-    `DIRETRIZES DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO):`,
-    `1. RITMO ACELERADO E DIRETO: Chega de descrições poéticas gigantes. Seja direto, cru e dinâmico. O texto deve ser rápido de ler. Se for combate, use frases curtas e impactantes. Vá direto ao ponto.`,
-    `2. CHEGA DE CLICHÊS: Não repita fórmulas (ex: "o ar está pesado", "a tensão é palpável"). Aja como um Mestre humano, natural e imprevisível.`,
-    `3. CONSEQUÊNCIAS REAIS E IMPLACÁVEIS: O mundo é perigoso. Se o jogador tomar uma decisão ruim, puna-o. Faça-o perder itens, sofrer dano ou ser traído. Crie tensão real.`,
-    `4. INTERAÇÃO LIVRE: NUNCA force uma lista de opções numeradas. Deixe o jogador livre. Termine a sua narração com uma pergunta instigante ou uma ação imediata.`,
-    `5. DIÁLOGOS VIVOS: Os NPCs devem ter personalidade forte. Eles mentem, têm pressa, são rudes ou tentam enganar o jogador. Eles não são guias de tutorial amigáveis.`,
-    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis do universo de ${c.world}.`,
+    `DIRETRIZES DE NARRAÇÃO (O SEGREDO PARA UM BOM RPG):`,
+    `1. DESCRIÇÕES SIMPLES E SENSORIAIS: Não abarrote o jogador com textos gigantes. Prepare o cenário, mas apresente apenas ALGUNS detalhes. Descreva usando até três elementos e SEMPRE use outros sentidos além da visão (audição, temperatura, olfato). Deixe o jogador preencher o resto com perguntas e exploração.`,
+    `2. NUNCA DITE SENTIMENTOS: É ESTRITAMENTE PROIBIDO dizer o que o personagem do jogador está a sentir (ex: "você sente medo", "você fica impressionado"). Quem decide o que o personagem sente é o JOGADOR. Apenas descreva o que acontece ao redor.`,
+    `3. EXPLORAÇÃO E IMPROVISO: Deixe o jogador explorar. Adapte o cenário e improvise elementos que favoreçam a ação dele. Deixe-o sentir-se inteligente ao descobrir o mundo.`,
+    `4. INTERAÇÃO LIVRE: NUNCA use listas de opções numeradas (1, 2, 3). Termine sempre a sua vez passando a bola para o jogador de forma natural (ex: "O que você faz?", "Como reage?").`,
+    `5. MUNDO VIVO E JUSTO: NPCs têm personalidade (mentem, brincam, irritam-se). O mundo reage de forma coerente às ações do jogador, respeitando rigorosamente o lore de ${c.world}.`,
     c.useImages
-      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
+      ? `6. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
@@ -152,66 +151,96 @@ export default function RPG() {
     } catch { return ""; }
   };
 
-  // ─── Export to PDF (MÉTODO NATIVO DO NAVEGADOR) ──────────────────────
-  const exportToBook = () => {
-    setStatus("📖 A preparar o livro...");
+  // ─── Export to Novel (PDF LITERÁRIO) ─────────────────────────────────
+  const exportToBook = async () => {
+    setStatus("📖 A reescrever a aventura como um romance... (Pode demorar uns segundos)");
     setLoading(true);
 
-    const bookContent = disp.map(m => {
-      if (m.type === "gm") {
-        return `<p style="margin-bottom: 24px; line-height: 1.8; font-size: 16px; text-align: justify; color: #111;">${m.text.replace(/\n/g, '<br/>')}</p>`;
-      }
-      if (m.type === "user" || m.type === "auto") {
-        return `<div style="text-align: right; margin-bottom: 24px;">
-                  <span style="font-style: italic; font-size: 15px; color: #444; border-bottom: 1px solid #ccc; padding-bottom: 2px;">
-                    — ${m.text}
-                  </span>
-                </div>`;
-      }
-      return "";
-    }).join("");
+    try {
+      const chatLog = disp.map(m => {
+        const autor = m.type === "gm" ? "Mestre" : active.charName;
+        return `[${autor}]: ${m.text}`;
+      }).join("\n\n");
 
-    const htmlString = `
-      <!DOCTYPE html>
-      <html lang="pt">
-      <head>
-        <meta charset="UTF-8">
-        <title>O Livro de ${active.charName}</title>
-        <style>
-          body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
-          @media print {
-            body { padding: 0; margin: 0; }
-            @page { margin: 2cm; }
-          }
-        </style>
-      </head>
-      <body>
-        <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
-          <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
-          <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
-          <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
-        </div>
-        <div>
-          ${bookContent}
-        </div>
-        <div style="text-align: center; margin-top: 60px; font-size: 18px; color: #000;">
-          <strong>FIM.</strong>
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
+      const sysPrompt = `Você é um escritor best-seller.
+Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário envolvente.
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(htmlString);
-      printWindow.document.close();
-    } else {
-      alert("Por favor, permita os pop-ups neste site para gerar o livro.");
+REGRAS ABSOLUTAS DA REESCRITA:
+1. NUNCA use formato de roteiro ou chat (ex: "Mestre:", "${active.charName}:").
+2. Remova TODAS as perguntas diretas ao jogador (ex: "O que você faz?", "Como reage?").
+3. Remova mecânicas de jogo, menções a dados, opções numeradas ou avisos de sistema.
+4. Transforme as falas curtas do jogador em ações descritivas e fluídas do protagonista (${active.charName}).
+5. Crie transições suaves. O texto deve fluir perfeitamente do início ao fim como um excelente livro de ficção.
+6. Escreva em Português Brasileiro.
+7. Mantenha o clima e o tom original da aventura.`;
+
+      const res = await fetch("/api/gm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: `AQUI ESTÁ O REGISTRO DO RPG PARA VOCÊ TRANSFORMAR NUM LIVRO LITERÁRIO:\n\n${chatLog}` }],
+          systemPrompt: sysPrompt
+        }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const novelText = data.text;
+      const parseMD = (str) => str.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
+      
+      const bookContent = novelText
+        .split('\n')
+        .map(p => p.trim())
+        .filter(p => p.length > 0)
+        .map(p => `<p style="margin-bottom: 18px; line-height: 1.9; font-size: 16px; text-align: justify; color: #111;">${parseMD(p)}</p>`)
+        .join("");
+
+      const htmlString = `
+        <!DOCTYPE html>
+        <html lang="pt">
+        <head>
+          <meta charset="UTF-8">
+          <title>O Livro de ${active.charName}</title>
+          <style>
+            body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
+            @media print {
+              body { padding: 0; margin: 0; }
+              @page { margin: 2cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
+            <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
+            <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
+            <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
+          </div>
+          <div>
+            ${bookContent}
+          </div>
+          <div style="text-align: center; margin-top: 80px; font-size: 18px; color: #000; font-style: italic;">
+            <strong>FIM DO CAPÍTULO.</strong>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function(){ window.print(); }, 500);
+            };
+          </script>
+        </body>
+        </html>
+      `;
+
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlString);
+        printWindow.document.close();
+      } else {
+        alert("Por favor, permita os pop-ups neste site para gerar o livro.");
+      }
+
+    } catch (e) {
+      alert("Falha ao reescrever o livro: " + e.message);
     }
     
     setLoading(false);
@@ -334,7 +363,7 @@ export default function RPG() {
       const raw = data.text;
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
-      const options = extractOptions(clean); // Se não houver opções (devido ao novo prompt), o array volta vazio.
+      const options = extractOptions(clean);
 
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
@@ -349,12 +378,9 @@ export default function RPG() {
 
       setPending(options);
 
-      // O AutoMode pode sofrer se o Mestre parar de gerar opções numeradas.
-      // Se não houver opções geradas, mas o modo automático estiver ligado, ele precisará de intervenção manual
       if (autoRef.current && options.length > 0) {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
       } else if (autoRef.current && options.length === 0) {
-         // Auto desativado por falta de opções claras
          intervene();
       }
 

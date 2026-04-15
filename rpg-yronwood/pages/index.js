@@ -152,17 +152,25 @@ export default function RPG() {
     } catch { return ""; }
   };
 
-  // ─── Export to PDF ────────────────────────────────────────────────────
+  // ─── Export to PDF (CORRIGIDO) ─────────────────────────────────────────
   const exportToBook = () => {
     if (!window.html2pdf) {
       alert("Carregando o gerador de PDF. Tente novamente em 2 segundos.");
       return;
     }
 
-    // Criamos o HTML do livro dinamicamente
+    setStatus("📖 A escrever o livro... Aguarde.");
+    setLoading(true);
+
     const element = document.createElement("div");
     
-    // Geração do conteúdo em formato de leitura agradável
+    element.style.position = "absolute";
+    element.style.left = "-9999px";
+    element.style.top = "0";
+    element.style.width = "800px";
+    element.style.background = "#ffffff";
+    element.style.color = "#000000";
+    
     const bookContent = disp.map(m => {
       if (m.type === "gm") {
         return `<p style="margin-bottom: 24px; line-height: 1.8; font-size: 16px; text-align: justify; color: #111;">${m.text.replace(/\n/g, '<br/>')}</p>`;
@@ -178,7 +186,7 @@ export default function RPG() {
     }).join("");
 
     element.innerHTML = `
-      <div style="font-family: 'Georgia', serif; padding: 40px; background: #fff;">
+      <div style="font-family: 'Georgia', serif; padding: 40px;">
         <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
           <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
           <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
@@ -193,15 +201,21 @@ export default function RPG() {
       </div>
     `;
 
+    document.body.appendChild(element);
+
     const opt = {
       margin:       15,
       filename:     `O_Livro_de_${active.charName.replace(/\s+/g, '_')}.pdf`,
       image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2 },
+      html2canvas:  { scale: 2, useCORS: true },
       jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
-    window.html2pdf().set(opt).from(element).save();
+    window.html2pdf().set(opt).from(element).save().then(() => {
+      document.body.removeChild(element);
+      setLoading(false);
+      setStatus("");
+    });
   };
 
   // ─── Auto mode helpers ────────────────────────────────────────────────
@@ -280,8 +294,8 @@ export default function RPG() {
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     let lore = "";
-    if (form.isKnownIP) { setStatus("🔍 Buscando lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
-    else { setStatus("⚗️ Preparando mundo..."); }
+    if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
+    else { setStatus("⚗️ A preparar mundo..."); }
     const id = uid();
     const camp = { id, ...form, lore, msgs: [], disp: [], img: null, createdAt: Date.now() };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
@@ -383,7 +397,7 @@ export default function RPG() {
         {!idx.length ? (
           <div className="empty">
             <div className="e-icon">🌍</div>
-            <div className="e-txt">Nenhum mundo criado ainda.<br />Comece sua primeira aventura.</div>
+            <div className="e-txt">Nenhum mundo criado ainda.<br />Comece a sua primeira aventura.</div>
           </div>
         ) : idx.map((s) => (
           <div key={s.id} className="card" onClick={() => openCamp(s)}>
@@ -430,7 +444,7 @@ export default function RPG() {
           <div className="cr-lbl">PASSO 1 — O MUNDO</div>
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
-            desc={form.isKnownIP ? "🔍 Vou buscar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
+            desc={form.isKnownIP ? "🔍 Vou procurar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
             value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP }))} />
           {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
           {form.isKnownIP && form.world.trim() && (

@@ -58,10 +58,10 @@ const PRESET = {
   useImages: true,
 };
 
-// ─── System prompt (ATUALIZADO COM SUAS DICAS DE OURO) ────────────────
+// ─── System prompt ────────────────────────────────────────────────────
 const buildPrompt = (c, loreExtra) =>
   [
-    `Você é o Mestre de um RPG de texto imersivo ambientado no universo de: ${c.world}.`,
+    `Você é o Mestre de um RPG de texto imersivo, criativo e envolvente ambientado no universo de: ${c.world}.`,
     loreExtra
       ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
@@ -73,14 +73,15 @@ const buildPrompt = (c, loreExtra) =>
     c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
-    `DIRETRIZES DE NARRAÇÃO (O SEGREDO PARA UM BOM RPG):`,
-    `1. DESCRIÇÕES SIMPLES E SENSORIAIS: Não abarrote o jogador com textos gigantes. Prepare o cenário, mas apresente apenas ALGUNS detalhes. Descreva usando até três elementos e SEMPRE use outros sentidos além da visão (audição, temperatura, olfato). Deixe o jogador preencher o resto com perguntas e exploração.`,
-    `2. NUNCA DITE SENTIMENTOS: É ESTRITAMENTE PROIBIDO dizer o que o personagem do jogador está a sentir (ex: "você sente medo", "você fica impressionado"). Quem decide o que o personagem sente é o JOGADOR. Apenas descreva o que acontece ao redor.`,
-    `3. EXPLORAÇÃO E IMPROVISO: Deixe o jogador explorar. Adapte o cenário e improvise elementos que favoreçam a ação dele. Deixe-o sentir-se inteligente ao descobrir o mundo.`,
-    `4. INTERAÇÃO LIVRE: NUNCA use listas de opções numeradas (1, 2, 3). Termine sempre a sua vez passando a bola para o jogador de forma natural (ex: "O que você faz?", "Como reage?").`,
-    `5. MUNDO VIVO E JUSTO: NPCs têm personalidade (mentem, brincam, irritam-se). O mundo reage de forma coerente às ações do jogador, respeitando rigorosamente o lore de ${c.world}.`,
+    `DIRETRIZES DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO):`,
+    `1. RITMO FLUIDO E AGRADÁVEL: Escreva de forma cativante, mas evite descrições gigantescas e poéticas que cansem o jogador. Mantenha a história dinâmica, direta e focada na ação do momento.`,
+    `2. SEJA NATURAL E AMIGÁVEL: Aja como um Mestre humano jogando com um amigo. Evite clichês chatos. Seja imprevisível, criativo, mas com uma narração gostosa de ler.`,
+    `3. CONSEQUÊNCIAS JUSTAS: O mundo reage às ações do jogador. Se ele for inteligente e tomar boas decisões, recompense. Se ele errar, crie um desafio novo, mas não seja punitivo sem motivo.`,
+    `4. INTERAÇÃO LIVRE: NUNCA force uma lista de opções numeradas. Deixe o jogador livre. Termine a sua narração com uma pergunta natural ou um gancho de ação (ex: "O que você faz agora?", "Como você responde?").`,
+    `5. DIÁLOGOS VIVOS: Os NPCs devem ter personalidades reais. Eles podem ser rudes, engraçados, amigáveis ou misteriosos, dependendo de quem são na história.`,
+    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis do universo de ${c.world}.`,
     c.useImages
-      ? `6. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
+      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
@@ -151,17 +152,19 @@ export default function RPG() {
     } catch { return ""; }
   };
 
-  // ─── Export to Novel (PDF LITERÁRIO) ─────────────────────────────────
+  // ─── Export to Novel (PDF LITERÁRIO CORRIGIDO) ───────────────────────
   const exportToBook = async () => {
-    setStatus("📖 A reescrever a aventura como um romance... (Pode demorar uns segundos)");
+    setStatus("📖 A reescrever a aventura como um livro... (Pode demorar uns segundos)");
     setLoading(true);
 
     try {
+      // 1. Prepara o histórico inteiro para enviar à IA
       const chatLog = disp.map(m => {
         const autor = m.type === "gm" ? "Mestre" : active.charName;
         return `[${autor}]: ${m.text}`;
       }).join("\n\n");
 
+      // 2. Prompt especial para transformar o jogo num livro focado no gênero original do jogo
       const sysPrompt = `Você é um escritor best-seller.
 Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário envolvente.
 
@@ -172,8 +175,9 @@ REGRAS ABSOLUTAS DA REESCRITA:
 4. Transforme as falas curtas do jogador em ações descritivas e fluídas do protagonista (${active.charName}).
 5. Crie transições suaves. O texto deve fluir perfeitamente do início ao fim como um excelente livro de ficção.
 6. Escreva em Português Brasileiro.
-7. Mantenha o clima e o tom original da aventura.`;
+7. Mantenha o clima e o gênero original da aventura (ex: se for terror, mantenha assustador; se for ficção científica, mantenha tecnológico). NÃO transforme obrigatoriamente a história num romance de amor.`;
 
+      // 3. Pede à IA para criar o livro
       const res = await fetch("/api/gm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,6 +190,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
+      // 4. Formata o texto recebido para HTML
       const novelText = data.text;
       const parseMD = (str) => str.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
       
@@ -196,6 +201,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
         .map(p => `<p style="margin-bottom: 18px; line-height: 1.9; font-size: 16px; text-align: justify; color: #111;">${parseMD(p)}</p>`)
         .join("");
 
+      // 5. Monta a janela de Impressão nativa do navegador
       const htmlString = `
         <!DOCTYPE html>
         <html lang="pt">
@@ -223,6 +229,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
             <strong>FIM DO CAPÍTULO.</strong>
           </div>
           <script>
+            // Quando a janela acabar de carregar, abre automaticamente o menu de impressão/guardar PDF
             window.onload = function() {
               setTimeout(function(){ window.print(); }, 500);
             };
@@ -337,7 +344,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
 
   // ─── Game ─────────────────────────────────────────────────────────────
   const doStart = (camp, lore) => sendMsg(
-    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro desafio imediato ou cena imersiva.`,
+    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro evento ou desafio com o qual ele se depara.`,
     [], [], camp, lore, false
   );
 

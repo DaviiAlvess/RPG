@@ -10,7 +10,10 @@ const extractOptions = (text) => {
   const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
   return matches.slice(-3).map(m => m[2].trim());
 };
-const cleanText = (t) => t.replace(/IMAGE_PROMPT:\s*.+/gi, "").trim();
+const cleanText = (t) =>
+  t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
+   .replace(/\[(MISSÃO|CONCLUÍDA):([^\]]+)\]/gi, "")
+   .trim();
 const generateImage = (prompt, world) => {
   const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
@@ -18,6 +21,31 @@ const generateImage = (prompt, world) => {
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
+const fmtTime = (ts) =>
+  ts ? new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+
+// ─── Mission parser ───────────────────────────────────────────────────
+const parseMissions = (text, current) => {
+  let updated = [...current];
+  const newMatches = [...text.matchAll(/\[MISSÃO:([^\]]+)\]/gi)];
+  for (const m of newMatches) {
+    const mText = m[1].trim();
+    if (!updated.find(ex => ex.text.toLowerCase() === mText.toLowerCase())) {
+      updated.push({ id: uid(), text: mText, completed: false });
+    }
+  }
+  const completedMatches = [...text.matchAll(/\[CONCLUÍDA:([^\]]+)\]/gi)];
+  for (const c of completedMatches) {
+    const cText = c[1].trim();
+    updated = updated.map(m =>
+      m.text.toLowerCase().includes(cText.toLowerCase()) ||
+      cText.toLowerCase().includes(m.text.toLowerCase())
+        ? { ...m, completed: true }
+        : m
+    );
+  }
+  return updated;
+};
 
 // ─── Aparência ────────────────────────────────────────────────────────
 const APP_OPTIONS = {
@@ -78,31 +106,40 @@ const buildPrompt = (c, loreExtra) =>
     `══════════════════════════════════════════`,
     ``,
     `REGRA 1 — MENOS É MAIS.`,
-    `Descreva a cena com apenas 2 ou 3 elementos concretos. Não detalhe tudo. Deixe lacunas. O jogador deve sentir que há mais para descobrir se ele explorar, perguntar e agir. Quanto mais você explica, menos o jogador imagina. Confie na imaginação dele.`,
+    `Descreva a cena com apenas 2 ou 3 elementos concretos e sensoriais. Não explique tudo. Deixe lacunas. O jogador deve sentir que há mais para descobrir se explorar, perguntar e agir. Brevidade com precisão é mais poderosa que abundância vaga. Parágrafos curtos. Frases que cortam.`,
     ``,
     `REGRA 2 — USE TODOS OS SENTIDOS, NÃO SÓ A VISÃO.`,
-    `A cada cena, inclua pelo menos um detalhe sonoro, um tátil ou térmico, e um olfativo ou gustativo. Exemplos: o cheiro de fumaça fria num corredor vazio, o calor úmido que gruda na armadura, o rangido de uma porta que ninguém abriu, a areia que entra pela bota. Sons, texturas, temperaturas e cheiros criam presença. Imagens sozinhas não.`,
+    `A cada cena, inclua pelo menos um detalhe sonoro, um tátil ou térmico, e um olfativo. O cheiro de sangue seco numa sala de audiências. O calor da tocha que não aquece. O rangido que vem de um corredor vazio. Sons, texturas e cheiros criam presença real. Imagens sozinhas são decoração.`,
     ``,
     `REGRA 3 — NUNCA DIGA O QUE O PERSONAGEM SENTE.`,
-    `Você narra o mundo, não a alma do personagem. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva te invade". Isso é papel do jogador. Em vez disso, descreva o que acontece no mundo que poderia provocar uma reação: "O mensageiro não te olha nos olhos." "A criança para de chorar quando você entra." Às vezes, pergunte diretamente: "Como ${c.charName} reage a isso?"`,
+    `Você narra o mundo, não a alma de ${c.charName}. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Isso é papel do jogador. Descreva o que o mundo faz que poderia provocar uma reação: "O mensageiro não te olha nos olhos." "A criança para de chorar quando você entra." Pergunte diretamente quando necessário: "Como ${c.charName} reage?"`,
     ``,
-    `REGRA 4 — NPCs TÊM VIDA PRÓPRIA E AGENDA PRÓPRIA.`,
-    `Cada NPC quer algo. Eles mentem, omitem, têm pressa, guardam rancor, fingem indiferença. Eles não existem para servir o jogador. Um ferreiro pode ignorar ${c.charName} porque está com raiva do filho. Um guarda pode ser corrupto ou covarde. Faça os NPCs parecerem reais, não bonecos de tutorial. Dê a eles falas curtas, diretas, com subtexto. Mostre o que eles fazem enquanto falam, não só o que dizem.`,
+    `REGRA 4 — NPCs TÊM VIDA PRÓPRIA, VOZ PRÓPRIA, AGENDA PRÓPRIA.`,
+    `Cada NPC quer algo específico. Eles mentem, omitem, têm pressa, guardam rancor. Mas além disso: cada um fala diferente. Um soldado veterano usa frases curtas, quase ordens. Uma velha curandeira fala em meias-verdades e provérbios. Um nobre ansioso ri alto demais. Um jovem guarda gagueja quando nervoso. Essas marcas custam uma linha e transformam papelão em gente. Mostre o que eles fazem enquanto falam — o ferreiro que não para de trabalhar, o mercador que recolhe a mercadoria quando vê ${c.charName} chegar. Ação revela mais que palavra.`,
     ``,
-    `REGRA 5 — O MUNDO REAGE E PUNE.`,
-    `Decisões têm peso. Se ${c.charName} age com descuido, o mundo responde: um aliado some, um item some, uma oportunidade fecha. Não avise antes. Não dê segunda chance automaticamente. O mundo é indiferente à sorte do jogador. Isso torna as vitórias reais e os erros dolorosos — e é isso que cria tensão de verdade.`,
+    `REGRA 5 — AÇÕES TÊM PESO E O MUNDO PUNE DESCUIDO.`,
+    `Decisões importam. Se ${c.charName} age com descuido, o mundo responde: um aliado desaparece, uma porta fecha, uma oportunidade some sem aviso. Não avise antes. Não dê segunda chance automaticamente. O mundo é indiferente à sorte do jogador — e isso torna as vitórias reais e os erros dolorosos.`,
     ``,
-    `REGRA 6 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.`,
-    `NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Em vez disso, termine a narração com uma situação viva: uma pergunta do ambiente, uma ação de um NPC, uma tensão que exige resposta. O jogador que decide o que fazer. Você só narra o que acontece.`,
+    `REGRA 6 — CADA CENA TEM UM CONFLITO, MESMO PEQUENO.`,
+    `Não existe cena neutra. Uma conversa simples tem tensão embaixo: alguém quer algo que o outro não quer dar, alguém sabe algo que esconde, alguém tem pressa enquanto o outro quer demorar. Identifique o conflito de cada cena — mesmo que minúsculo — e deixe ele respirar. Subtexto é o que faz uma cena viver depois que o jogador fecha o jogo.`,
     ``,
-    `REGRA 7 — IMPROVISE COM INTENÇÃO.`,
-    `Se o jogador explorar algo que você não planejou, crie na hora. Adapte o que já existe. Um detalhe que você jogou no cenário pode virar uma pista, um perigo ou um aliado. O improviso deve parecer inevitável, não aleatório.`,
+    `REGRA 7 — PAUSA É NARRAÇÃO.`,
+    `Às vezes a resposta mais pesada é o silêncio. "Ela não responde. Examina as próprias mãos." "A sala fica quieta." "O vento para." Pausas criam peso emocional. Uma cena pode terminar sem ação — com uma olhar, um gesto, um som distante. Use isso.`,
     ``,
-    `REGRA 8 — RESPEITE O LORE.`,
-    `As regras, a magia, a política e a física do universo de ${c.world} existem e têm peso. Não quebre o lore por conveniência narrativa.`,
+    `REGRA 8 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.`,
+    `NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Termine com uma situação viva: uma pergunta do ambiente, a ação de um NPC, uma tensão que exige resposta. O jogador decide. Você só narra o que acontece.`,
+    ``,
+    `REGRA 9 — IMPROVISE COM INTENÇÃO.`,
+    `Se o jogador explorar algo não planejado, crie na hora. Um detalhe de cenário pode virar pista, perigo ou aliado. O improviso deve parecer inevitável, não aleatório.`,
+    ``,
+    `REGRA 10 — RESPEITE O LORE.`,
+    `As regras, a magia, a política e a física de ${c.world} existem e têm peso. Não quebre o lore por conveniência narrativa.`,
+    ``,
+    `REGRA 11 — MISSÕES E OBJETIVOS.`,
+    `Quando surgir um objetivo claro para ${c.charName} — uma tarefa, um pedido, uma promessa, uma obrigação importante — inclua ao final da narração, na última linha: [MISSÃO: descrição em 1 linha]. Quando ${c.charName} cumprir um objetivo: [CONCLUÍDA: descrição em 1 linha]. Use com parcimônia — só para objetivos reais, não para cada ação pequena.`,
     ``,
     c.useImages
-      ? `IMAGEM: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
+      ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
@@ -134,33 +171,84 @@ export default function RPG() {
   const [showChar, setShowChar] = useState(false);
   const [campLore, setCampLore] = useState("");
 
-  // Auto mode
-  const [autoMode, setAutoMode]         = useState(false);
-  const [autoWaiting, setAutoWaiting]   = useState(false); 
-  const [pendingOptions, setPending]    = useState([]);    
-  const [autoDelay, setAutoDelay]       = useState(3);     
-  const [countdown, setCountdown]       = useState(0);
+  // HP
+  const [hp, setHp] = useState(100);
 
-  const bottomRef  = useRef(null);
-  const taRef      = useRef(null);
-  const sending    = useRef(false);
-  const autoRef    = useRef(false);        
-  const timerRef   = useRef(null);
-  const cdRef      = useRef(null);
+  // Missions
+  const [missions, setMissions] = useState([]);
+
+  // Saves
+  const [saveFlash, setSaveFlash] = useState(false);
+
+  // Auto mode
+  const [autoMode, setAutoMode]       = useState(false);
+  const [autoWaiting, setAutoWaiting] = useState(false);
+  const [pendingOptions, setPending]  = useState([]);
+  const [autoDelay, setAutoDelay]     = useState(3);
+  const [countdown, setCountdown]     = useState(0);
+
+  const bottomRef = useRef(null);
+  const taRef     = useRef(null);
+  const sending   = useRef(false);
+  const autoRef   = useRef(false);
+  const timerRef  = useRef(null);
+  const cdRef     = useRef(null);
 
   useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
-
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
-
-  useEffect(() => {
-    if (view !== "play") { clearAuto(); }
-  }, [view]);
+  useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
 
   // ─── Storage ─────────────────────────────────────────────────────────
   const saveIdx  = (l) => { try { localStorage.setItem(IDX_KEY, JSON.stringify(l)); } catch {} };
   const saveCamp = (id, d) => { try { localStorage.setItem(campKey(id), JSON.stringify(d)); } catch {} };
   const readCamp = (id) => { try { return JSON.parse(localStorage.getItem(campKey(id))); } catch { return null; } };
+
+  // ─── Save Slots ───────────────────────────────────────────────────────
+  const saveSlot = () => {
+    if (!active || loading) return;
+    const lastGM = [...disp].reverse().find(m => m.type === "gm");
+    const snippet = lastGM
+      ? lastGM.text.replace(/\n/g, " ").slice(0, 58) + "…"
+      : "Início da aventura";
+    const newSave = {
+      id: uid(),
+      name: snippet,
+      hp,
+      timestamp: Date.now(),
+      msgs: [...msgs],
+      disp: [...disp],
+      img: sceneImg,
+      missions: [...missions],
+    };
+    const currentSaves = active.saves || [];
+    const updatedSaves = [newSave, ...currentSaves].slice(0, 5);
+    const updated = { ...active, saves: updatedSaves, missions, hp };
+    setActive(updated);
+    saveCamp(active.id, updated);
+    setSaveFlash(true);
+    setTimeout(() => setSaveFlash(false), 1500);
+  };
+
+  const loadSlot = (save) => {
+    if (!confirm("Carregar este save? O progresso não salvo será perdido.")) return;
+    clearAuto();
+    setMsgs(save.msgs || []);
+    setDisp(save.disp || []);
+    setSceneImg(save.img || null);
+    setImgOk(!!save.img);
+    setHp(save.hp ?? 100);
+    setMissions(save.missions || []);
+    setShowChar(false);
+  };
+
+  const deleteSlot = (saveId) => {
+    if (!confirm("Apagar este save permanentemente?")) return;
+    const updatedSaves = (active.saves || []).filter(s => s.id !== saveId);
+    const updated = { ...active, saves: updatedSaves };
+    setActive(updated);
+    saveCamp(active.id, updated);
+  };
 
   // ─── Lore fetch ───────────────────────────────────────────────────────
   const fetchLore = async (world) => {
@@ -173,73 +261,45 @@ export default function RPG() {
     } catch { return ""; }
   };
 
-  // ─── Export to PDF (MÉTODO NATIVO DO NAVEGADOR) ──────────────────────
+  // ─── Export to Book ───────────────────────────────────────────────────
   const exportToBook = () => {
-    setStatus("📖 A preparar o livro...");
-    setLoading(true);
-
     const bookContent = disp.map(m => {
       if (m.type === "gm") {
-        return `<p style="margin-bottom: 24px; line-height: 1.8; font-size: 16px; text-align: justify; color: #111;">${m.text.replace(/\n/g, '<br/>')}</p>`;
+        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/\n/g, "<br/>")}</p>`;
       }
       if (m.type === "user" || m.type === "auto") {
-        return `<div style="text-align: right; margin-bottom: 24px;">
-                  <span style="font-style: italic; font-size: 15px; color: #444; border-bottom: 1px solid #ccc; padding-bottom: 2px;">
-                    — ${m.text}
-                  </span>
-                </div>`;
+        return `<div style="text-align:right;margin-bottom:24px;"><span style="font-style:italic;font-size:15px;color:#444;border-bottom:1px solid #ccc;padding-bottom:2px;">— ${m.text}</span></div>`;
       }
       return "";
     }).join("");
 
-    const htmlString = `
-      <!DOCTYPE html>
-      <html lang="pt">
-      <head>
-        <meta charset="UTF-8">
-        <title>O Livro de ${active.charName}</title>
-        <style>
-          body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
-          @media print {
-            body { padding: 0; margin: 0; }
-            @page { margin: 2cm; }
-          }
-        </style>
-      </head>
-      <body>
-        <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
-          <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
-          <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
-          <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
-        </div>
-        <div>
-          ${bookContent}
-        </div>
-        <div style="text-align: center; margin-top: 60px; font-size: 18px; color: #000;">
-          <strong>FIM.</strong>
-        </div>
-        <script>
-          window.onload = function() {
-            window.print();
-          };
-        </script>
-      </body>
-      </html>
-    `;
+    const missionsHtml = missions.length
+      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
+          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">MISSÕES</h3>
+          ${missions.map(m => `<p style="font-size:13px;color:${m.completed ? '#888' : '#111'};text-decoration:${m.completed ? 'line-through' : 'none'};margin-bottom:6px;">${m.completed ? "✓" : "◦"} ${m.text}</p>`).join("")}
+        </div>`
+      : "";
 
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(htmlString);
-      printWindow.document.close();
-    } else {
-      alert("Por favor, permita os pop-ups neste site para gerar o livro.");
-    }
-    
-    setLoading(false);
-    setStatus("");
+    const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>As Crônicas de ${active.charName}</title>
+      <style>body{font-family:'Georgia',serif;padding:40px;color:#000;background:#fff;max-width:800px;margin:0 auto}@media print{body{padding:0;margin:0}@page{margin:2cm}}</style></head>
+      <body>
+        <div style="text-align:center;margin-bottom:80px;margin-top:50px;">
+          <h1 style="font-size:38px;color:#000;letter-spacing:2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
+          <h2 style="font-size:20px;font-weight:normal;color:#555;margin-bottom:30px;">${active.world}</h2>
+          <div style="width:80px;height:2px;background:#000;margin:0 auto;"></div>
+        </div>
+        ${missionsHtml}
+        ${bookContent}
+        <div style="text-align:center;margin-top:60px;font-size:18px;"><strong>FIM.</strong></div>
+        <script>window.onload=function(){window.print();}<\/script>
+      </body></html>`;
+
+    const w = window.open("", "_blank");
+    if (w) { w.document.write(html); w.document.close(); }
+    else alert("Permita pop-ups neste site para gerar o livro.");
   };
 
-  // ─── Auto mode helpers ────────────────────────────────────────────────
+  // ─── Auto mode ────────────────────────────────────────────────────────
   const clearAuto = () => {
     clearTimeout(timerRef.current);
     clearInterval(cdRef.current);
@@ -249,17 +309,11 @@ export default function RPG() {
 
   const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
     if (!autoRef.current || !options.length) return;
-
     setAutoWaiting(true);
     setCountdown(autoDelay);
-
     cdRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { clearInterval(cdRef.current); return 0; }
-        return prev - 1;
-      });
+      setCountdown(prev => { if (prev <= 1) { clearInterval(cdRef.current); return 0; } return prev - 1; });
     }, 1000);
-
     timerRef.current = setTimeout(() => {
       setAutoWaiting(false);
       if (!autoRef.current) return;
@@ -272,9 +326,7 @@ export default function RPG() {
     const next = !autoMode;
     setAutoMode(next);
     autoRef.current = next;
-    if (!next) {
-      clearAuto();
-    }
+    if (!next) clearAuto();
   };
 
   const intervene = () => {
@@ -289,9 +341,15 @@ export default function RPG() {
   const openCamp = (s) => {
     const data = readCamp(s.id);
     if (!data) return;
-    setActive(data); setMsgs(data.msgs || []); setDisp(data.disp || []);
-    setSceneImg(data.img || null); setImgOk(!!data.img);
-    setCampLore(data.lore || ""); setShowChar(false);
+    setActive(data);
+    setMsgs(data.msgs || []);
+    setDisp(data.disp || []);
+    setSceneImg(data.img || null);
+    setImgOk(!!data.img);
+    setCampLore(data.lore || "");
+    setHp(data.hp ?? 100);
+    setMissions(data.missions || []);
+    setShowChar(false);
     setAutoMode(false); setAutoWaiting(false); setPending([]);
     setView("play");
     if (!data.msgs?.length) doStart(data, data.lore || "");
@@ -314,11 +372,12 @@ export default function RPG() {
   const finishCreate = async () => {
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
+    setHp(100); setMissions([]);
     let lore = "";
     if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
     else { setStatus("⚗️ A preparar mundo..."); }
     const id = uid();
-    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, createdAt: Date.now() };
+    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, hp: 100, missions: [], saves: [], createdAt: Date.now() };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
     setIdx(next); saveIdx(next); saveCamp(id, camp);
@@ -357,6 +416,10 @@ export default function RPG() {
       const clean = cleanText(raw);
       const options = extractOptions(clean);
 
+      // Parse missions
+      const updatedMissions = parseMissions(raw, missions);
+      setMissions(updatedMissions);
+
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
       setMsgs(finalMsgs); setDisp(finalDisp);
@@ -364,16 +427,15 @@ export default function RPG() {
       let newImg = camp.img || null;
       if (imgPrompt) { setImgOk(false); newImg = generateImage(imgPrompt, camp.world); setSceneImg(newImg); }
 
-      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, updatedAt: Date.now() };
+      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, missions: updatedMissions, hp, updatedAt: Date.now() };
       setActive(updated); saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
       setPending(options);
-
       if (autoRef.current && options.length > 0) {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
       } else if (autoRef.current && options.length === 0) {
-         intervene();
+        intervene();
       }
 
     } catch {
@@ -392,19 +454,32 @@ export default function RPG() {
   const resetChat = () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
     clearAuto(); setAutoMode(false); autoRef.current = false;
-    const updated = { ...active, msgs: [], disp: [], img: null };
-    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null); setPending([]);
+    const updated = { ...active, msgs: [], disp: [], img: null, missions: [], hp: 100 };
+    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
+    setMissions([]); setHp(100); setPending([]);
     saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
   const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
 
+  // HP with active sync
+  const changeHp = (delta) => {
+    const next = Math.min(100, Math.max(0, hp + delta));
+    setHp(next);
+    if (active) {
+      const updated = { ...active, hp: next };
+      setActive(updated);
+      saveCamp(active.id, updated);
+    }
+  };
+
+  const activeMissions = missions.filter(m => !m.completed);
+  const doneMissions   = missions.filter(m => m.completed);
+
   // ═══ HOME ══════════════════════════════════════════════════════════
   if (view === "home") return (
     <div className="root">
-      <Head>
-        <title>Forja de Mundos</title>
-      </Head>
+      <Head><title>Forja de Mundos</title></Head>
       <div className="hh">
         <div className="hh-icon">⚔</div>
         <div className="hh-title">FORJA DE MUNDOS</div>
@@ -437,9 +512,7 @@ export default function RPG() {
   // ═══ CREATE ════════════════════════════════════════════════════════
   if (view === "create") return (
     <div className="root">
-      <Head>
-        <title>Novo Personagem</title>
-      </Head>
+      <Head><title>Novo Personagem</title></Head>
       <div className="cr-head">
         <button className="btn-back" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← VOLTAR</button>
         <div className="cr-steps">
@@ -516,18 +589,17 @@ export default function RPG() {
           <button className="btn-next" onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
         </>}
       </div>
-
       <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST }} />
     </div>
   );
 
   // ═══ PLAY ══════════════════════════════════════════════════════════
   const c = active || {};
+  const hpColor = hp > 60 ? "#2a6a2a" : hp > 30 ? "#8b7a00" : "#8b1a00";
+
   return (
     <div className="root">
-      <Head>
-        <title>{c.charName} — {c.world}</title>
-      </Head>
+      <Head><title>{c.charName} — {c.world}</title></Head>
 
       {/* Header */}
       <div className="header">
@@ -545,6 +617,17 @@ export default function RPG() {
             <div className="t-name">⚔ {c.charName}</div>
             {c.charTitle && <div className="t-world">{c.charTitle}</div>}
           </div>
+          {/* HP mini */}
+          <div className="hp-mini" title="Vida">
+            <div className="hp-mini-bar" style={{ width: `${hp}%`, background: hpColor }} />
+            <span className="hp-mini-val">{hp}</span>
+          </div>
+          {/* Mission badge */}
+          {activeMissions.length > 0 && (
+            <div className="mission-badge" onClick={() => setShowChar(v => !v)} title="Missões ativas">
+              📋{activeMissions.length}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 4 }}>
             <button className="btn-sm" onClick={() => setShowChar(v => !v)}>📜</button>
             <button className="btn-sm" onClick={resetChat}>↺</button>
@@ -553,7 +636,8 @@ export default function RPG() {
 
         {showChar && (
           <div className="cpanel">
-            <div className="cp-lbl">▸ FICHA E OPÇÕES</div>
+            {/* Character info */}
+            <div className="cp-lbl">▸ PERSONAGEM</div>
             {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
             {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
             {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
@@ -561,16 +645,90 @@ export default function RPG() {
             {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
             {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
             {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
-            
-            <div style={{ marginTop: 16, display: "flex", gap: 6, flexWrap: "wrap", borderTop: "1px solid #180e00", paddingTop: 10 }}>
+
+            {/* HP tracker */}
+            <div className="cp-divider" />
+            <div className="cp-lbl">❤ VIDA</div>
+            <div className="hp-ctrl">
+              <button className="hp-btn" onClick={() => changeHp(-10)}>−10</button>
+              <button className="hp-btn" onClick={() => changeHp(-5)}>−5</button>
+              <div className="hp-bar-wrap">
+                <div className="hp-bar-fill" style={{ width: `${hp}%`, background: hpColor }} />
+                <span className="hp-val">{hp}/100</span>
+              </div>
+              <button className="hp-btn" onClick={() => changeHp(+5)}>+5</button>
+              <button className="hp-btn" onClick={() => changeHp(+10)}>+10</button>
+            </div>
+
+            {/* Missions */}
+            {missions.length > 0 && <>
+              <div className="cp-divider" />
+              <div className="cp-lbl">📋 MISSÕES</div>
+              {activeMissions.map(m => (
+                <div key={m.id} className="mission-row active">
+                  <span className="mission-dot">◦</span>
+                  <span>{m.text}</span>
+                </div>
+              ))}
+              {doneMissions.map(m => (
+                <div key={m.id} className="mission-row done">
+                  <span className="mission-dot">✓</span>
+                  <span>{m.text}</span>
+                </div>
+              ))}
+            </>}
+
+            {/* Saves */}
+            <div className="cp-divider" />
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div className="cp-lbl" style={{ margin: 0 }}>💾 SAVES ({(active.saves || []).length}/5)</div>
+              <button
+                className={`btn-save ${saveFlash ? "flash" : ""}`}
+                onClick={saveSlot}
+              >{saveFlash ? "✓ SALVO" : "SALVAR"}</button>
+            </div>
+            {!(active.saves || []).length && (
+              <div className="save-empty">Nenhum save ainda. Salve para não perder o progresso.</div>
+            )}
+            {(active.saves || []).map(s => (
+              <div key={s.id} className="save-item">
+                <div className="save-info">
+                  <div className="save-name">{s.name}</div>
+                  <div className="save-meta">
+                    <span className="save-hp">❤ {s.hp ?? "—"}</span>
+                    <span>{fmtDate(s.timestamp)} {fmtTime(s.timestamp)}</span>
+                    {(s.missions || []).filter(m => !m.completed).length > 0 && (
+                      <span className="save-missions">📋 {(s.missions || []).filter(m => !m.completed).length}</span>
+                    )}
+                  </div>
+                </div>
+                <div className="save-btns">
+                  <button className="save-btn-load" onClick={() => loadSlot(s)}>▶</button>
+                  <button className="save-btn-del"  onClick={() => deleteSlot(s.id)}>✕</button>
+                </div>
+              </div>
+            ))}
+
+            {/* Badges & export */}
+            <div className="cp-divider" />
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
               {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
             </div>
-
             <button onClick={exportToBook} className="btn-export">📖 EXPORTAR COMO LIVRO (PDF)</button>
           </div>
         )}
       </div>
+
+      {/* Missões em destaque (inline, quando houver missões ativas e painel fechado) */}
+      {!showChar && activeMissions.length > 0 && (
+        <div className="missions-strip" onClick={() => setShowChar(true)}>
+          {activeMissions.slice(0, 2).map(m => (
+            <div key={m.id} className="missions-strip-item">◦ {m.text}</div>
+          ))}
+          {activeMissions.length > 2 && <div className="missions-strip-more">+{activeMissions.length - 2} mais</div>}
+        </div>
+      )}
 
       {/* Mensagens */}
       <div className="msgs">
@@ -615,7 +773,7 @@ export default function RPG() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input + botão AUTO */}
+      {/* Input */}
       <div className="iarea">
         <button
           className={`btn-auto ${autoMode ? "on" : ""}`}
@@ -624,7 +782,6 @@ export default function RPG() {
         >
           {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
         </button>
-
         <textarea
           ref={taRef}
           className="ibox"
@@ -682,7 +839,7 @@ textarea::placeholder,input::placeholder{color:#2a1800}
 ::-webkit-scrollbar-thumb{background:#2a1800;border-radius:2px}
 @keyframes pulse{0%,100%{opacity:.15}50%{opacity:.85}}
 @keyframes autopulse{0%,100%{opacity:.4}50%{opacity:1}}
-@keyframes cdbar{from{width:100%}to{width:0%}}
+@keyframes flashgreen{0%{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}100%{background:transparent;border-color:#2a1800;color:#4a2c00}}
 `;
 
 const BASE = `
@@ -746,17 +903,65 @@ const PLAY_ST = BASE + `
 .si.ok{opacity:.72}
 .si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
 .si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-.tbar{display:flex;align-items:center;gap:8px;padding:10px 12px}
+.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px}
 .tc{flex:1;text-align:center;min-width:0}
 .t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
-.btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
-.cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:280px;overflow-y:auto}
+.btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+
+/* HP mini in tbar */
+.hp-mini{position:relative;width:32px;height:32px;flex-shrink:0;border:1px solid #180e00;border-radius:4px;overflow:hidden;cursor:default;display:flex;align-items:center;justify-content:center}
+.hp-mini-bar{position:absolute;bottom:0;left:0;height:100%;transition:width .4s,background .4s;opacity:.35}
+.hp-mini-val{position:relative;font-size:9px;color:#c4a060;letter-spacing:0;z-index:1}
+
+/* Mission badge in tbar */
+.mission-badge{font-size:10px;color:#8b6a20;border:1px solid #2a1e00;border-radius:4px;padding:4px 6px;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;background:#0c0900}
+
+/* cpanel */
+.cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:340px;overflow-y:auto}
 .cp-lbl{color:#d4a843;font-size:8px;letter-spacing:3px;margin-bottom:6px}
+.cp-divider{border-top:1px solid #180e00;margin:10px 0}
 .dd{color:#4a2c00}
+
+/* HP tracker */
+.hp-ctrl{display:flex;align-items:center;gap:4px;margin-bottom:4px}
+.hp-btn{background:#0a0600;border:1px solid #1e1400;border-radius:3px;color:#6b4a1a;font-size:10px;padding:3px 7px;cursor:pointer;font-family:inherit;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+.hp-bar-wrap{flex:1;position:relative;height:18px;background:#0a0600;border:1px solid #180e00;border-radius:3px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.hp-bar-fill{position:absolute;left:0;top:0;bottom:0;transition:width .3s,background .3s;opacity:.7}
+.hp-val{position:relative;font-size:9px;color:#c4a060;z-index:1}
+
+/* Missions */
+.mission-row{display:flex;gap:6px;font-size:11px;line-height:1.7;align-items:flex-start}
+.mission-row.active{color:#c4a060}
+.mission-row.done{color:#3a2a10;text-decoration:line-through}
+.mission-dot{flex-shrink:0;color:#8b5a14;margin-top:1px}
+
+/* Saves */
+.btn-save{background:transparent;border:1px solid #2a1800;border-radius:3px;color:#4a2c00;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit;transition:all .3s;-webkit-tap-highlight-color:transparent}
+.btn-save:hover{border-color:#8b5a14;color:#d4a843}
+.btn-save.flash{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}
+.save-empty{font-size:10px;color:#2c1900;font-style:italic;line-height:1.6}
+.save-item{display:flex;align-items:center;gap:8px;background:#0a0600;border:1px solid #180e00;border-radius:4px;padding:7px 8px;margin-bottom:5px}
+.save-info{flex:1;min-width:0}
+.save-name{font-size:10px;color:#8b6a30;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.save-meta{font-size:9px;color:#2c1900;display:flex;gap:6px;align-items:center;margin-top:2px}
+.save-hp{color:#6b3a1a}
+.save-missions{color:#5a4a10}
+.save-btns{display:flex;gap:4px;flex-shrink:0}
+.save-btn-load{background:#1a0e00;border:1px solid #4a2000;color:#8b5a14;border-radius:3px;padding:4px 8px;cursor:pointer;font-size:11px;-webkit-tap-highlight-color:transparent}
+.save-btn-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:3px;padding:4px 7px;cursor:pointer;font-size:10px;-webkit-tap-highlight-color:transparent}
+
+/* Badges */
 .badge{font-size:8px;letter-spacing:2px;color:#2c1900;background:#0a0600;border:1px solid #180e00;border-radius:3px;padding:2px 6px}
-.btn-export{width:100%;background:transparent;border:1px solid #4a2c00;color:#c4a060;padding:10px;margin-top:14px;border-radius:4px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit;}
+.btn-export{width:100%;background:transparent;border:1px solid #4a2c00;color:#c4a060;padding:10px;margin-top:14px;border-radius:4px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit}
 .btn-export:hover{background:#180e00}
+
+/* Mission strip (always visible below header) */
+.missions-strip{flex-shrink:0;background:#0c0900;border-bottom:1px solid #1e1400;padding:6px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.missions-strip-item{font-size:10px;color:#6b5010;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.missions-strip-more{font-size:9px;color:#3a2800;letter-spacing:1px}
+
+/* Messages */
 .msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
 .splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
 .b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}
@@ -771,6 +976,8 @@ const PLAY_ST = BASE + `
 .auto-dot{width:7px;height:7px;border-radius:50%;background:#8b6a00;flex-shrink:0;animation:autopulse 1s infinite}
 .auto-banner-top strong{color:#d4a843}
 .btn-intervir{background:#1a1000;border:1px solid #5a4000;border-radius:4px;color:#d4a843;font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:2px;font-family:inherit;-webkit-tap-highlight-color:transparent}
+
+/* Input area */
 .iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}
 .btn-auto{background:#0c0700;border:1px solid #180e00;border-radius:6px;color:#2c1900;font-size:8px;letter-spacing:1px;padding:0;width:44px;height:48px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4;white-space:pre;-webkit-tap-highlight-color:transparent;transition:all .2s}
 .btn-auto.on{background:#1a1000;border-color:#6a5000;color:#d4a843;animation:autopulse 1.5s infinite}

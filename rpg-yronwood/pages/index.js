@@ -149,7 +149,7 @@ ${loreExtra}`
     `REGRA 7 — PAUSA É NARRAÇÃO.`,
     `Às vezes a resposta mais pesada é o silêncio. "Ela não responde. Examina as próprias mãos." "A sala fica quieta." "O vento para." Pausas criam peso emocional. Uma cena pode terminar sem ação — com uma olhar, um gesto, um som distante. Use isso.`,
     ``,
-    `REGRA 8 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.`,
+    `REGRA 8 — TERMINE WITH UMA ABERTURA, NÃO COM UMA LISTA.`,
     `NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Termine com uma situação viva: uma pergunta do ambiente, a ação de um NPC, uma tensão que exige resposta. O jogador decide. Você só narra o que acontece.`,
     ``,
     `REGRA 9 — IMPROVISE COM INTENÇÃO.`,
@@ -474,6 +474,12 @@ export default function RPG() {
       setPendingTest(null);
       sendMsg(
         `Resultado do teste de ${attribute}: ${description}. (Resultado: ${roll}/20)`,
+        msgs, disp, active, campLore, false
+      );
+    } else {
+      // Rolagem manual livre
+      sendMsg(
+        `Tento realizar uma ação e rolo um dado de 20 faces. (Resultado: ${roll}/20)`,
         msgs, disp, active, campLore, false
       );
     }
@@ -923,13 +929,14 @@ export default function RPG() {
 
       {/* Quick Actions */}
       <div className="q-actions">
+        <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
         <button className="q-btn" onClick={() => insertCmd("[TESTE:Força] ")}>💪 TESTE</button>
         <button className="q-btn" onClick={() => insertCmd("[ITEM:Item] ")}>🎒 ITEM</button>
         <button className="q-btn" onClick={() => insertCmd("[MISSÃO:Nova Missão] ")}>📋 MISSÃO</button>
         <button className="q-btn" onClick={() => insertCmd("[CONCLUÍDA:Missão] ")}>✓ OK</button>
       </div>
 
-      {/* Input */}
+      {/* Input area */}
       <div className="iarea">
         <button
           className={`btn-auto ${autoMode ? "on" : ""}`}
@@ -1158,6 +1165,7 @@ const PLAY_ST = BASE + `
 .q-actions::-webkit-scrollbar{display:none}
 .q-btn{background:#0a0600;border:1px solid #1e1400;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit;letter-spacing:1px;-webkit-tap-highlight-color:transparent}
 .q-btn:active{background:#1a0e00;border-color:#4a2c00}
+.q-btn.q-dice{background:linear-gradient(135deg,#1a0d3a,#0a031a);border-color:#2a1e6a;color:#9a7afa;font-weight:bold}
 
 /* Input area */
 .iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}

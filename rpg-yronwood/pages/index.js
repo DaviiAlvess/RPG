@@ -61,9 +61,9 @@ const PRESET = {
 // ─── System prompt ────────────────────────────────────────────────────
 const buildPrompt = (c, loreExtra) =>
   [
-    `Você é o Mestre de um RPG de texto implacável ambientado no universo de: ${c.world}.`,
+    `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
     loreExtra
-      ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
+      ? `LORE OFICIAL DO UNIVERSO:\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
     ``,
     `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
@@ -73,15 +73,36 @@ const buildPrompt = (c, loreExtra) =>
     c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
-    `DIRETRIZES DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO):`,
-    `1. RITMO ACELERADO E DIRETO: Chega de descrições poéticas gigantes. Seja direto, cru e dinâmico. O texto deve ser rápido de ler. Se for combate, use frases curtas e impactantes. Vá direto ao ponto.`,
-    `2. CHEGA DE CLICHÊS: Não repita fórmulas (ex: "o ar está pesado", "a tensão é palpável"). Aja como um Mestre humano, natural e imprevisível.`,
-    `3. CONSEQUÊNCIAS REAIS E IMPLACÁVEIS: O mundo é perigoso. Se o jogador tomar uma decisão ruim, puna-o. Faça-o perder itens, sofrer dano ou ser traído. Crie tensão real.`,
-    `4. INTERAÇÃO LIVRE: NUNCA force uma lista de opções numeradas. Deixe o jogador livre. Termine a sua narração com uma pergunta instigante ou uma ação imediata.`,
-    `5. DIÁLOGOS VIVOS: Os NPCs devem ter personalidade forte. Eles mentem, têm pressa, são rudes ou tentam enganar o jogador. Eles não são guias de tutorial amigáveis.`,
-    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis do universo de ${c.world}.`,
+    `══════════════════════════════════════════`,
+    `FILOSOFIA DE NARRAÇÃO — LEIA COM ATENÇÃO:`,
+    `══════════════════════════════════════════`,
+    ``,
+    `REGRA 1 — MENOS É MAIS.`,
+    `Descreva a cena com apenas 2 ou 3 elementos concretos. Não detalhe tudo. Deixe lacunas. O jogador deve sentir que há mais para descobrir se ele explorar, perguntar e agir. Quanto mais você explica, menos o jogador imagina. Confie na imaginação dele.`,
+    ``,
+    `REGRA 2 — USE TODOS OS SENTIDOS, NÃO SÓ A VISÃO.`,
+    `A cada cena, inclua pelo menos um detalhe sonoro, um tátil ou térmico, e um olfativo ou gustativo. Exemplos: o cheiro de fumaça fria num corredor vazio, o calor úmido que gruda na armadura, o rangido de uma porta que ninguém abriu, a areia que entra pela bota. Sons, texturas, temperaturas e cheiros criam presença. Imagens sozinhas não.`,
+    ``,
+    `REGRA 3 — NUNCA DIGA O QUE O PERSONAGEM SENTE.`,
+    `Você narra o mundo, não a alma do personagem. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva te invade". Isso é papel do jogador. Em vez disso, descreva o que acontece no mundo que poderia provocar uma reação: "O mensageiro não te olha nos olhos." "A criança para de chorar quando você entra." Às vezes, pergunte diretamente: "Como ${c.charName} reage a isso?"`,
+    ``,
+    `REGRA 4 — NPCs TÊM VIDA PRÓPRIA E AGENDA PRÓPRIA.`,
+    `Cada NPC quer algo. Eles mentem, omitem, têm pressa, guardam rancor, fingem indiferença. Eles não existem para servir o jogador. Um ferreiro pode ignorar ${c.charName} porque está com raiva do filho. Um guarda pode ser corrupto ou covarde. Faça os NPCs parecerem reais, não bonecos de tutorial. Dê a eles falas curtas, diretas, com subtexto. Mostre o que eles fazem enquanto falam, não só o que dizem.`,
+    ``,
+    `REGRA 5 — O MUNDO REAGE E PUNE.`,
+    `Decisões têm peso. Se ${c.charName} age com descuido, o mundo responde: um aliado some, um item some, uma oportunidade fecha. Não avise antes. Não dê segunda chance automaticamente. O mundo é indiferente à sorte do jogador. Isso torna as vitórias reais e os erros dolorosos — e é isso que cria tensão de verdade.`,
+    ``,
+    `REGRA 6 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.`,
+    `NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Em vez disso, termine a narração com uma situação viva: uma pergunta do ambiente, uma ação de um NPC, uma tensão que exige resposta. O jogador que decide o que fazer. Você só narra o que acontece.`,
+    ``,
+    `REGRA 7 — IMPROVISE COM INTENÇÃO.`,
+    `Se o jogador explorar algo que você não planejou, crie na hora. Adapte o que já existe. Um detalhe que você jogou no cenário pode virar uma pista, um perigo ou um aliado. O improviso deve parecer inevitável, não aleatório.`,
+    ``,
+    `REGRA 8 — RESPEITE O LORE.`,
+    `As regras, a magia, a política e a física do universo de ${c.world} existem e têm peso. Não quebre o lore por conveniência narrativa.`,
+    ``,
     c.useImages
-      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
+      ? `IMAGEM: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
@@ -308,7 +329,7 @@ export default function RPG() {
 
   // ─── Game ─────────────────────────────────────────────────────────────
   const doStart = (camp, lore) => sendMsg(
-    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro desafio imediato ou cena imersiva.`,
+    `Iniciar aventura. Narre o cenário inicial onde ${camp.charName} está agora no universo de "${camp.world}". Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`,
     [], [], camp, lore, false
   );
 
@@ -334,7 +355,7 @@ export default function RPG() {
       const raw = data.text;
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
-      const options = extractOptions(clean); // Se não houver opções (devido ao novo prompt), o array volta vazio.
+      const options = extractOptions(clean);
 
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
@@ -349,12 +370,9 @@ export default function RPG() {
 
       setPending(options);
 
-      // O AutoMode pode sofrer se o Mestre parar de gerar opções numeradas.
-      // Se não houver opções geradas, mas o modo automático estiver ligado, ele precisará de intervenção manual
       if (autoRef.current && options.length > 0) {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
       } else if (autoRef.current && options.length === 0) {
-         // Auto desativado por falta de opções claras
          intervene();
       }
 
@@ -584,7 +602,6 @@ export default function RPG() {
           <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
         )}
 
-        {/* Banner de countdown no modo auto */}
         {autoWaiting && !loading && (
           <div className="auto-banner">
             <div className="auto-banner-top">

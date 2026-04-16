@@ -12,7 +12,7 @@ const extractOptions = (text) => {
 };
 const cleanText = (t) => t.replace(/IMAGE_PROMPT:\s*.+/gi, "").trim();
 const generateImage = (prompt, world) => {
-  const full = `${prompt}, ${world || "dark fantasy"} setting, cinematic, dramatic lighting, gritty, photorealistic, 8k, no text, no people`;
+  const full = `${prompt}, ${world || "dark fantasy"} setting, gritty, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
 };
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -58,7 +58,7 @@ const PRESET = {
   useImages: true,
 };
 
-// ─── System prompt (VERSÃO VISCERAL E ANTI-TÉDIO) ─────────────────────
+// ─── System prompt ────────────────────────────────────────────────────
 const buildPrompt = (c, loreExtra) =>
   [
     `Você é o Mestre de um RPG de texto cru, sombrio e visceral ambientado no universo de: ${c.world}.`,
@@ -73,15 +73,15 @@ const buildPrompt = (c, loreExtra) =>
     c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? buildAppearance(c.appearance)           : "",
     ``,
-    `REGRAS ABSOLUTAS DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO E PARA MATAR O TÉDIO):`,
-    `1. ZERO PASSIVIDADE E CLICHÊS: Evite ser polido. O mundo não espera pelo jogador. NPCs têm pressa, são rudes, têm segundas intenções, interrompem, mentem e reagem de forma agressiva ou desconfiada ao tom de voz do jogador.`,
-    `2. ESTILO GRITTY E DIRETO: Escreva parágrafos curtos e de alto impacto. Foque no visceral e sensorial: o gosto de metal na boca, o cheiro de suor, a frieza do olhar, o som de aço ou ossos. Nada de descrições poéticas e arrastadas.`,
-    `3. AMEAÇA CONSTANTE: O mundo não perdoa. Se o jogador hesitar, agir com arrogância ou for estúpido, o mundo o pune. Insira perigo real e tangível a cada curva.`,
-    `4. INTERAÇÃO TUDO OU NADA: NUNCA force uma lista de opções numeradas. Nunca termine com perguntas genéricas como "O que você faz?". Termine sempre com uma provocação direta de um NPC, uma lâmina no pescoço, um ataque iminente ou uma escolha moral que precisa ser feita em frações de segundo.`,
-    `5. NPCs VIVOS: NPCs não existem para dar missões. Eles existem para sobreviver. Se o jogador for chato ou desrespeitoso, o NPC pode atacá-lo ou expulsá-lo imediatamente do local.`,
-    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis implacáveis do universo de ${c.world}.`,
+    `REGRAS ABSOLUTAS DE NARRAÇÃO (CRÍTICO PARA MATAR O TÉDIO):`,
+    `1. ZERO PASSIVIDADE E CLICHÊS: O mundo não espera pelo jogador. NPCs têm pressa, são rudes, têm segundas intenções, interrompem, mentem e reagem de forma agressiva. Ninguém é seu amigo de graça.`,
+    `2. ESTILO GRITTY E DIRETO: Escreva parágrafos curtos e de alto impacto. Foque no visceral: o gosto de sangue, o cheiro de suor, a frieza do olhar, o som de aço. Nada de descrições poéticas arrastadas.`,
+    `3. AMEAÇA CONSTANTE: O mundo não perdoa. Se o jogador hesitar, o mundo o pune. Insira perigo real e tangível a cada ação.`,
+    `4. INTERAÇÃO TUDO OU NADA: NUNCA force lista de opções numeradas. Nunca termine com perguntas genéricas e chatas como "O que você faz?". Termine sempre com uma provocação de um NPC, uma lâmina no pescoço, uma decisão moral ou uma ameaça iminente de frações de segundo.`,
+    `5. NPCs VIVOS: NPCs existem para sobreviver, não para dar missões de tutorial. Se o jogador for chato ou não for direto ao ponto, o NPC pode atacá-lo ou expulsá-lo imediatamente.`,
+    `6. MANTENHA O LORE: Respeite as leis cruéis do universo de ${c.world}.`,
     c.useImages
-      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, dark fantasy, gritty, moody lighting, cinematic composition, blood and dirt, sem texto, sem personagens de costas].`
+      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo a cena atual, dark fantasy, gritty, moody lighting, cinematic composition, blood and dirt, sem texto].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
   ].filter(Boolean).join("\n");
 
@@ -154,7 +154,7 @@ export default function RPG() {
 
   // ─── Export to Novel (PDF LITERÁRIO CORRIGIDO) ───────────────────────
   const exportToBook = async () => {
-    setStatus("📖 A reescrever a aventura como um romance sombrio e imersivo...");
+    setStatus("📖 A reescrever a aventura como um livro... (Pode demorar uns segundos)");
     setLoading(true);
 
     try {
@@ -166,15 +166,16 @@ export default function RPG() {
 
       // 2. Prompt especial para transformar o jogo num livro focado no gênero original do jogo
       const sysPrompt = `Você é um escritor best-seller de fantasia sombria e visceral.
-Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário cru e tenso.
+Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário envolvente e cruel.
 
 REGRAS ABSOLUTAS DA REESCRITA:
 1. NUNCA use formato de roteiro ou chat (ex: "Mestre:", "${active.charName}:").
-2. Remova TODAS as perguntas diretas ao jogador e interações de sistema.
-3. Remova mecânicas de jogo, menções a dados ou opções numeradas.
+2. Remova TODAS as perguntas diretas ao jogador (ex: "O que você faz?", "Como reage?").
+3. Remova mecânicas de jogo, menções a dados, opções numeradas ou avisos de sistema.
 4. Transforme as falas curtas do jogador em ações descritivas e fluídas do protagonista (${active.charName}).
-5. Mantenha o clima opressivo, focando em sensações cruas, sangue, medo e tensão. O texto deve fluir perfeitamente.
-6. Escreva em Português Brasileiro.`;
+5. Crie transições suaves. O texto deve fluir perfeitamente do início ao fim como um excelente livro de ficção.
+6. Escreva em Português Brasileiro.
+7. Mantenha o clima opressivo e o gênero original da aventura (ex: se for terror, mantenha assustador; se for ficção científica, mantenha tecnológico). NUNCA transforme a história num romance leve.`;
 
       // 3. Pede à IA para criar o livro
       const res = await fetch("/api/gm", {
@@ -206,7 +207,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
         <html lang="pt">
         <head>
           <meta charset="UTF-8">
-          <title>As Crônicas de ${active.charName}</title>
+          <title>O Livro de ${active.charName}</title>
           <style>
             body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
             @media print {
@@ -218,7 +219,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
         <body>
           <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
             <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
-            <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">Registro de ${active.world}</h2>
+            <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
             <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
           </div>
           <div>
@@ -228,6 +229,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
             <strong>FIM DO CAPÍTULO.</strong>
           </div>
           <script>
+            // Quando a janela acabar de carregar, abre automaticamente o menu de impressão/guardar PDF
             window.onload = function() {
               setTimeout(function(){ window.print(); }, 500);
             };
@@ -342,7 +344,7 @@ REGRAS ABSOLUTAS DA REESCRITA:
 
   // ─── Game ─────────────────────────────────────────────────────────────
   const doStart = (camp, lore) => sendMsg(
-    `Narre o início brutal da jornada de ${camp.charName} em "${camp.world}". Esqueça as introduções lentas. Coloque-o imediatamente no meio de uma cena de alta tensão, conflito iminente ou perigo visceral que exige uma atitude imediata.`,
+    `Inicie a aventura de forma brutal. Onde ${camp.charName} está agora no universo de "${camp.world}"? Coloque-o imediatamente no meio de uma cena de alta tensão, conflito iminente ou perigo visceral que exige atitude. Nada de introduções calmas.`,
     [], [], camp, lore, false
   );
 

@@ -499,7 +499,6 @@ export default function RPG() {
       if (data.error) throw new Error(data.error);
 
       let raw = data.text;
-      // Parse de missões, itens e alterações de relacionamento
       const updatedMissions = parseMissions(raw, missions);
       const updatedItems = parseItems(raw, active?.items || []);
       setMissions(updatedMissions);
@@ -536,7 +535,6 @@ export default function RPG() {
         intervene();
       }
 
-      // Detecção automática de teste de dado
       if (raw.toLowerCase().includes("[teste:")) {
         const testMatch = raw.match(/\[TESTE:(\w+)\]\s*(.+)/i);
         if (testMatch) {
@@ -581,7 +579,6 @@ export default function RPG() {
 
   const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
 
-  // HP with active sync
   const changeHp = (delta) => {
     const next = Math.min(100, Math.max(0, hp + delta));
     setHp(next);
@@ -594,6 +591,14 @@ export default function RPG() {
       setActive(updated);
       saveCamp(active.id, updated);
     }
+  };
+
+  const insertCmd = (cmd) => {
+    setInput(prev => {
+      const space = prev && !prev.endsWith(" ") ? " " : "";
+      return prev + space + cmd;
+    });
+    taRef.current?.focus();
   };
 
   const activeMissions = missions.filter(m => !m.completed);
@@ -864,7 +869,6 @@ export default function RPG() {
         )}
       </div>
 
-      {/* Missões em destaque (inline, quando houver missões ativas e painel fechado) */}
       {!showChar && activeMissions.length > 0 && (
         <div className="missions-strip" onClick={() => setShowChar(true)}>
           {activeMissions.slice(0, 2).map(m => (
@@ -915,6 +919,14 @@ export default function RPG() {
         )}
 
         <div ref={bottomRef} />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="q-actions">
+        <button className="q-btn" onClick={() => insertCmd("[TESTE:Força] ")}>💪 TESTE</button>
+        <button className="q-btn" onClick={() => insertCmd("[ITEM:Item] ")}>🎒 ITEM</button>
+        <button className="q-btn" onClick={() => insertCmd("[MISSÃO:Nova Missão] ")}>📋 MISSÃO</button>
+        <button className="q-btn" onClick={() => insertCmd("[CONCLUÍDA:Missão] ")}>✓ OK</button>
       </div>
 
       {/* Input */}
@@ -1140,6 +1152,12 @@ const PLAY_ST = BASE + `
 .auto-dot{width:7px;height:7px;border-radius:50%;background:#8b6a00;flex-shrink:0;animation:autopulse 1s infinite}
 .auto-banner-top strong{color:#d4a843}
 .btn-intervir{background:#1a1000;border:1px solid #5a4000;border-radius:4px;color:#d4a843;font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:2px;font-family:inherit;-webkit-tap-highlight-color:transparent}
+
+/* Quick Actions */
+.q-actions{display:flex;gap:6px;padding:0 12px 8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.q-actions::-webkit-scrollbar{display:none}
+.q-btn{background:#0a0600;border:1px solid #1e1400;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit;letter-spacing:1px;-webkit-tap-highlight-color:transparent}
+.q-btn:active{background:#1a0e00;border-color:#4a2c00}
 
 /* Input area */
 .iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}

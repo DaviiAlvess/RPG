@@ -3,87 +3,87 @@ import Head from "next/head";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
-  const m = text.match(/IMAGE_PROMPT:\s*(.+)/i);
-  return m ? m[1].trim() : null;
+  const m = text.match(/IMAGE_PROMPT:\s*(.+)/i);
+  return m ? m[1].trim() : null;
 };
 const extractOptions = (text) => {
-  const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
-  return matches.slice(-3).map(m => m[2].trim());
+  const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
+  return matches.slice(-3).map(m => m[2].trim());
 };
 const cleanText = (t) => t.replace(/IMAGE_PROMPT:\s*.+/gi, "").trim();
 const generateImage = (prompt, world) => {
-  const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
+  const full = `${prompt}, ${world || "dark fantasy"} setting, cinematic, dramatic lighting, gritty, photorealistic, 8k, no text, no people`;
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
 };
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
-  ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
+  ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
 
 // ─── Aparência ────────────────────────────────────────────────────────
 const APP_OPTIONS = {
-  body:      ["Magro",       "Atlético",   "Médio",        "Robusto",    "Gordo"],
-  height:    ["Muito baixo", "Baixo",      "Médio",        "Alto",       "Muito alto"],
-  skin:      ["Muito clara", "Clara",      "Morena clara", "Morena",     "Negra"],
-  hairLen:   ["Careca",      "Curto",      "Médio",        "Longo",      "Muito longo"],
-  hairColor: ["Preto",       "Castanho",   "Loiro",        "Ruivo",      "Branco/Grisalho"],
-  hairStyle: ["Liso",        "Ondulado",   "Cacheado",     "Crespo",     "Raspado/Moicano"],
-  eyeColor:  ["Castanhos",   "Verdes",     "Azuis",        "Cinzas",     "Pretos"],
-  eyeShape:  ["Amendoados",  "Redondos",   "Puxados",      "Pequenos",   "Grandes"],
-  face:      ["Oval",        "Quadrada",   "Redonda",      "Triangular", "Alongada"],
-  extras:    ["Nenhum",      "Cicatriz",   "Tatuagem",     "Barba",      "Sardas"],
+  body:      ["Magro",       "Atlético",   "Médio",        "Robusto",    "Gordo"],
+  height:    ["Muito baixo", "Baixo",      "Médio",        "Alto",       "Muito alto"],
+  skin:      ["Muito clara", "Clara",      "Morena clara", "Morena",     "Negra"],
+  hairLen:   ["Careca",      "Curto",      "Médio",        "Longo",      "Muito longo"],
+  hairColor: ["Preto",       "Castanho",   "Loiro",        "Ruivo",      "Branco/Grisalho"],
+  hairStyle: ["Liso",        "Ondulado",   "Cacheado",     "Crespo",     "Raspado/Moicano"],
+  eyeColor:  ["Castanhos",   "Verdes",     "Azuis",        "Cinzas",     "Pretos"],
+  eyeShape:  ["Amendoados",  "Redondos",   "Puxados",      "Pequenos",   "Grandes"],
+  face:      ["Oval",        "Quadrada",   "Redonda",      "Triangular", "Alongada"],
+  extras:    ["Nenhum",      "Cicatriz",   "Tatuagem",     "Barba",      "Sardas"],
 };
 const APP_LABELS = {
-  body: "Tipo de corpo", height: "Altura", skin: "Tom de pele",
-  hairLen: "Comprimento do cabelo", hairColor: "Cor do cabelo", hairStyle: "Estilo do cabelo",
-  eyeColor: "Cor dos olhos", eyeShape: "Formato dos olhos", face: "Formato do rosto", extras: "Marca especial",
+  body: "Tipo de corpo", height: "Altura", skin: "Tom de pele",
+  hairLen: "Comprimento do cabelo", hairColor: "Cor do cabelo", hairStyle: "Estilo do cabelo",
+  eyeColor: "Cor dos olhos", eyeShape: "Formato dos olhos", face: "Formato do rosto", extras: "Marca especial",
 };
 const DEFAULT_APP = Object.fromEntries(Object.keys(APP_OPTIONS).map((k) => [k, APP_OPTIONS[k][2]]));
 const HAIR_COLORS = { "Preto": "#0a0a0a", "Castanho": "#5c3317", "Loiro": "#c8a84b", "Ruivo": "#8b2500", "Branco/Grisalho": "#a0a0a0" };
-const EYE_COLORS  = { "Castanhos": "#5c3317", "Verdes": "#2d6a4f", "Azuis": "#1a4a7a", "Cinzas": "#607080", "Pretos": "#0a0a14" };
+const EYE_COLORS  = { "Castanhos": "#5c3317", "Verdes": "#2d6a4f", "Azuis": "#1a4a7a", "Cinzas": "#607080", "Pretos": "#0a0a14" };
 const buildAppearance = (a) =>
-  `Aparência: corpo ${a.body?.toLowerCase()}, estatura ${a.height?.toLowerCase()}, pele ${a.skin?.toLowerCase()}, cabelo ${a.hairLen?.toLowerCase()} ${a.hairColor?.toLowerCase()} ${a.hairStyle?.toLowerCase()}, olhos ${a.eyeColor?.toLowerCase()} ${a.eyeShape?.toLowerCase()}, rosto ${a.face?.toLowerCase()}${a.extras && a.extras !== "Nenhum" ? `, marca especial: ${a.extras?.toLowerCase()}` : ""}.`;
+  `Aparência: corpo ${a.body?.toLowerCase()}, estatura ${a.height?.toLowerCase()}, pele ${a.skin?.toLowerCase()}, cabelo ${a.hairLen?.toLowerCase()} ${a.hairColor?.toLowerCase()} ${a.hairStyle?.toLowerCase()}, olhos ${a.eyeColor?.toLowerCase()} ${a.eyeShape?.toLowerCase()}, rosto ${a.face?.toLowerCase()}${a.extras && a.extras !== "Nenhum" ? `, marca especial: ${a.extras?.toLowerCase()}` : ""}.`;
 
 // ─── Preset ───────────────────────────────────────────────────────────
 const PRESET = {
-  world: "Westeros — Crônicas de Gelo e Fogo",
-  worldBg: "Logo após a guerra de Maegor Targaryen em 8 d.C. Dorne foi devastada. O povo dornês entregou a cabeça de Seth para encerrar o cerco. As feridas ainda são recentes.",
-  isKnownIP: true,
-  charName: "Edric Yronwood",
-  charTitle: "Lorde de Pedra Sangrenta, Guardião das Marches Dornesas",
-  charAge: "26",
-  charBg: "Sua casa foi saqueada por Maegor Targaryen. Seu pai morreu defendendo os portões quando Edric tinha 10 anos. Reconstruiu tudo com mão firme.",
-  charPersonality: "Orgulhoso, calculista, justo. Desconfia de sorrisos que chegam antes das palavras.",
-  charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
-  appearance: { body: "Atlético", height: "Alto", skin: "Morena", hairLen: "Curto", hairColor: "Preto", hairStyle: "Liso", eyeColor: "Castanhos", eyeShape: "Amendoados", face: "Quadrada", extras: "Cicatriz" },
-  useImages: true,
+  world: "Westeros — Crônicas de Gelo e Fogo",
+  worldBg: "Logo após a guerra de Maegor Targaryen em 8 d.C. Dorne foi devastada. O povo dornês entregou a cabeça de Seth para encerrar o cerco. As feridas ainda são recentes.",
+  isKnownIP: true,
+  charName: "Edric Yronwood",
+  charTitle: "Lorde de Pedra Sangrenta, Guardião das Marches Dornesas",
+  charAge: "26",
+  charBg: "Sua casa foi saqueada por Maegor Targaryen. Seu pai morreu defendendo os portões quando Edric tinha 10 anos. Reconstruiu tudo com mão firme.",
+  charPersonality: "Orgulhoso, calculista, justo. Desconfia de sorrisos que chegam antes das palavras.",
+  charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
+  appearance: { body: "Atlético", height: "Alto", skin: "Morena", hairLen: "Curto", hairColor: "Preto", hairStyle: "Liso", eyeColor: "Castanhos", eyeShape: "Amendoados", face: "Quadrada", extras: "Cicatriz" },
+  useImages: true,
 };
 
-// ─── System prompt ────────────────────────────────────────────────────
+// ─── System prompt (VERSÃO VISCERAL E ANTI-TÉDIO) ─────────────────────
 const buildPrompt = (c, loreExtra) =>
-  [
-    `Você é o Mestre de um RPG de texto imersivo, criativo e envolvente ambientado no universo de: ${c.world}.`,
-    loreExtra
-      ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
-      : `CONTEXTO DO MUNDO: ${c.worldBg}`,
-    ``,
-    `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
-    c.charAge         ? `Idade: ${c.charAge} anos.`             : "",
-    c.charBg          ? `História: ${c.charBg}`                 : "",
-    c.charPersonality ? `Personalidade: ${c.charPersonality}`   : "",
-    c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
-    c.appearance      ? buildAppearance(c.appearance)           : "",
-    ``,
-    `DIRETRIZES DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO):`,
-    `1. RITMO FLUIDO E AGRADÁVEL: Escreva de forma cativante, mas evite descrições gigantescas e poéticas que cansem o jogador. Mantenha a história dinâmica, direta e focada na ação do momento.`,
-    `2. SEJA NATURAL E AMIGÁVEL: Aja como um Mestre humano jogando com um amigo. Evite clichês chatos. Seja imprevisível, criativo, mas com uma narração gostosa de ler.`,
-    `3. CONSEQUÊNCIAS JUSTAS: O mundo reage às ações do jogador. Se ele for inteligente e tomar boas decisões, recompense. Se ele errar, crie um desafio novo, mas não seja punitivo sem motivo.`,
-    `4. INTERAÇÃO LIVRE: NUNCA force uma lista de opções numeradas. Deixe o jogador livre. Termine a sua narração com uma pergunta natural ou um gancho de ação (ex: "O que você faz agora?", "Como você responde?").`,
-    `5. DIÁLOGOS VIVOS: Os NPCs devem ter personalidades reais. Eles podem ser rudes, engraçados, amigáveis ou misteriosos, dependendo de quem são na história.`,
-    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis do universo de ${c.world}.`,
-    c.useImages
-      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, estilo cinematic, foco na atmosfera e iluminação, sem texto, sem personagens de costas].`
-      : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
-  ].filter(Boolean).join("\n");
+  [
+    `Você é o Mestre de um RPG de texto cru, sombrio e visceral ambientado no universo de: ${c.world}.`,
+    loreExtra
+      ? `LORE OFICIAL DO UNIVERSO (pesquisado na internet):\n${loreExtra}`
+      : `CONTEXTO DO MUNDO: ${c.worldBg}`,
+    ``,
+    `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
+    c.charAge         ? `Idade: ${c.charAge} anos.`             : "",
+    c.charBg          ? `História: ${c.charBg}`                 : "",
+    c.charPersonality ? `Personalidade: ${c.charPersonality}`   : "",
+    c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
+    c.appearance      ? buildAppearance(c.appearance)           : "",
+    ``,
+    `REGRAS ABSOLUTAS DE NARRAÇÃO (CRÍTICO PARA O RITMO DO JOGO E PARA MATAR O TÉDIO):`,
+    `1. ZERO PASSIVIDADE E CLICHÊS: Evite ser polido. O mundo não espera pelo jogador. NPCs têm pressa, são rudes, têm segundas intenções, interrompem, mentem e reagem de forma agressiva ou desconfiada ao tom de voz do jogador.`,
+    `2. ESTILO GRITTY E DIRETO: Escreva parágrafos curtos e de alto impacto. Foque no visceral e sensorial: o gosto de metal na boca, o cheiro de suor, a frieza do olhar, o som de aço ou ossos. Nada de descrições poéticas e arrastadas.`,
+    `3. AMEAÇA CONSTANTE: O mundo não perdoa. Se o jogador hesitar, agir com arrogância ou for estúpido, o mundo o pune. Insira perigo real e tangível a cada curva.`,
+    `4. INTERAÇÃO TUDO OU NADA: NUNCA force uma lista de opções numeradas. Nunca termine com perguntas genéricas como "O que você faz?". Termine sempre com uma provocação direta de um NPC, uma lâmina no pescoço, um ataque iminente ou uma escolha moral que precisa ser feita em frações de segundo.`,
+    `5. NPCs VIVOS: NPCs não existem para dar missões. Eles existem para sobreviver. Se o jogador for chato ou desrespeitoso, o NPC pode atacá-lo ou expulsá-lo imediatamente do local.`,
+    `6. MANTENHA O LORE: Respeite as regras, a magia e as leis implacáveis do universo de ${c.world}.`,
+    c.useImages
+      ? `7. IMAGE_PROMPT: Ao final de CADA resposta, na última linha, adicione estritamente: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário da cena atual, dark fantasy, gritty, moody lighting, cinematic composition, blood and dirt, sem texto, sem personagens de costas].`
+      : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
+  ].filter(Boolean).join("\n");
 
 // ─── Storage ──────────────────────────────────────────────────────────
 const IDX_KEY = "rpg-idx-v3";
@@ -91,602 +91,600 @@ const campKey = (id) => `rpg-camp-${id}`;
 
 // ═════════════════════════════════════════════════════════════════════
 export default function RPG() {
-  const [view, setView]     = useState("home");
-  const [idx, setIdx]       = useState([]);
-  const [active, setActive] = useState(null);
-  const [step, setStep]     = useState(0);
-  const [form, setForm]     = useState({
-    world: "", worldBg: "", isKnownIP: false,
-    charName: "", charTitle: "", charAge: "",
-    charBg: "", charPersonality: "", charSkills: "",
-    appearance: { ...DEFAULT_APP }, useImages: true,
-  });
+  const [view, setView]     = useState("home");
+  const [idx, setIdx]       = useState([]);
+  const [active, setActive] = useState(null);
+  const [step, setStep]     = useState(0);
+  const [form, setForm]     = useState({
+    world: "", worldBg: "", isKnownIP: false,
+    charName: "", charTitle: "", charAge: "",
+    charBg: "", charPersonality: "", charSkills: "",
+    appearance: { ...DEFAULT_APP }, useImages: true,
+  });
 
-  // Play
-  const [msgs, setMsgs]         = useState([]);
-  const [disp, setDisp]         = useState([]);
-  const [input, setInput]       = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [statusText, setStatus] = useState("");
-  const [sceneImg, setSceneImg] = useState(null);
-  const [imgOk, setImgOk]       = useState(false);
-  const [showChar, setShowChar] = useState(false);
-  const [campLore, setCampLore] = useState("");
+  // Play
+  const [msgs, setMsgs]         = useState([]);
+  const [disp, setDisp]         = useState([]);
+  const [input, setInput]       = useState("");
+  const [loading, setLoading]   = useState(false);
+  const [statusText, setStatus] = useState("");
+  const [sceneImg, setSceneImg] = useState(null);
+  const [imgOk, setImgOk]       = useState(false);
+  const [showChar, setShowChar] = useState(false);
+  const [campLore, setCampLore] = useState("");
 
-  // Auto mode
-  const [autoMode, setAutoMode]         = useState(false);
-  const [autoWaiting, setAutoWaiting]   = useState(false); 
-  const [pendingOptions, setPending]    = useState([]);    
-  const [autoDelay, setAutoDelay]       = useState(3);     
-  const [countdown, setCountdown]       = useState(0);
+  // Auto mode
+  const [autoMode, setAutoMode]         = useState(false);
+  const [autoWaiting, setAutoWaiting]   = useState(false); 
+  const [pendingOptions, setPending]    = useState([]);    
+  const [autoDelay, setAutoDelay]       = useState(3);     
+  const [countdown, setCountdown]       = useState(0);
 
-  const bottomRef  = useRef(null);
-  const taRef      = useRef(null);
-  const sending    = useRef(false);
-  const autoRef    = useRef(false);        
-  const timerRef   = useRef(null);
-  const cdRef      = useRef(null);
+  const bottomRef  = useRef(null);
+  const taRef      = useRef(null);
+  const sending    = useRef(false);
+  const autoRef    = useRef(false);        
+  const timerRef   = useRef(null);
+  const cdRef      = useRef(null);
 
-  useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
+  useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
 
-  useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
+  useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
 
-  useEffect(() => {
-    if (view !== "play") { clearAuto(); }
-  }, [view]);
+  useEffect(() => {
+    if (view !== "play") { clearAuto(); }
+  }, [view]);
 
-  // ─── Storage ─────────────────────────────────────────────────────────
-  const saveIdx  = (l) => { try { localStorage.setItem(IDX_KEY, JSON.stringify(l)); } catch {} };
-  const saveCamp = (id, d) => { try { localStorage.setItem(campKey(id), JSON.stringify(d)); } catch {} };
-  const readCamp = (id) => { try { return JSON.parse(localStorage.getItem(campKey(id))); } catch { return null; } };
+  // ─── Storage ─────────────────────────────────────────────────────────
+  const saveIdx  = (l) => { try { localStorage.setItem(IDX_KEY, JSON.stringify(l)); } catch {} };
+  const saveCamp = (id, d) => { try { localStorage.setItem(campKey(id), JSON.stringify(d)); } catch {} };
+  const readCamp = (id) => { try { return JSON.parse(localStorage.getItem(campKey(id))); } catch { return null; } };
 
-  // ─── Lore fetch ───────────────────────────────────────────────────────
-  const fetchLore = async (world) => {
-    try {
-      const res = await fetch("/api/gm", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ useLoreSearch: true, world }),
-      });
-      return (await res.json()).lore || "";
-    } catch { return ""; }
-  };
+  // ─── Lore fetch ───────────────────────────────────────────────────────
+  const fetchLore = async (world) => {
+    try {
+      const res = await fetch("/api/gm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useLoreSearch: true, world }),
+      });
+      return (await res.json()).lore || "";
+    } catch { return ""; }
+  };
 
-  // ─── Export to Novel (PDF LITERÁRIO CORRIGIDO) ───────────────────────
-  const exportToBook = async () => {
-    setStatus("📖 A reescrever a aventura como um livro... (Pode demorar uns segundos)");
-    setLoading(true);
+  // ─── Export to Novel (PDF LITERÁRIO CORRIGIDO) ───────────────────────
+  const exportToBook = async () => {
+    setStatus("📖 A reescrever a aventura como um romance sombrio e imersivo...");
+    setLoading(true);
 
-    try {
-      // 1. Prepara o histórico inteiro para enviar à IA
-      const chatLog = disp.map(m => {
-        const autor = m.type === "gm" ? "Mestre" : active.charName;
-        return `[${autor}]: ${m.text}`;
-      }).join("\n\n");
+    try {
+      // 1. Prepara o histórico inteiro para enviar à IA
+      const chatLog = disp.map(m => {
+        const autor = m.type === "gm" ? "Mestre" : active.charName;
+        return `[${autor}]: ${m.text}`;
+      }).join("\n\n");
 
-      // 2. Prompt especial para transformar o jogo num livro focado no gênero original do jogo
-      const sysPrompt = `Você é um escritor best-seller.
-Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário envolvente.
+      // 2. Prompt especial para transformar o jogo num livro focado no gênero original do jogo
+      const sysPrompt = `Você é um escritor best-seller de fantasia sombria e visceral.
+Sua tarefa é ler um registro (log) de uma sessão de RPG de texto e REESCREVER toda a história como se fosse um capítulo literário cru e tenso.
 
 REGRAS ABSOLUTAS DA REESCRITA:
 1. NUNCA use formato de roteiro ou chat (ex: "Mestre:", "${active.charName}:").
-2. Remova TODAS as perguntas diretas ao jogador (ex: "O que você faz?", "Como reage?").
-3. Remova mecânicas de jogo, menções a dados, opções numeradas ou avisos de sistema.
+2. Remova TODAS as perguntas diretas ao jogador e interações de sistema.
+3. Remova mecânicas de jogo, menções a dados ou opções numeradas.
 4. Transforme as falas curtas do jogador em ações descritivas e fluídas do protagonista (${active.charName}).
-5. Crie transições suaves. O texto deve fluir perfeitamente do início ao fim como um excelente livro de ficção.
-6. Escreva em Português Brasileiro.
-7. Mantenha o clima e o gênero original da aventura (ex: se for terror, mantenha assustador; se for ficção científica, mantenha tecnológico). NÃO transforme obrigatoriamente a história num romance de amor.`;
+5. Mantenha o clima opressivo, focando em sensações cruas, sangue, medo e tensão. O texto deve fluir perfeitamente.
+6. Escreva em Português Brasileiro.`;
 
-      // 3. Pede à IA para criar o livro
-      const res = await fetch("/api/gm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{ role: "user", content: `AQUI ESTÁ O REGISTRO DO RPG PARA VOCÊ TRANSFORMAR NUM LIVRO LITERÁRIO:\n\n${chatLog}` }],
-          systemPrompt: sysPrompt
-        }),
-      });
+      // 3. Pede à IA para criar o livro
+      const res = await fetch("/api/gm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: `AQUI ESTÁ O REGISTRO DO RPG PARA VOCÊ TRANSFORMAR NUM LIVRO LITERÁRIO:\n\n${chatLog}` }],
+          systemPrompt: sysPrompt
+        }),
+      });
 
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
 
-      // 4. Formata o texto recebido para HTML
-      const novelText = data.text;
-      const parseMD = (str) => str.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
-      
-      const bookContent = novelText
-        .split('\n')
-        .map(p => p.trim())
-        .filter(p => p.length > 0)
-        .map(p => `<p style="margin-bottom: 18px; line-height: 1.9; font-size: 16px; text-align: justify; color: #111;">${parseMD(p)}</p>`)
-        .join("");
+      // 4. Formata o texto recebido para HTML
+      const novelText = data.text;
+      const parseMD = (str) => str.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\*(.*?)\*/g, '<i>$1</i>');
+      
+      const bookContent = novelText
+        .split('\n')
+        .map(p => p.trim())
+        .filter(p => p.length > 0)
+        .map(p => `<p style="margin-bottom: 18px; line-height: 1.9; font-size: 16px; text-align: justify; color: #111;">${parseMD(p)}</p>`)
+        .join("");
 
-      // 5. Monta a janela de Impressão nativa do navegador
-      const htmlString = `
-        <!DOCTYPE html>
-        <html lang="pt">
-        <head>
-          <meta charset="UTF-8">
-          <title>O Livro de ${active.charName}</title>
-          <style>
-            body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
-            @media print {
-              body { padding: 0; margin: 0; }
-              @page { margin: 2cm; }
-            }
-          </style>
-        </head>
-        <body>
-          <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
-            <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
-            <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">O Diário de ${active.world}</h2>
-            <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
-          </div>
-          <div>
-            ${bookContent}
-          </div>
-          <div style="text-align: center; margin-top: 80px; font-size: 18px; color: #000; font-style: italic;">
-            <strong>FIM DO CAPÍTULO.</strong>
-          </div>
-          <script>
-            // Quando a janela acabar de carregar, abre automaticamente o menu de impressão/guardar PDF
-            window.onload = function() {
-              setTimeout(function(){ window.print(); }, 500);
-            };
-          </script>
-        </body>
-        </html>
-      `;
+      // 5. Monta a janela de Impressão nativa do navegador
+      const htmlString = `
+        <!DOCTYPE html>
+        <html lang="pt">
+        <head>
+          <meta charset="UTF-8">
+          <title>As Crônicas de ${active.charName}</title>
+          <style>
+            body { font-family: 'Georgia', serif; padding: 40px; color: #000; background: #fff; max-width: 800px; margin: 0 auto; }
+            @media print {
+              body { padding: 0; margin: 0; }
+              @page { margin: 2cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <div style="text-align: center; margin-bottom: 80px; margin-top: 50px;">
+            <h1 style="font-size: 42px; margin-bottom: 10px; color: #000; letter-spacing: 2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
+            <h2 style="font-size: 22px; font-weight: normal; color: #555; margin-bottom: 30px;">Registro de ${active.world}</h2>
+            <div style="width: 100px; height: 2px; background: #000; margin: 0 auto;"></div>
+          </div>
+          <div>
+            ${bookContent}
+          </div>
+          <div style="text-align: center; margin-top: 80px; font-size: 18px; color: #000; font-style: italic;">
+            <strong>FIM DO CAPÍTULO.</strong>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function(){ window.print(); }, 500);
+            };
+          </script>
+        </body>
+        </html>
+      `;
 
-      const printWindow = window.open('', '_blank');
-      if (printWindow) {
-        printWindow.document.write(htmlString);
-        printWindow.document.close();
-      } else {
-        alert("Por favor, permita os pop-ups neste site para gerar o livro.");
-      }
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlString);
+        printWindow.document.close();
+      } else {
+        alert("Por favor, permita os pop-ups neste site para gerar o livro.");
+      }
 
-    } catch (e) {
-      alert("Falha ao reescrever o livro: " + e.message);
-    }
-    
-    setLoading(false);
-    setStatus("");
-  };
+    } catch (e) {
+      alert("Falha ao reescrever o livro: " + e.message);
+    }
+    
+    setLoading(false);
+    setStatus("");
+  };
 
-  // ─── Auto mode helpers ────────────────────────────────────────────────
-  const clearAuto = () => {
-    clearTimeout(timerRef.current);
-    clearInterval(cdRef.current);
-    setCountdown(0);
-    setAutoWaiting(false);
-  };
+  // ─── Auto mode helpers ────────────────────────────────────────────────
+  const clearAuto = () => {
+    clearTimeout(timerRef.current);
+    clearInterval(cdRef.current);
+    setCountdown(0);
+    setAutoWaiting(false);
+  };
 
-  const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
-    if (!autoRef.current || !options.length) return;
+  const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
+    if (!autoRef.current || !options.length) return;
 
-    setAutoWaiting(true);
-    setCountdown(autoDelay);
+    setAutoWaiting(true);
+    setCountdown(autoDelay);
 
-    cdRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { clearInterval(cdRef.current); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
+    cdRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) { clearInterval(cdRef.current); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
 
-    timerRef.current = setTimeout(() => {
-      setAutoWaiting(false);
-      if (!autoRef.current) return;
-      const chosen = options[Math.floor(Math.random() * options.length)];
-      sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
-    }, autoDelay * 1000);
-  }, [autoDelay]);
+    timerRef.current = setTimeout(() => {
+      setAutoWaiting(false);
+      if (!autoRef.current) return;
+      const chosen = options[Math.floor(Math.random() * options.length)];
+      sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
+    }, autoDelay * 1000);
+  }, [autoDelay]);
 
-  const toggleAuto = () => {
-    const next = !autoMode;
-    setAutoMode(next);
-    autoRef.current = next;
-    if (!next) {
-      clearAuto();
-    }
-  };
+  const toggleAuto = () => {
+    const next = !autoMode;
+    setAutoMode(next);
+    autoRef.current = next;
+    if (!next) {
+      clearAuto();
+    }
+  };
 
-  const intervene = () => {
-    clearAuto();
-    setAutoMode(false);
-    autoRef.current = false;
-    setAutoWaiting(false);
-    setPending([]);
-  };
+  const intervene = () => {
+    clearAuto();
+    setAutoMode(false);
+    autoRef.current = false;
+    setAutoWaiting(false);
+    setPending([]);
+  };
 
-  // ─── Home ─────────────────────────────────────────────────────────────
-  const openCamp = (s) => {
-    const data = readCamp(s.id);
-    if (!data) return;
-    setActive(data); setMsgs(data.msgs || []); setDisp(data.disp || []);
-    setSceneImg(data.img || null); setImgOk(!!data.img);
-    setCampLore(data.lore || ""); setShowChar(false);
-    setAutoMode(false); setAutoWaiting(false); setPending([]);
-    setView("play");
-    if (!data.msgs?.length) doStart(data, data.lore || "");
-  };
+  // ─── Home ─────────────────────────────────────────────────────────────
+  const openCamp = (s) => {
+    const data = readCamp(s.id);
+    if (!data) return;
+    setActive(data); setMsgs(data.msgs || []); setDisp(data.disp || []);
+    setSceneImg(data.img || null); setImgOk(!!data.img);
+    setCampLore(data.lore || ""); setShowChar(false);
+    setAutoMode(false); setAutoWaiting(false); setPending([]);
+    setView("play");
+    if (!data.msgs?.length) doStart(data, data.lore || "");
+  };
 
-  const delCamp = (id, e) => {
-    e.stopPropagation();
-    if (!confirm("Apagar esta campanha permanentemente?")) return;
-    const next = idx.filter((c) => c.id !== id);
-    setIdx(next); saveIdx(next);
-    try { localStorage.removeItem(campKey(id)); } catch {}
-  };
+  const delCamp = (id, e) => {
+    e.stopPropagation();
+    if (!confirm("Apagar esta campanha permanentemente?")) return;
+    const next = idx.filter((c) => c.id !== id);
+    setIdx(next); saveIdx(next);
+    try { localStorage.removeItem(campKey(id)); } catch {}
+  };
 
-  // ─── Create ───────────────────────────────────────────────────────────
-  const startCreate = () => {
-    setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true });
-    setStep(0); setView("create");
-  };
+  // ─── Create ───────────────────────────────────────────────────────────
+  const startCreate = () => {
+    setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true });
+    setStep(0); setView("create");
+  };
 
-  const finishCreate = async () => {
-    if (!form.world.trim() || !form.charName.trim()) return;
-    setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
-    let lore = "";
-    if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
-    else { setStatus("⚗️ A preparar mundo..."); }
-    const id = uid();
-    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, createdAt: Date.now() };
-    const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
-    const next = [summary, ...idx];
-    setIdx(next); saveIdx(next); saveCamp(id, camp);
-    setActive(camp); setCampLore(lore); setShowChar(false);
-    setAutoMode(false); setAutoWaiting(false); setPending([]);
-    setLoading(false); doStart(camp, lore);
-  };
+  const finishCreate = async () => {
+    if (!form.world.trim() || !form.charName.trim()) return;
+    setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
+    let lore = "";
+    if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
+    else { setStatus("⚗️ A preparar mundo..."); }
+    const id = uid();
+    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, createdAt: Date.now() };
+    const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
+    const next = [summary, ...idx];
+    setIdx(next); saveIdx(next); saveCamp(id, camp);
+    setActive(camp); setCampLore(lore); setShowChar(false);
+    setAutoMode(false); setAutoWaiting(false); setPending([]);
+    setLoading(false); doStart(camp, lore);
+  };
 
-  // ─── Game ─────────────────────────────────────────────────────────────
-  const doStart = (camp, lore) => sendMsg(
-    `Iniciar aventura. Narre o cenário inicial: onde ${camp.charName} está agora no universo de "${camp.world}", qual a situação atual do mundo, e apresente o primeiro evento ou desafio com o qual ele se depara.`,
-    [], [], camp, lore, false
-  );
+  // ─── Game ─────────────────────────────────────────────────────────────
+  const doStart = (camp, lore) => sendMsg(
+    `Narre o início brutal da jornada de ${camp.charName} em "${camp.world}". Esqueça as introduções lentas. Coloque-o imediatamente no meio de uma cena de alta tensão, conflito iminente ou perigo visceral que exige uma atitude imediata.`,
+    [], [], camp, lore, false
+  );
 
-  const sendMsg = async (text, baseMsgs, baseDisp, camp, lore, isAuto = false) => {
-    if (!text.trim() || sending.current) return;
-    sending.current = true;
-    setLoading(true);
-    setStatus(isAuto ? "⚡ MODO AUTO — MESTRE NARRANDO ✦" : "✦ O MESTRE TECE O DESTINO ✦");
-    setInput(""); taRef.current?.blur();
+  const sendMsg = async (text, baseMsgs, baseDisp, camp, lore, isAuto = false) => {
+    if (!text.trim() || sending.current) return;
+    sending.current = true;
+    setLoading(true);
+    setStatus(isAuto ? "⚡ MODO AUTO — MESTRE NARRANDO ✦" : "✦ O MESTRE TECE O DESTINO ✦");
+    setInput(""); taRef.current?.blur();
 
-    const newMsgs = [...baseMsgs, { role: "user", content: text }];
-    const newDisp = [...baseDisp, { type: isAuto ? "auto" : "user", text }];
-    setMsgs(newMsgs); setDisp(newDisp);
+    const newMsgs = [...baseMsgs, { role: "user", content: text }];
+    const newDisp = [...baseDisp, { type: isAuto ? "auto" : "user", text }];
+    setMsgs(newMsgs); setDisp(newDisp);
 
-    try {
-      const res = await fetch("/api/gm", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMsgs, systemPrompt: buildPrompt(camp, lore) }),
-      });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+    try {
+      const res = await fetch("/api/gm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: newMsgs, systemPrompt: buildPrompt(camp, lore) }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
 
-      const raw = data.text;
-      const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
-      const clean = cleanText(raw);
-      const options = extractOptions(clean);
+      const raw = data.text;
+      const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
+      const clean = cleanText(raw);
+      const options = extractOptions(clean);
 
-      const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
-      const finalDisp = [...newDisp, { type: "gm", text: clean }];
-      setMsgs(finalMsgs); setDisp(finalDisp);
+      const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
+      const finalDisp = [...newDisp, { type: "gm", text: clean }];
+      setMsgs(finalMsgs); setDisp(finalDisp);
 
-      let newImg = camp.img || null;
-      if (imgPrompt) { setImgOk(false); newImg = generateImage(imgPrompt, camp.world); setSceneImg(newImg); }
+      let newImg = camp.img || null;
+      if (imgPrompt) { setImgOk(false); newImg = generateImage(imgPrompt, camp.world); setSceneImg(newImg); }
 
-      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, updatedAt: Date.now() };
-      setActive(updated); saveCamp(camp.id, updated);
-      setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
+      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, updatedAt: Date.now() };
+      setActive(updated); saveCamp(camp.id, updated);
+      setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
-      setPending(options);
+      setPending(options);
 
-      if (autoRef.current && options.length > 0) {
-        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
-      } else if (autoRef.current && options.length === 0) {
-         intervene();
-      }
+      if (autoRef.current && options.length > 0) {
+        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
+      } else if (autoRef.current && options.length === 0) {
+         intervene();
+      }
 
-    } catch {
-      setDisp((prev) => [...prev, { type: "error", text: "Erro ao contatar o Mestre. Tente novamente." }]);
-    }
+    } catch {
+      setDisp((prev) => [...prev, { type: "error", text: "Erro ao contatar o Mestre. Tente novamente." }]);
+    }
 
-    sending.current = false; setLoading(false); setStatus("");
-  };
+    sending.current = false; setLoading(false); setStatus("");
+  };
 
-  const handleSend = () => {
-    if (!input.trim() || sending.current || !active) return;
-    clearAuto();
-    sendMsg(input, msgs, disp, active, campLore, false);
-  };
+  const handleSend = () => {
+    if (!input.trim() || sending.current || !active) return;
+    clearAuto();
+    sendMsg(input, msgs, disp, active, campLore, false);
+  };
 
-  const resetChat = () => {
-    if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
-    clearAuto(); setAutoMode(false); autoRef.current = false;
-    const updated = { ...active, msgs: [], disp: [], img: null };
-    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null); setPending([]);
-    saveCamp(active.id, updated); doStart(updated, campLore);
-  };
+  const resetChat = () => {
+    if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
+    clearAuto(); setAutoMode(false); autoRef.current = false;
+    const updated = { ...active, msgs: [], disp: [], img: null };
+    setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null); setPending([]);
+    saveCamp(active.id, updated); doStart(updated, campLore);
+  };
 
-  const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
+  const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
 
-  // ═══ HOME ══════════════════════════════════════════════════════════
-  if (view === "home") return (
-    <div className="root">
-      <Head>
-        <title>Forja de Mundos</title>
-      </Head>
-      <div className="hh">
-        <div className="hh-icon">⚔</div>
-        <div className="hh-title">FORJA DE MUNDOS</div>
-        <div className="hh-sub">RPG · CRIAÇÃO DE AVENTURAS</div>
-      </div>
-      <div className="list">
-        {!idx.length ? (
-          <div className="empty">
-            <div className="e-icon">🌍</div>
-            <div className="e-txt">Nenhum mundo criado ainda.<br />Comece a sua primeira aventura.</div>
-          </div>
-        ) : idx.map((s) => (
-          <div key={s.id} className="card" onClick={() => openCamp(s)}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="c-world">{s.world}</div>
-              <div className="c-char">⚔ {s.charName}</div>
-              {s.updatedAt && <div className="c-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
-            </div>
-            <button className="c-del" onClick={(e) => delCamp(s.id, e)}>✕</button>
-          </div>
-        ))}
-      </div>
-      <div className="hfoot">
-        <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
-      </div>
-      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST }} />
-    </div>
-  );
+  // ═══ HOME ══════════════════════════════════════════════════════════
+  if (view === "home") return (
+    <div className="root">
+      <Head>
+        <title>Forja de Mundos</title>
+      </Head>
+      <div className="hh">
+        <div className="hh-icon">⚔</div>
+        <div className="hh-title">FORJA DE MUNDOS</div>
+        <div className="hh-sub">RPG · CRIAÇÃO DE AVENTURAS</div>
+      </div>
+      <div className="list">
+        {!idx.length ? (
+          <div className="empty">
+            <div className="e-icon">🌍</div>
+            <div className="e-txt">Nenhum mundo criado ainda.<br />Comece a sua primeira aventura.</div>
+          </div>
+        ) : idx.map((s) => (
+          <div key={s.id} className="card" onClick={() => openCamp(s)}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="c-world">{s.world}</div>
+              <div className="c-char">⚔ {s.charName}</div>
+              {s.updatedAt && <div className="c-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
+            </div>
+            <button className="c-del" onClick={(e) => delCamp(s.id, e)}>✕</button>
+          </div>
+        ))}
+      </div>
+      <div className="hfoot">
+        <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
+      </div>
+      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST }} />
+    </div>
+  );
 
-  // ═══ CREATE ════════════════════════════════════════════════════════
-  if (view === "create") return (
-    <div className="root">
-      <Head>
-        <title>Novo Personagem</title>
-      </Head>
-      <div className="cr-head">
-        <button className="btn-back" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← VOLTAR</button>
-        <div className="cr-steps">
-          {[0, 1, 2].map(i => (
-            <span key={i} style={{ display: "flex", alignItems: "center" }}>
-              <span className={`cr-dot ${step >= i ? "on" : ""}`} />
-              {i < 2 && <span className="cr-ln" />}
-            </span>
-          ))}
-        </div>
-        {step === 0
-          ? <button className="btn-pres" onClick={() => setForm({ ...PRESET })}>🐉 EDRIC</button>
-          : <div style={{ width: 56 }} />}
-      </div>
+  // ═══ CREATE ════════════════════════════════════════════════════════
+  if (view === "create") return (
+    <div className="root">
+      <Head>
+        <title>Novo Personagem</title>
+      </Head>
+      <div className="cr-head">
+        <button className="btn-back" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← VOLTAR</button>
+        <div className="cr-steps">
+          {[0, 1, 2].map(i => (
+            <span key={i} style={{ display: "flex", alignItems: "center" }}>
+              <span className={`cr-dot ${step >= i ? "on" : ""}`} />
+              {i < 2 && <span className="cr-ln" />}
+            </span>
+          ))}
+        </div>
+        {step === 0
+          ? <button className="btn-pres" onClick={() => setForm({ ...PRESET })}>🐉 EDRIC</button>
+          : <div style={{ width: 56 }} />}
+      </div>
 
-      <div className="cr-body">
-        {step === 0 && <>
-          <div className="cr-lbl">PASSO 1 — O MUNDO</div>
-          <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
-          <Toggle title="Universo existente?"
-            desc={form.isKnownIP ? "🔍 Vou procurar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
-            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP }))} />
-          {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
-          {form.isKnownIP && form.world.trim() && (
-            <div className="ip-hint">O Mestre vai pesquisar na internet o lore de <strong>{form.world}</strong>: personagens, poderes, facções e eventos.</div>
-          )}
-          <Toggle title="Gerar imagens de cena?"
-            desc={form.useImages ? "🖼️ Uma imagem por cena — mais imersivo, mais lento" : "⚡ Sem imagens — mais rápido e barato"}
-            value={form.useImages} onChange={() => setForm(f => ({ ...f, useImages: !f.useImages }))} />
-          <button className="btn-next" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>PRÓXIMO →</button>
-        </>}
+      <div className="cr-body">
+        {step === 0 && <>
+          <div className="cr-lbl">PASSO 1 — O MUNDO</div>
+          <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
+          <Toggle title="Universo existente?"
+            desc={form.isKnownIP ? "🔍 Vou procurar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
+            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP }))} />
+          {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
+          {form.isKnownIP && form.world.trim() && (
+            <div className="ip-hint">O Mestre vai pesquisar na internet o lore de <strong>{form.world}</strong>: personagens, poderes, facções e eventos.</div>
+          )}
+          <Toggle title="Gerar imagens de cena?"
+            desc={form.useImages ? "🖼️ Uma imagem por cena — mais imersivo, mais lento" : "⚡ Sem imagens — mais rápido e barato"}
+            value={form.useImages} onChange={() => setForm(f => ({ ...f, useImages: !f.useImages }))} />
+          <button className="btn-next" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>PRÓXIMO →</button>
+        </>}
 
-        {step === 1 && <>
-          <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
-          <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder="ex: Naruto, V, Geralt..." />
-          <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="ex: Hokage, Witcher, Lorde..." />
-          <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
-          <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
-          <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
-          <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: Rasengan, velocidade, magia de fogo..." />
-          <button className="btn-next" disabled={!form.charName.trim()} onClick={() => setStep(2)}>PRÓXIMO →</button>
-        </>}
+        {step === 1 && <>
+          <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
+          <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder="ex: Naruto, V, Geralt..." />
+          <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="ex: Hokage, Witcher, Lorde..." />
+          <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
+          <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
+          <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
+          <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: Rasengan, velocidade, magia de fogo..." />
+          <button className="btn-next" disabled={!form.charName.trim()} onClick={() => setStep(2)}>PRÓXIMO →</button>
+        </>}
 
-        {step === 2 && <>
-          <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
-          <div className="app-preview">
-            <div className="app-avatar">
-              <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
-              <div className="av-body">{form.appearance.body?.[0]}</div>
-              <div className="av-eyes">
-                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-              </div>
-            </div>
-            <div className="app-summary">
-              {Object.entries(APP_LABELS).map(([k, label]) => (
-                <div key={k} className="app-sum-row">
-                  <span className="app-sum-key">{label}:</span>
-                  <span className="app-sum-val">{form.appearance[k]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {Object.entries(APP_OPTIONS).map(([key, opts]) => (
-            <div key={key} className="app-section">
-              <div className="app-section-label">{APP_LABELS[key]}</div>
-              <div className="chips">
-                {opts.map(opt => (
-                  <button key={opt} className={`chip ${form.appearance[key] === opt ? "on" : ""}`} onClick={() => setApp(key, opt)}>{opt}</button>
-                ))}
-              </div>
-            </div>
-          ))}
-          <button className="btn-next" onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
-        </>}
-      </div>
+        {step === 2 && <>
+          <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
+          <div className="app-preview">
+            <div className="app-avatar">
+              <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
+              <div className="av-body">{form.appearance.body?.[0]}</div>
+              <div className="av-eyes">
+                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
+                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
+              </div>
+            </div>
+            <div className="app-summary">
+              {Object.entries(APP_LABELS).map(([k, label]) => (
+                <div key={k} className="app-sum-row">
+                  <span className="app-sum-key">{label}:</span>
+                  <span className="app-sum-val">{form.appearance[k]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {Object.entries(APP_OPTIONS).map(([key, opts]) => (
+            <div key={key} className="app-section">
+              <div className="app-section-label">{APP_LABELS[key]}</div>
+              <div className="chips">
+                {opts.map(opt => (
+                  <button key={opt} className={`chip ${form.appearance[key] === opt ? "on" : ""}`} onClick={() => setApp(key, opt)}>{opt}</button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <button className="btn-next" onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
+        </>}
+      </div>
 
-      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST }} />
-    </div>
-  );
+      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST }} />
+    </div>
+  );
 
-  // ═══ PLAY ══════════════════════════════════════════════════════════
-  const c = active || {};
-  return (
-    <div className="root">
-      <Head>
-        <title>{c.charName} — {c.world}</title>
-      </Head>
+  // ═══ PLAY ══════════════════════════════════════════════════════════
+  const c = active || {};
+  return (
+    <div className="root">
+      <Head>
+        <title>{c.charName} — {c.world}</title>
+      </Head>
 
-      {/* Header */}
-      <div className="header">
-        {c.useImages && sceneImg && (
-          <div className="si-wrap">
-            <img src={sceneImg} alt="" className={`si ${imgOk ? "ok" : ""}`} onLoad={() => setImgOk(true)} />
-            <div className="si-ov" />
-            {!imgOk && <div className="si-spin">✦ GERANDO CENA ✦</div>}
-          </div>
-        )}
-        <div className="tbar">
-          <button className="btn-sm" onClick={() => { clearAuto(); setView("home"); }}>⌂</button>
-          <div className="tc">
-            <div className="t-world">{c.world}</div>
-            <div className="t-name">⚔ {c.charName}</div>
-            {c.charTitle && <div className="t-world">{c.charTitle}</div>}
-          </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button className="btn-sm" onClick={() => setShowChar(v => !v)}>📜</button>
-            <button className="btn-sm" onClick={resetChat}>↺</button>
-          </div>
-        </div>
+      {/* Header */}
+      <div className="header">
+        {c.useImages && sceneImg && (
+          <div className="si-wrap">
+            <img src={sceneImg} alt="" className={`si ${imgOk ? "ok" : ""}`} onLoad={() => setImgOk(true)} />
+            <div className="si-ov" />
+            {!imgOk && <div className="si-spin">✦ GERANDO CENA ✦</div>}
+          </div>
+        )}
+        <div className="tbar">
+          <button className="btn-sm" onClick={() => { clearAuto(); setView("home"); }}>⌂</button>
+          <div className="tc">
+            <div className="t-world">{c.world}</div>
+            <div className="t-name">⚔ {c.charName}</div>
+            {c.charTitle && <div className="t-world">{c.charTitle}</div>}
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button className="btn-sm" onClick={() => setShowChar(v => !v)}>📜</button>
+            <button className="btn-sm" onClick={resetChat}>↺</button>
+          </div>
+        </div>
 
-        {showChar && (
-          <div className="cpanel">
-            <div className="cp-lbl">▸ FICHA E OPÇÕES</div>
-            {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
-            {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
-            {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
-            {c.charBg          && <div><span className="dd">Origem:</span> {c.charBg}</div>}
-            {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
-            {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
-            {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
-            
-            <div style={{ marginTop: 16, display: "flex", gap: 6, flexWrap: "wrap", borderTop: "1px solid #180e00", paddingTop: 10 }}>
-              {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
-              {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
-            </div>
+        {showChar && (
+          <div className="cpanel">
+            <div className="cp-lbl">▸ FICHA E OPÇÕES</div>
+            {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
+            {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
+            {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
+            {c.charBg          && <div><span className="dd">Origem:</span> {c.charBg}</div>}
+            {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
+            {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
+            {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
+            
+            <div style={{ marginTop: 16, display: "flex", gap: 6, flexWrap: "wrap", borderTop: "1px solid #180e00", paddingTop: 10 }}>
+              {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
+              {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
+            </div>
 
-            <button onClick={exportToBook} className="btn-export">📖 EXPORTAR COMO LIVRO (PDF)</button>
-          </div>
-        )}
-      </div>
+            <button onClick={exportToBook} className="btn-export">📖 EXPORTAR COMO LIVRO (PDF)</button>
+          </div>
+        )}
+      </div>
 
-      {/* Mensagens */}
-      <div className="msgs">
-        {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
+      {/* Mensagens */}
+      <div className="msgs">
+        {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
 
-        {disp.map((m, i) => (
-          <div key={i}>
-            {m.type === "gm" && (
-              <div className="b-gm">
-                <div className="b-lbl">✦ MESTRE ✦</div>
-                {m.text}
-              </div>
-            )}
-            {m.type === "user" && (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div className="b-u">{m.text}</div>
-              </div>
-            )}
-            {m.type === "auto" && (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div className="b-auto">⚡ {m.text}</div>
-              </div>
-            )}
-            {m.type === "error" && <div className="b-err">{m.text}</div>}
-          </div>
-        ))}
+        {disp.map((m, i) => (
+          <div key={i}>
+            {m.type === "gm" && (
+              <div className="b-gm">
+                <div className="b-lbl">✦ MESTRE ✦</div>
+                {m.text}
+              </div>
+            )}
+            {m.type === "user" && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="b-u">{m.text}</div>
+              </div>
+            )}
+            {m.type === "auto" && (
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div className="b-auto">⚡ {m.text}</div>
+              </div>
+            )}
+            {m.type === "error" && <div className="b-err">{m.text}</div>}
+          </div>
+        ))}
 
-        {loading && disp.length > 0 && (
-          <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
-        )}
+        {loading && disp.length > 0 && (
+          <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
+        )}
 
-        {/* Banner de countdown no modo auto */}
-        {autoWaiting && !loading && (
-          <div className="auto-banner">
-            <div className="auto-banner-top">
-              <span className="auto-dot" />
-              <span>MODO AUTOMÁTICO — próximo turno em <strong>{countdown}s</strong></span>
-            </div>
-            <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
-          </div>
-        )}
+        {/* Banner de countdown no modo auto */}
+        {autoWaiting && !loading && (
+          <div className="auto-banner">
+            <div className="auto-banner-top">
+              <span className="auto-dot" />
+              <span>MODO AUTOMÁTICO — próximo turno em <strong>{countdown}s</strong></span>
+            </div>
+            <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
+          </div>
+        )}
 
-        <div ref={bottomRef} />
-      </div>
+        <div ref={bottomRef} />
+      </div>
 
-      {/* Input + botão AUTO */}
-      <div className="iarea">
-        <button
-          className={`btn-auto ${autoMode ? "on" : ""}`}
-          onClick={toggleAuto}
-          title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
-        >
-          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
-        </button>
+      {/* Input + botão AUTO */}
+      <div className="iarea">
+        <button
+          className={`btn-auto ${autoMode ? "on" : ""}`}
+          onClick={toggleAuto}
+          title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+        >
+          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
+        </button>
 
-        <textarea
-          ref={taRef}
-          className="ibox"
-          value={input}
-          rows={2}
-          disabled={loading || autoWaiting}
-          placeholder={autoMode ? "Auto ligado — aperte AUTO pra intervir" : `O que ${c.charName || "o personagem"} faz?`}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-        />
-        <button
-          className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
-          onClick={handleSend}
-          disabled={loading || !input.trim() || autoWaiting}
-        >⚔</button>
-      </div>
+        <textarea
+          ref={taRef}
+          className="ibox"
+          value={input}
+          rows={2}
+          disabled={loading || autoWaiting}
+          placeholder={autoMode ? "Auto ligado — aperte AUTO pra intervir" : `O que ${c.charName || "o personagem"} faz?`}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+        />
+        <button
+          className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
+          onClick={handleSend}
+          disabled={loading || !input.trim() || autoWaiting}
+        >⚔</button>
+      </div>
 
-      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST }} />
-    </div>
-  );
+      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST }} />
+    </div>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────
 function F({ label, value, set, placeholder, ta, rows }) {
-  const st = { width: "100%", background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: "10px 12px", color: "#c4a060", fontSize: 13, fontFamily: "'Palatino Linotype',Palatino,serif", outline: "none", resize: "none", lineHeight: 1.6, WebkitAppearance: "none", boxSizing: "border-box", display: "block" };
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
-      {ta ? <textarea style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
-          : <input    style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
-    </div>
-  );
+  const st = { width: "100%", background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: "10px 12px", color: "#c4a060", fontSize: 13, fontFamily: "'Palatino Linotype',Palatino,serif", outline: "none", resize: "none", lineHeight: 1.6, WebkitAppearance: "none", boxSizing: "border-box", display: "block" };
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
+      {ta ? <textarea style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
+          : <input    style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
+    </div>
+  );
 }
 
 function Toggle({ title, desc, value, onChange }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: 12, marginBottom: 12 }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, color: "#c4a060", marginBottom: 3 }}>{title}</div>
-        <div style={{ fontSize: 9, color: "#4a2c00", lineHeight: 1.6 }}>{desc}</div>
-      </div>
-      <button onClick={onChange} style={{ background: value ? "#2a0d00" : "#0a0600", border: `1px solid ${value ? "#8b5a14" : "#180e00"}`, borderRadius: 4, color: value ? "#d4a843" : "#2c1900", fontSize: 9, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 2, flexShrink: 0 }}>
-        {value ? "SIM" : "NÃO"}
-      </button>
-    </div>
-  );
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: 12, marginBottom: 12 }}>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 11, color: "#c4a060", marginBottom: 3 }}>{title}</div>
+        <div style={{ fontSize: 9, color: "#4a2c00", lineHeight: 1.6 }}>{desc}</div>
+      </div>
+      <button onClick={onChange} style={{ background: value ? "#2a0d00" : "#0a0600", border: `1px solid ${value ? "#8b5a14" : "#180e00"}`, borderRadius: 4, color: value ? "#d4a843" : "#2c1900", fontSize: 9, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 2, flexShrink: 0 }}>
+        {value ? "SIM" : "NÃO"}
+      </button>
+    </div>
+  );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────

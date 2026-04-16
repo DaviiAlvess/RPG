@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 
@@ -150,7 +149,7 @@ ${loreExtra}`
     `REGRA 7 — PAUSA É NARRAÇÃO.`,
     `Às vezes a resposta mais pesada é o silêncio. "Ela não responde. Examina as próprias mãos." "A sala fica quieta." "O vento para." Pausas criam peso emocional. Uma cena pode terminar sem ação — com uma olhar, um gesto, um som distante. Use isso.`,
     ``,
-    `REGRA 8 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.`,
+    `REGRA 8 — TERMINE WITH UMA ABERTURA, NÃO COM UMA LISTA.`,
     `NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Termine com uma situação viva: uma pergunta do ambiente, a ação de um NPC, uma tensão que exige resposta. O jogador decide. Você só narra o que acontece.`,
     ``,
     `REGRA 9 — IMPROVISE COM INTENÇÃO.`,
@@ -174,13 +173,11 @@ ${loreExtra}`
     ``,
     `REGRA 13 — RELACIONAMENTOS E FACÇÕES.`,
     `Mantenha um registro oculto da atitude dos NPCs em relação a ${c.charName}:
-    ${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("
-    ")}
+    ${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("\n    ")}
     Sempre que o jogador agir de forma rude, agressiva ou desrespeitosa com um NPC, mude permanentemente a atitude para "Hostil" ou "Suspeito".
     Se o jogador for gentil, justo ou útil, mude para "Amigável" ou "Neutral".
     Nunca explique a mudança de atitude ao jogador — apenas ajuste o tom da resposta do NPC.`,
-  ].filter(Boolean).join("
-");
+  ].filter(Boolean).join("\n");
 
 // ─── Storage ──────────────────────────────────────────────────────────
 const IDX_KEY = "rpg-idx-v3";
@@ -191,13 +188,8 @@ export default function RPG() {
   const [view, setView]     = useState("home");
   const [idx, setIdx]       = useState([]);
   const [active, setActive] = useState(null);
+  const [form, setForm]     = useState({ ...PRESET });
   const [step, setStep]     = useState(0);
-  const [form, setForm]     = useState({
-    world: "", worldBg: "", isKnownIP: false,
-    charName: "", charTitle: "", charAge: "",
-    charBg: "", charPersonality: "", charSkills: "",
-    appearance: { ...DEFAULT_APP }, useImages: true,
-  });
 
   // Play
   const [msgs, setMsgs]         = useState([]);
@@ -253,8 +245,7 @@ export default function RPG() {
     if (!active || loading) return;
     const lastGM = [...disp].reverse().find(m => m.type === "gm");
     const snippet = lastGM
-      ? lastGM.text.replace(/
-/g, " ").slice(0, 58) + "…"
+      ? lastGM.text.replace(/\n/g, " ").slice(0, 58) + "…"
       : "Início da aventura";
     const newSave = {
       id: uid(),
@@ -313,8 +304,7 @@ export default function RPG() {
   const exportToBook = () => {
     const bookContent = disp.map(m => {
       if (m.type === "gm") {
-        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/
-/g, "<br/>")}</p>`;
+        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/\n/g, "<br/>")}</p>`;
       }
       if (m.type === "user" || m.type === "auto") {
         return `<div style="text-align:right;margin-bottom:24px;"><span style="font-style:italic;font-size:15px;color:#444;border-bottom:1px solid #ccc;padding-bottom:2px;">— ${m.text}</span></div>`;
@@ -539,6 +529,15 @@ export default function RPG() {
         scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
       } else if (autoRef.current && options.length === 0) {
         intervene();
+      }
+
+      // Detecção automática de teste de dado
+      if (raw.toLowerCase().includes("[teste:")) {
+        const testMatch = raw.match(/\[TESTE:(\w+)\]\s*(.+)/i);
+        if (testMatch) {
+          setPendingTest({ attribute: testMatch[1], description: testMatch[2] });
+          setShowRollButton(true);
+        }
       }
 
     } catch {
@@ -908,7 +907,7 @@ export default function RPG() {
             </div>
             <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
           </div>
-        )
+        )}
 
         <div ref={bottomRef} />
       </div>
@@ -920,9 +919,7 @@ export default function RPG() {
           onClick={toggleAuto}
           title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
         >
-          {autoMode ? "AUTO
-LIGADO" : "AUTO
-DESL."}
+          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
         </button>
         <textarea
           ref={taRef}
@@ -1057,33 +1054,21 @@ const PLAY_ST = BASE + `
 .t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
 .btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;flex-shrink:0}
-
-/* HP mini in tbar */
 .hp-mini{position:relative;width:32px;height:32px;flex-shrink:0;border:1px solid #180e00;border-radius:4px;overflow:hidden;cursor:default;display:flex;align-items:center;justify-content:center}
 .hp-mini-bar{position:absolute;bottom:0;left:0;height:100%;transition:width .4s,background .4s;opacity:.35}
 .hp-mini-val{position:relative;font-size:9px;color:#c4a060;letter-spacing:0;z-index:1}
-
-/* Mission badge in tbar */
 .mission-badge{font-size:10px;color:#8b6a20;border:1px solid #2a1e00;border-radius:4px;padding:4px 6px;cursor:pointer;flex-shrink:0;-webkit-tap-highlight-color:transparent;background:#0c0900}
-
-/* cpanel */
 .cpanel{margin:0 12px 10px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;font-size:11px;line-height:2;color:#907040;max-height:340px;overflow-y:auto}
 .cp-lbl{color:#d4a843;font-size:8px;letter-spacing:3px;margin-bottom:6px}
 .cp-divider{border-top:1px solid #180e00;margin:10px 0}
 .dd{color:#4a2c00}
-
-/* HP tracker */
 .hp-ctrl{display:flex;align-items:center;gap:4px;margin-bottom:4px}
 .hp-btn{background:#0a0600;border:1px solid #1e1400;border-radius:3px;color:#6b4a1a;font-size:10px;padding:3px 7px;cursor:pointer;font-family:inherit;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .hp-bar-wrap{flex:1;position:relative;height:18px;background:#0a0600;border:1px solid #180e00;border-radius:3px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .hp-bar-fill{position:absolute;left:0;top:0;bottom:0;transition:width .3s,background .3s;opacity:.7}
 .hp-val{position:relative;font-size:9px;color:#c4a060;z-index:1}
-
-/* Items */
 .items-list{display:flex;flex-direction:column;gap:6px;font-size:11px;line-height:1.6;margin-bottom:10px}
 .item{background:#0a0600;border:1px solid #180e00;border-radius:4px;padding:6px 8px;color:#6b5a20}
-
-/* Relationships */
 .relationship{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px}
 .relationship-npc{color:#6b5a20}
 .relationship-attitude{font-weight:bold;text-transform:uppercase;letter-spacing:1px}
@@ -1091,14 +1076,10 @@ const PLAY_ST = BASE + `
 .relationship-attitude.suspeito{color:#8b5a00}
 .relationship-attitude.neutro,.relationship-attitude.neutral{color:#4a4a4a}
 .relationship-attitude.amigável,.relationship-attitude.amigavel{color:#1a6a1a}
-
-/* Missions */
 .mission-row{display:flex;gap:6px;font-size:11px;line-height:1.7;align-items:flex-start}
 .mission-row.active{color:#c4a060}
 .mission-row.done{color:#3a2a10;text-decoration:line-through}
 .mission-dot{flex-shrink:0;color:#8b5a14;margin-top:1px}
-
-/* Saves */
 .btn-save{background:transparent;border:1px solid #2a1800;border-radius:3px;color:#4a2c00;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit;transition:all .3s;-webkit-tap-highlight-color:transparent}
 .btn-save:hover{border-color:#8b5a14;color:#d4a843}
 .btn-save.flash{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}
@@ -1112,18 +1093,12 @@ const PLAY_ST = BASE + `
 .save-btns{display:flex;gap:4px;flex-shrink:0}
 .save-btn-load{background:#1a0e00;border:1px solid #4a2000;color:#8b5a14;border-radius:3px;padding:4px 8px;cursor:pointer;font-size:11px;-webkit-tap-highlight-color:transparent}
 .save-btn-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:3px;padding:4px 7px;cursor:pointer;font-size:10px;-webkit-tap-highlight-color:transparent}
-
-/* Badges */
 .badge{font-size:8px;letter-spacing:2px;color:#2c1900;background:#0a0600;border:1px solid #180e00;border-radius:3px;padding:2px 6px}
 .btn-export{width:100%;background:transparent;border:1px solid #4a2c00;color:#c4a060;padding:10px;margin-top:14px;border-radius:4px;font-size:10px;letter-spacing:2px;cursor:pointer;font-family:inherit}
 .btn-export:hover{background:#180e00}
-
-/* Mission strip (always visible below header) */
 .missions-strip{flex-shrink:0;background:#0c0900;border-bottom:1px solid #1e1400;padding:6px 14px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .missions-strip-item{font-size:10px;color:#6b5010;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .missions-strip-more{font-size:9px;color:#3a2800;letter-spacing:1px}
-
-/* Messages */
 .msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
 .splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
 .b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}
@@ -1138,8 +1113,6 @@ const PLAY_ST = BASE + `
 .auto-dot{width:7px;height:7px;border-radius:50%;background:#8b6a00;flex-shrink:0;animation:autopulse 1s infinite}
 .auto-banner-top strong{color:#d4a843}
 .btn-intervir{background:#1a1000;border:1px solid #5a4000;border-radius:4px;color:#d4a843;font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:2px;font-family:inherit;-webkit-tap-highlight-color:transparent}
-
-/* Input area */
 .iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}
 .btn-auto{background:#0c0700;border:1px solid #180e00;border-radius:6px;color:#2c1900;font-size:8px;letter-spacing:1px;padding:0;width:44px;height:48px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4;white-space:pre;-webkit-tap-highlight-color:transparent;transition:all .2s}
 .btn-auto.on{background:#1a1000;border-color:#6a5000;color:#d4a843;animation:autopulse 1.5s infinite}
@@ -1160,11 +1133,7 @@ const PLAY_ST = BASE + `
   -webkit-tap-highlight-color: transparent;
 }
 .i-roll:hover { border-color: #4a3a8a; color: #9a7afa; }
-
-/* Rain overlay */
-.rain-overlay {
-  position: relative;
-}
+.rain-overlay { position: relative; }
 .rain-overlay::after {
   content: "";
   position: fixed;

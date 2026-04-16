@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 
@@ -10,9 +11,13 @@ const extractOptions = (text) => {
   const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
   return matches.slice(-3).map(m => m[2].trim());
 };
+const extractItems = (text) => {
+  const matches = [...text.matchAll(/\[ITEM:([^\]]+)\]/gi)];
+  return matches.map(m => m[1].trim());
+};
 const cleanText = (t) =>
   t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
-   .replace(/\[(MISSÃO|CONCLUÍDA):([^\]]+)\]/gi, "")
+   .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
    .trim();
 const generateImage = (prompt, world) => {
   const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
@@ -43,6 +48,18 @@ const parseMissions = (text, current) => {
         ? { ...m, completed: true }
         : m
     );
+  }
+  return updated;
+};
+
+// ─── Item parser ──────────────────────────────────────────────────────
+const parseItems = (text, current) => {
+  let updated = [...current];
+  const newMatches = extractItems(text);
+  for (const item of newMatches) {
+    if (!updated.some(i => i.toLowerCase() === item.toLowerCase())) {
+      updated.push(item);
+    }
   }
   return updated;
 };
@@ -84,6 +101,12 @@ const PRESET = {
   charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
   appearance: { body: "Atlético", height: "Alto", skin: "Morena", hairLen: "Curto", hairColor: "Preto", hairStyle: "Liso", eyeColor: "Castanhos", eyeShape: "Amendoados", face: "Quadrada", extras: "Cicatriz" },
   useImages: true,
+  relationships: {
+    "Tywin Lannister": "Hostil",
+    "Oberyn Martell": "Neutral",
+    "Jon Snow": "Amigável",
+    "Cersei Lannister": "Suspeito",
+  },
 };
 
 // ─── System prompt ────────────────────────────────────────────────────
@@ -91,7 +114,8 @@ const buildPrompt = (c, loreExtra) =>
   [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
     loreExtra
-      ? `LORE OFICIAL DO UNIVERSO:\n${loreExtra}`
+      ? `LORE OFICIAL DO UNIVERSO:
+${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
     ``,
     `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
@@ -141,7 +165,22 @@ const buildPrompt = (c, loreExtra) =>
     c.useImages
       ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
-  ].filter(Boolean).join("\n");
+    ``,
+    `REGRA 12 — MECÂNICA DE JOGO E DADOS.`,
+    `Sempre que o jogador tentar algo difícil, incerto ou arriscado, interrompa a narração com: "[TESTE:ATRIBUTO] [Descrição do teste]" — onde ATRIBUTO é Força, Destreza, Mente ou Carisma.
+    Exemplo: "[TESTE:Força] Role um dado de 20 faces para arrombar a porta."
+    O jogador então lança o dado usando o botão "🎲 D20" no input. O Mestre deve narrar a consequência baseada no resultado (1-5: falha crítica, 6-10: falha, 11-15: sucesso parcial, 16-20: sucesso completo).
+    Nunca diga o resultado do dado — deixe o jogador interpretá-lo. Apenas narre a consequência no contexto da cena.`,
+    ``,
+    `REGRA 13 — RELACIONAMENTOS E FACÇÕES.`,
+    `Mantenha um registro oculto da atitude dos NPCs em relação a ${c.charName}:
+    ${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("
+    ")}
+    Sempre que o jogador agir de forma rude, agressiva ou desrespeitosa com um NPC, mude permanentemente a atitude para "Hostil" ou "Suspeito".
+    Se o jogador for gentil, justo ou útil, mude para "Amigável" ou "Neutral".
+    Nunca explique a mudança de atitude ao jogador — apenas ajuste o tom da resposta do NPC.`,
+  ].filter(Boolean).join("
+");
 
 // ─── Storage ──────────────────────────────────────────────────────────
 const IDX_KEY = "rpg-idx-v3";
@@ -187,6 +226,11 @@ export default function RPG() {
   const [autoDelay, setAutoDelay]     = useState(3);
   const [countdown, setCountdown]     = useState(0);
 
+  // Novos estados para D20 e inventário
+  const [lastRoll, setLastRoll] = useState(null);
+  const [showRollButton, setShowRollButton] = useState(false);
+  const [pendingTest, setPendingTest] = useState(null);
+
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
   const sending   = useRef(false);
@@ -209,7 +253,8 @@ export default function RPG() {
     if (!active || loading) return;
     const lastGM = [...disp].reverse().find(m => m.type === "gm");
     const snippet = lastGM
-      ? lastGM.text.replace(/\n/g, " ").slice(0, 58) + "…"
+      ? lastGM.text.replace(/
+/g, " ").slice(0, 58) + "…"
       : "Início da aventura";
     const newSave = {
       id: uid(),
@@ -220,10 +265,12 @@ export default function RPG() {
       disp: [...disp],
       img: sceneImg,
       missions: [...missions],
+      items: [...(active.items || [])],
+      relationships: { ...(active.relationships || {}) },
     };
     const currentSaves = active.saves || [];
     const updatedSaves = [newSave, ...currentSaves].slice(0, 5);
-    const updated = { ...active, saves: updatedSaves, missions, hp };
+    const updated = { ...active, saves: updatedSaves, missions, hp, items: newSave.items, relationships: newSave.relationships };
     setActive(updated);
     saveCamp(active.id, updated);
     setSaveFlash(true);
@@ -240,6 +287,7 @@ export default function RPG() {
     setHp(save.hp ?? 100);
     setMissions(save.missions || []);
     setShowChar(false);
+    setInput("");
   };
 
   const deleteSlot = (saveId) => {
@@ -265,7 +313,8 @@ export default function RPG() {
   const exportToBook = () => {
     const bookContent = disp.map(m => {
       if (m.type === "gm") {
-        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/\n/g, "<br/>")}</p>`;
+        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/
+/g, "<br/>")}</p>`;
       }
       if (m.type === "user" || m.type === "auto") {
         return `<div style="text-align:right;margin-bottom:24px;"><span style="font-style:italic;font-size:15px;color:#444;border-bottom:1px solid #ccc;padding-bottom:2px;">— ${m.text}</span></div>`;
@@ -280,6 +329,20 @@ export default function RPG() {
         </div>`
       : "";
 
+    const itemsHtml = active?.items?.length
+      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
+          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">MOCHILA</h3>
+          ${active.items.map((item, i) => `<p style="font-size:13px;color:#111;margin-bottom:6px;">${i + 1}. ${item}</p>`).join("")}
+        </div>`
+      : "";
+
+    const relationshipsHtml = active?.relationships && Object.keys(active.relationships).length
+      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
+          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">RELACIONAMENTOS</h3>
+          ${Object.entries(active.relationships).map(([npc, attitude]) => `<p style="font-size:13px;color:#111;margin-bottom:6px;"><strong>${npc}:</strong> ${attitude}</p>`).join("")}
+        </div>`
+      : "";
+
     const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>As Crônicas de ${active.charName}</title>
       <style>body{font-family:'Georgia',serif;padding:40px;color:#000;background:#fff;max-width:800px;margin:0 auto}@media print{body{padding:0;margin:0}@page{margin:2cm}}</style></head>
       <body>
@@ -289,6 +352,8 @@ export default function RPG() {
           <div style="width:80px;height:2px;background:#000;margin:0 auto;"></div>
         </div>
         ${missionsHtml}
+        ${itemsHtml}
+        ${relationshipsHtml}
         ${bookContent}
         <div style="text-align:center;margin-top:60px;font-size:18px;"><strong>FIM.</strong></div>
         <script>window.onload=function(){window.print();}<\/script>
@@ -317,7 +382,21 @@ export default function RPG() {
     timerRef.current = setTimeout(() => {
       setAutoWaiting(false);
       if (!autoRef.current) return;
-      const chosen = options[Math.floor(Math.random() * options.length)];
+
+      let chosen;
+      const personality = camp.charPersonality?.toLowerCase() || "";
+
+      if (personality.includes("orgulhoso")) {
+        const proudOptions = options.filter(opt => opt.toLowerCase().includes("desafiar") || opt.toLowerCase().includes("exigir"));
+        chosen = proudOptions.length ? proudOptions[Math.floor(Math.random() * proudOptions.length)] : options[Math.floor(Math.random() * options.length)];
+      } else if (personality.includes("calculista")) {
+        chosen = options[Math.floor(Math.random() * options.length)];
+      } else if (personality.includes("justo")) {
+        chosen = options[Math.floor(Math.random() * options.length)];
+      } else {
+        chosen = options[Math.floor(Math.random() * options.length)];
+      }
+
       sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
     }, autoDelay * 1000);
   }, [autoDelay]);
@@ -372,12 +451,12 @@ export default function RPG() {
   const finishCreate = async () => {
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
-    setHp(100); setMissions([]);
+    setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
     let lore = "";
     if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
     else { setStatus("⚗️ A preparar mundo..."); }
     const id = uid();
-    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, hp: 100, missions: [], saves: [], createdAt: Date.now() };
+    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, hp: 100, missions: [], saves: [], items: [], relationships: form.relationships || {}, createdAt: Date.now() };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
     setIdx(next); saveIdx(next); saveCamp(id, camp);
@@ -391,6 +470,19 @@ export default function RPG() {
     `Iniciar aventura. Narre o cenário inicial onde ${camp.charName} está agora no universo de "${camp.world}". Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`,
     [], [], camp, lore, false
   );
+
+  const rollD20 = () => {
+    const roll = Math.floor(Math.random() * 20) + 1;
+    setLastRoll(roll);
+    if (pendingTest) {
+      const { attribute, description } = pendingTest;
+      setPendingTest(null);
+      sendMsg(
+        `Resultado do teste de ${attribute}: ${description}. (Resultado: ${roll}/20)`,
+        msgs, disp, active, campLore, false
+      );
+    }
+  };
 
   const sendMsg = async (text, baseMsgs, baseDisp, camp, lore, isAuto = false) => {
     if (!text.trim() || sending.current) return;
@@ -411,24 +503,35 @@ export default function RPG() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      const raw = data.text;
+      let raw = data.text;
+      // Parse de missões, itens e alterações de relacionamento
+      const updatedMissions = parseMissions(raw, missions);
+      const updatedItems = parseItems(raw, active?.items || []);
+      setMissions(updatedMissions);
+
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
       const options = extractOptions(clean);
-
-      // Parse missions
-      const updatedMissions = parseMissions(raw, missions);
-      setMissions(updatedMissions);
 
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp, { type: "gm", text: clean }];
       setMsgs(finalMsgs); setDisp(finalDisp);
 
       let newImg = camp.img || null;
-      if (imgPrompt) { setImgOk(false); newImg = generateImage(imgPrompt, camp.world); setSceneImg(newImg); }
+      if (imgPrompt) {
+        setImgOk(false);
+        newImg = generateImage(imgPrompt, camp.world);
+        setSceneImg(newImg);
+        if (imgPrompt.toLowerCase().includes("rain") || imgPrompt.toLowerCase().includes("storm")) {
+          document.body.classList.add("rain-overlay");
+        } else {
+          document.body.classList.remove("rain-overlay");
+        }
+      }
 
-      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, missions: updatedMissions, hp, updatedAt: Date.now() };
-      setActive(updated); saveCamp(camp.id, updated);
+      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, missions: updatedMissions, items: updatedItems, hp, updatedAt: Date.now() };
+      setActive(updated);
+      saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
       setPending(options);
@@ -448,15 +551,27 @@ export default function RPG() {
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;
     clearAuto();
+
+    const testMatch = input.match(/^\[TESTE:(\w+)\]\s*(.+)$/i);
+    if (testMatch) {
+      const attribute = testMatch[1];
+      const description = testMatch[2];
+      setPendingTest({ attribute, description });
+      setShowRollButton(true);
+      setInput("");
+      taRef.current?.blur();
+      return;
+    }
+
     sendMsg(input, msgs, disp, active, campLore, false);
   };
 
   const resetChat = () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
     clearAuto(); setAutoMode(false); autoRef.current = false;
-    const updated = { ...active, msgs: [], disp: [], img: null, missions: [], hp: 100 };
+    const updated = { ...active, msgs: [], disp: [], img: null, missions: [], items: [], hp: 100 };
     setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
-    setMissions([]); setHp(100); setPending([]);
+    setMissions([]); setItems([]); setHp(100); setPending([]);
     saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
@@ -466,6 +581,10 @@ export default function RPG() {
   const changeHp = (delta) => {
     const next = Math.min(100, Math.max(0, hp + delta));
     setHp(next);
+    if (next < hp) {
+      document.body.classList.add("damage-flash");
+      setTimeout(() => document.body.classList.remove("damage-flash"), 300);
+    }
     if (active) {
       const updated = { ...active, hp: next };
       setActive(updated);
@@ -617,12 +736,10 @@ export default function RPG() {
             <div className="t-name">⚔ {c.charName}</div>
             {c.charTitle && <div className="t-world">{c.charTitle}</div>}
           </div>
-          {/* HP mini */}
           <div className="hp-mini" title="Vida">
             <div className="hp-mini-bar" style={{ width: `${hp}%`, background: hpColor }} />
             <span className="hp-mini-val">{hp}</span>
           </div>
-          {/* Mission badge */}
           {activeMissions.length > 0 && (
             <div className="mission-badge" onClick={() => setShowChar(v => !v)} title="Missões ativas">
               📋{activeMissions.length}
@@ -674,6 +791,29 @@ export default function RPG() {
                 <div key={m.id} className="mission-row done">
                   <span className="mission-dot">✓</span>
                   <span>{m.text}</span>
+                </div>
+              ))}
+            </>}
+
+            {/* Items */}
+            {c.items && c.items.length > 0 && <>
+              <div className="cp-divider" />
+              <div className="cp-lbl">🎒 MOCHILA</div>
+              <div className="items-list">
+                {c.items.map((item, i) => (
+                  <div key={i} className="item">{item}</div>
+                ))}
+              </div>
+            </>}
+
+            {/* Relationships */}
+            {c.relationships && Object.entries(c.relationships).length > 0 && <>
+              <div className="cp-divider" />
+              <div className="cp-lbl">🤝 RELACIONAMENTOS</div>
+              {Object.entries(c.relationships).map(([npc, attitude]) => (
+                <div key={npc} className="relationship">
+                  <span className="relationship-npc">{npc}</span>
+                  <span className={`relationship-attitude ${attitude.toLowerCase()}`}>{attitude}</span>
                 </div>
               ))}
             </>}
@@ -768,7 +908,7 @@ export default function RPG() {
             </div>
             <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
           </div>
-        )}
+        )
 
         <div ref={bottomRef} />
       </div>
@@ -780,7 +920,9 @@ export default function RPG() {
           onClick={toggleAuto}
           title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
         >
-          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
+          {autoMode ? "AUTO
+LIGADO" : "AUTO
+DESL."}
         </button>
         <textarea
           ref={taRef}
@@ -792,6 +934,11 @@ export default function RPG() {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
         />
+        {showRollButton && (
+          <button className="i-roll" onClick={rollD20}>
+            🎲 {lastRoll ? lastRoll : "D20"}
+          </button>
+        )}
         <button
           className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
           onClick={handleSend}
@@ -840,6 +987,8 @@ textarea::placeholder,input::placeholder{color:#2a1800}
 @keyframes pulse{0%,100%{opacity:.15}50%{opacity:.85}}
 @keyframes autopulse{0%,100%{opacity:.4}50%{opacity:1}}
 @keyframes flashgreen{0%{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}100%{background:transparent;border-color:#2a1800;color:#4a2c00}}
+@keyframes damageFlash{ 0% { filter: brightness(1.2) hue-rotate(10deg); } 50% { filter: brightness(0.8) hue-rotate(-10deg); } 100% { filter: brightness(1); } }
+@keyframes rain { 0% { transform: translateY(-100px); } 100% { transform: translateY(100px); } }
 `;
 
 const BASE = `
@@ -930,6 +1079,19 @@ const PLAY_ST = BASE + `
 .hp-bar-fill{position:absolute;left:0;top:0;bottom:0;transition:width .3s,background .3s;opacity:.7}
 .hp-val{position:relative;font-size:9px;color:#c4a060;z-index:1}
 
+/* Items */
+.items-list{display:flex;flex-direction:column;gap:6px;font-size:11px;line-height:1.6;margin-bottom:10px}
+.item{background:#0a0600;border:1px solid #180e00;border-radius:4px;padding:6px 8px;color:#6b5a20}
+
+/* Relationships */
+.relationship{display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px}
+.relationship-npc{color:#6b5a20}
+.relationship-attitude{font-weight:bold;text-transform:uppercase;letter-spacing:1px}
+.relationship-attitude.hostil{color:#8b1a00}
+.relationship-attitude.suspeito{color:#8b5a00}
+.relationship-attitude.neutro,.relationship-attitude.neutral{color:#4a4a4a}
+.relationship-attitude.amigável,.relationship-attitude.amigavel{color:#1a6a1a}
+
 /* Missions */
 .mission-row{display:flex;gap:6px;font-size:11px;line-height:1.7;align-items:flex-start}
 .mission-row.active{color:#c4a060}
@@ -985,4 +1147,32 @@ const PLAY_ST = BASE + `
 .ibox:disabled{opacity:.35}
 .i-send{background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;width:48px;height:48px;border-radius:8px;cursor:pointer;font-size:18px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .i-send.off{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
+.i-roll {
+  background: linear-gradient(135deg, #1a0d3a, #0a031a);
+  border: 1px solid #2a1e6a;
+  color: #6a4afa;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.i-roll:hover { border-color: #4a3a8a; color: #9a7afa; }
+
+/* Rain overlay */
+.rain-overlay {
+  position: relative;
+}
+.rain-overlay::after {
+  content: "";
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><linearGradient id="rain" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="rgba(174,194,224,0.8)" /><stop offset="100%" stop-color="rgba(174,194,224,0.2)" /></linearGradient></defs><path d="M0,50 Q25,20 50,50 T100,50" stroke="url(%23rain)" stroke-width="1" fill="none" /></svg>') repeat;
+  animation: rain 1s linear infinite;
+  z-index: 100;
+}
+.damage-flash { animation: damageFlash .3s ease-in-out; }
 `;

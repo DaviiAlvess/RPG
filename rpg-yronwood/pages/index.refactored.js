@@ -1,9 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import Head from "next/head";
-import { campaignStorage } from "../../utils/supabase-client";
-import Inventory from "../../components/Inventory";
-import CombatSystem from "../../components/CombatSystem";
-import CharacterSheet from "../../components/CharacterSheet";
+import { campaignStorage } from "../utils/supabase-client";
+import Inventory from "../components/Inventory";
+import CombatSystem from "../components/CombatSystem";
+import CharacterSheet from "../components/CharacterSheet";
 
 // Constants and configuration
 const RPG_CONSTANTS = {

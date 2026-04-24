@@ -238,6 +238,9 @@ export default function RPG() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [theme, setTheme] = useState('dark');
+  const [lastRoll, setLastRoll] = useState(null);
+  const [showRollButton, setShowRollButton] = useState(false);
+  const [pendingTest, setPendingTest] = useState(null);
 
   const bottomRef = useRef(null);
   const taRef     = useRef(null);

@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
+import { campaignStorage } from "../../utils/supabase-client";
+import Inventory from "../../components/Inventory";
+import CombatSystem from "../../components/CombatSystem";
+import CharacterSheet from "../../components/CharacterSheet";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -223,10 +227,17 @@ export default function RPG() {
   const [autoDelay, setAutoDelay]     = useState(3);
   const [countdown, setCountdown]     = useState(0);
 
-  // Novos estados para D20 e inventário
-  const [lastRoll, setLastRoll] = useState(null);
-  const [showRollButton, setShowRollButton] = useState(false);
-  const [pendingTest, setPendingTest] = useState(null);
+  // Estados novos para funcionalidades adicionais
+  const [showInventory, setShowInventory] = useState(false);
+  const [showCombat, setShowCombat] = useState(false);
+  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
+  const [experience, setExperience] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [attributes, setAttributes] = useState({ strength: 10, dexterity: 10, mind: 10, charisma: 10 });
+  const [skills, setSkills] = useState({ combat: 1, stealth: 1, magic: 1, persuasion: 1, survival: 1, perception: 1 });
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [theme, setTheme] = useState('dark');
 
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
@@ -235,15 +246,72 @@ export default function RPG() {
   const timerRef  = useRef(null);
   const cdRef     = useRef(null);
 
-  useEffect(() => { try { setIdx(JSON.parse(localStorage.getItem(IDX_KEY) || "[]")); } catch {} }, []);
+  useEffect(() => { 
+    const loadInitialData = async () => {
+      const campaigns = await loadIdx();
+      setIdx(campaigns);
+    };
+    loadInitialData();
+  }, []);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
 
-  // ─── Storage ─────────────────────────────────────────────────────────
-  const saveIdx  = (l) => { try { localStorage.setItem(IDX_KEY, JSON.stringify(l)); } catch {} };
-  const saveCamp = (id, d) => { try { localStorage.setItem(campKey(id), JSON.stringify(d)); } catch {} };
-  const readCamp = (id) => { try { return JSON.parse(localStorage.getItem(campKey(id))); } catch { return null; } };
+  // ─── Storage (agora com Supabase) ───────────────────────────────────────
+  const saveIdx = async (l) => { 
+    try {
+      localStorage.setItem(IDX_KEY, JSON.stringify(l));
+    } catch (error) {
+      console.error('Erro ao salvar índice:', error);
+    } 
+  };
+  
+  const saveCamp = async (id, d) => { 
+    try {
+      await campaignStorage.saveCampaign(d);
+    } catch (error) {
+      console.error('Erro ao salvar no Supabase, usando fallback:', error);
+      try { 
+        localStorage.setItem(campKey(id), JSON.stringify(d)); 
+      } catch (fallbackError) {
+        console.error('Erro no fallback localStorage:', fallbackError);
+      } 
+    }
+  };
+  
+  const readCamp = async (id) => { 
+    try {
+      const data = await campaignStorage.loadCampaign(id);
+      if (data) return data;
+    } catch (error) {
+      console.error('Erro ao carregar do Supabase, usando fallback:', error);
+    }
+    
+    try { 
+      return JSON.parse(localStorage.getItem(campKey(id))); 
+    } catch (error) { 
+      console.error('Erro no fallback localStorage:', error);
+      return null; 
+    } 
+  };
+  
+  const loadIdx = async () => {
+    try {
+      const campaigns = await campaignStorage.listCampaigns();
+      if (campaigns.length > 0) {
+        return campaigns;
+      }
+    } catch (error) {
+      console.error('Erro ao carregar índice do Supabase, usando fallback:', error);
+    }
+    
+    try { 
+      return JSON.parse(localStorage.getItem(IDX_KEY) || "[]"); 
+    } catch (error) { 
+      console.error('Erro no fallback localStorage:', error);
+      return []; 
+    }
+  };
 
   // ─── Save Slots ───────────────────────────────────────────────────────
   const saveSlot = () => {
@@ -412,8 +480,8 @@ export default function RPG() {
   };
 
   // ─── Home ─────────────────────────────────────────────────────────────
-  const openCamp = (s) => {
-    const data = readCamp(s.id);
+  const openCamp = async (s) => {
+    const data = await readCamp(s.id);
     if (!data) return;
     setActive(data);
     setMsgs(data.msgs || []);
@@ -429,12 +497,24 @@ export default function RPG() {
     if (!data.msgs?.length) doStart(data, data.lore || "");
   };
 
-  const delCamp = (id, e) => {
+  const delCamp = async (id, e) => {
     e.stopPropagation();
     if (!confirm("Apagar esta campanha permanentemente?")) return;
+    
+    // Tentar deletar do Supabase primeiro
+    try {
+      await campaignStorage.deleteCampaign(id);
+    } catch (err) {
+      console.error('Erro ao deletar do Supabase:', err);
+    }
+    
+    // Remover do estado e localStorage
     const next = idx.filter((c) => c.id !== id);
-    setIdx(next); saveIdx(next);
-    try { localStorage.removeItem(campKey(id)); } catch {}
+    setIdx(next); 
+    saveIdx(next);
+    try { 
+      localStorage.removeItem(campKey(id)); 
+    } catch {}
   };
 
   // ─── Create ───────────────────────────────────────────────────────────
@@ -591,12 +671,256 @@ export default function RPG() {
     if (next < hp) {
       document.body.classList.add("damage-flash");
       setTimeout(() => document.body.classList.remove("damage-flash"), 300);
+      // Efeito sonoro de dano
+      if (soundEnabled) playSound('damage');
     }
     if (active) {
       const updated = { ...active, hp: next };
       setActive(updated);
       saveCamp(active.id, updated);
     }
+  };
+
+  // ─── Funções de Inventário ─────────────────────────────────────────────
+  const addItem = async (itemName) => {
+    if (!active || !itemName) return;
+    
+    try {
+      const currentItems = active.items || [];
+      const newItems = [...currentItems, itemName];
+      
+      const updated = { ...active, items: newItems };
+      setActive(updated);
+      await saveCamp(active.id, updated);
+      
+      if (notificationsEnabled) {
+        showNotification(`Item adicionado: ${itemName}`);
+      }
+    } catch (error) {
+      console.error('Erro ao adicionar item:', error);
+      showNotification('Erro ao adicionar item', 'error');
+    }
+  };
+
+  const removeItem = async (index) => {
+    if (!active || index < 0 || index >= (active.items || []).length) return;
+    
+    try {
+      const currentItems = active.items || [];
+      const newItems = currentItems.filter((_, i) => i !== index);
+      
+      const updated = { ...active, items: newItems };
+      setActive(updated);
+      await saveCamp(active.id, updated);
+    } catch (error) {
+      console.error('Erro ao remover item:', error);
+      showNotification('Erro ao remover item', 'error');
+    }
+  };
+
+  const useItem = async (itemName) => {
+    if (!active || !itemName) return;
+    
+    try {
+      const itemLower = itemName.toLowerCase();
+      let hpChange = 0;
+      let message = '';
+      
+      if (itemLower.includes('poção') || itemLower.includes('cura')) {
+        hpChange = 20;
+        message = `Você usou ${itemName} e recuperou 20 HP!`;
+      } else if (itemLower.includes('comida') || itemLower.includes('racao')) {
+        hpChange = 5;
+        message = `Você comeu ${itemName} e recuperou 5 HP!`;
+      } else {
+        message = `Você usou ${itemName}`;
+      }
+      
+      if (hpChange > 0) {
+        changeHp(hpChange);
+      }
+      
+      showNotification(message);
+      
+      // Remove item after use
+      const itemIndex = active.items?.indexOf(itemName);
+      if (itemIndex !== -1) {
+        await removeItem(itemIndex);
+      }
+    } catch (error) {
+      console.error('Erro ao usar item:', error);
+      showNotification('Erro ao usar item', 'error');
+    }
+  };
+
+  // ─── Funções de Combate ───────────────────────────────────────────────
+  const handleCombatStart = (enemy) => {
+    if (enemy && enemy.name) {
+      showNotification(`Combate iniciado contra ${enemy.name}!`);
+    }
+  };
+
+  const handleCombatEnd = (victory, enemy = null) => {
+    if (victory && enemy) {
+      const xpGained = (enemy.hp || 10) * 2;
+      setExperience(prev => prev + xpGained);
+      showNotification(`Vitória! Você ganhou ${xpGained} XP!`);
+      
+      // Verificar se subiu de nível
+      const newTotalXp = experience + xpGained;
+      const newLevel = Math.floor(newTotalXp / 100) + 1;
+      if (newLevel > level) {
+        setLevel(newLevel);
+        showNotification(`PARABÉNS! Você alcançou o nível ${newLevel}!`);
+        changeHp(25); // Recupera HP ao subir de nível
+      }
+    } else {
+      showNotification(`Você fugiu do combate!`);
+    }
+  };
+
+  const handleCombatDamage = (damage) => {
+    if (typeof damage === 'number' && damage > 0) {
+      changeHp(-damage);
+    }
+  };
+
+  // ─── Funções de Personagem ─────────────────────────────────────────────
+  const handleLevelUp = () => {
+    setLevel(prev => prev + 1);
+    setAttributes(prev => ({
+      strength: prev.strength + 1,
+      dexterity: prev.dexterity + 1,
+      mind: prev.mind + 1,
+      charisma: prev.charisma + 1
+    }));
+    
+    showNotification(`⬆️ Você subiu para o nível ${level + 1}!`);
+    changeHp(25); // Recupera HP ao subir de nível
+  };
+
+  const handleUpdateCharacter = (updatedCharacter) => {
+    if (!active) return;
+    
+    const updated = { ...active, ...updatedCharacter };
+    setActive(updated);
+    saveCamp(active.id, updated);
+    showNotification('💾 Ficha de personagem atualizada!');
+  };
+
+  // ─── Utilitários ───────────────────────────────────────────────────────
+  const showNotification = (message, type = 'info') => {
+    if (!notificationsEnabled || !message) return;
+    
+    try {
+      // Remover notificações existentes
+      const existingNotifications = document.querySelectorAll('.notification');
+      existingNotifications.forEach(n => n.remove());
+      
+      // Criar notificação temporária
+      const notification = document.createElement('div');
+      notification.className = `notification notification-${type}`;
+      notification.textContent = message;
+      
+      // Estilos base
+      const baseStyles = {
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        padding: '12px 16px',
+        borderRadius: '6px',
+        zIndex: '1000',
+        animation: 'slideIn 0.3s ease',
+        maxWidth: '300px',
+        fontSize: '12px',
+        fontFamily: 'inherit',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+      };
+      
+      // Estilos por tipo
+      const typeStyles = {
+        info: {
+          background: '#2a0d00',
+          border: '1px solid #8b5a14',
+          color: '#d4a843'
+        },
+        success: {
+          background: '#1a3a0a',
+          border: '1px solid #4a8a14',
+          color: '#a0d060'
+        },
+        error: {
+          background: '#3a0a0a',
+          border: '1px solid #8a1414',
+          color: '#d06060'
+        },
+        warning: {
+          background: '#3a3a0a',
+          border: '1px solid #8a8a14',
+          color: '#d0d060'
+        }
+      };
+      
+      // Aplicar estilos
+      const styles = { ...baseStyles, ...typeStyles[type] };
+      Object.assign(notification.style, styles);
+      
+      document.body.appendChild(notification);
+      
+      // Auto remover após 3 segundos
+      setTimeout(() => {
+        if (notification.parentNode) {
+          notification.style.animation = 'slideOut 0.3s ease';
+          setTimeout(() => {
+            if (notification.parentNode) {
+              document.body.removeChild(notification);
+            }
+          }, 300);
+        }
+      }, 3000);
+    } catch (error) {
+      console.error('Erro ao mostrar notificação:', error);
+    }
+  };
+
+  const playSound = (type) => {
+    if (!soundEnabled) return;
+    
+    // Implementar sons simples usando Web Audio API
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    switch(type) {
+      case 'damage':
+        oscillator.frequency.value = 200;
+        gainNode.gain.value = 0.1;
+        break;
+      case 'success':
+        oscillator.frequency.value = 800;
+        gainNode.gain.value = 0.1;
+        break;
+      case 'levelup':
+        oscillator.frequency.value = 600;
+        gainNode.gain.value = 0.15;
+        break;
+      default:
+        oscillator.frequency.value = 440;
+        gainNode.gain.value = 0.1;
+    }
+    
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.1);
+  };
+
+  // ─── Temas ─────────────────────────────────────────────────────────────
+  const toggleTheme = () => {
+    const newTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(newTheme);
+    document.body.className = newTheme;
   };
 
   const insertCmd = (cmd) => {
@@ -811,27 +1135,31 @@ export default function RPG() {
             </>}
 
             {/* Items */}
-            {c.items && c.items.length > 0 && <>
-              <div className="cp-divider" />
-              <div className="cp-lbl">🎒 MOCHILA</div>
-              <div className="items-list">
-                {c.items.map((item, i) => (
-                  <div key={i} className="item">{item}</div>
-                ))}
+            {c.items && c.items.length > 0 && (
+              <div>
+                <div className="cp-divider" />
+                <div className="cp-lbl">🎒 MOCHILA</div>
+                <div className="items-list">
+                  {c.items.map((item, i) => (
+                    <div key={i} className="item">{item}</div>
+                  ))}
+                </div>
               </div>
-            </>}
+            )}
 
             {/* Relationships */}
-            {c.relationships && Object.entries(c.relationships).length > 0 && <>
-              <div className="cp-divider" />
-              <div className="cp-lbl">🤝 RELACIONAMENTOS</div>
-              {Object.entries(c.relationships).map(([npc, attitude]) => (
-                <div key={npc} className="relationship">
-                  <span className="relationship-npc">{npc}</span>
-                  <span className={`relationship-attitude ${attitude.toLowerCase()}`}>{attitude}</span>
-                </div>
-              ))}
-            </>}
+            {c.relationships && Object.entries(c.relationships).length > 0 && (
+              <div>
+                <div className="cp-divider" />
+                <div className="cp-lbl">🤝 RELACIONAMENTOS</div>
+                {Object.entries(c.relationships).map(([npc, attitude]) => (
+                  <div key={npc} className="relationship">
+                    <span className="relationship-npc">{npc}</span>
+                    <span className={`relationship-attitude ${attitude.toLowerCase()}`}>{attitude}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Saves */}
             <div className="cp-divider" />
@@ -934,7 +1262,52 @@ export default function RPG() {
         <button className="q-btn" onClick={() => insertCmd("[ITEM:Item] ")}>🎒 ITEM</button>
         <button className="q-btn" onClick={() => insertCmd("[MISSÃO:Nova Missão] ")}>📋 MISSÃO</button>
         <button className="q-btn" onClick={() => insertCmd("[CONCLUÍDA:Missão] ")}>✓ OK</button>
+        <button className="q-btn" onClick={() => setShowInventory(!showInventory)}>🎒 INVENTÁRIO</button>
+        <button className="q-btn" onClick={() => setShowCombat(!showCombat)}>⚔️ COMBATE</button>
+        <button className="q-btn" onClick={() => setShowCharacterSheet(!showCharacterSheet)}>📜 FICHA</button>
+        <button className="q-btn" onClick={toggleTheme}>🎨 TEMA</button>
       </div>
+
+      {/* Modais sobrepostos */}
+      {showInventory && (
+        <div className="modal-overlay" onClick={() => setShowInventory(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <Inventory 
+              items={c.items || []}
+              onAddItem={addItem}
+              onRemoveItem={removeItem}
+              onUseItem={useItem}
+            />
+          </div>
+        </div>
+      )}
+
+      {showCombat && (
+        <div className="modal-overlay" onClick={() => setShowCombat(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <CombatSystem 
+              character={{ ...c, hp, attributes, skills }}
+              onCombatStart={handleCombatStart}
+              onCombatEnd={handleCombatEnd}
+              onDamage={handleCombatDamage}
+              onHeal={(amount) => changeHp(amount)}
+              isActive={true}
+            />
+          </div>
+        </div>
+      )}
+
+      {showCharacterSheet && (
+        <div className="modal-overlay" onClick={() => setShowCharacterSheet(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <CharacterSheet 
+              character={{ ...c, hp, experience, level, attributes, skills }}
+              onUpdateCharacter={handleUpdateCharacter}
+              onLevelUp={handleLevelUp}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Input area */}
       <div className="iarea">
@@ -1010,6 +1383,8 @@ textarea::placeholder,input::placeholder{color:#2a1800}
 @keyframes flashgreen{0%{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}100%{background:transparent;border-color:#2a1800;color:#4a2c00}}
 @keyframes damageFlash{ 0% { filter: brightness(1.2) hue-rotate(10deg); } 50% { filter: brightness(0.8) hue-rotate(-10deg); } 100% { filter: brightness(1); } }
 @keyframes rain { 0% { transform: translateY(-100px); } 100% { transform: translateY(100px); } }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
 `;
 
 const BASE = `
@@ -1189,6 +1564,92 @@ const PLAY_ST = BASE + `
 }
 .i-roll:hover { border-color: #4a3a8a; color: #9a7afa; }
 
+/* Modal overlay - Responsivo */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.modal-content {
+  background: #0c0700;
+  border: 1px solid #180e00;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  animation: fadeIn 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* Responsividade para modais */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 10px;
+  }
+  
+  .modal-content {
+    max-width: 95vw;
+    max-height: 95vh;
+    border-radius: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-overlay {
+    padding: 5px;
+    align-items: flex-start;
+    padding-top: 40px;
+  }
+  
+  .modal-content {
+    max-width: 100vw;
+    max-height: calc(100vh - 50px);
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+@media (max-width: 320px) {
+  .modal-content {
+    font-size: 14px;
+  }
+}
+
+/* Theme variations */
+body.light {
+  background: #f5f5f5;
+  color: #333;
+}
+
+body.light .root {
+  background: #f5f5f5;
+}
+
+body.light .cpanel,
+body.light .modal-content {
+  background: #ffffff;
+  border-color: #ddd;
+}
+
+body.light .btn-sm,
+body.light .btn-save,
+body.light .btn-export {
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #333;
+}
+
 /* Rain overlay */
 .rain-overlay {
   position: relative;
@@ -1201,6 +1662,140 @@ const PLAY_ST = BASE + `
   background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><linearGradient id="rain" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="rgba(174,194,224,0.8)" /><stop offset="100%" stop-color="rgba(174,194,224,0.2)" /></linearGradient></defs><path d="M0,50 Q25,20 50,50 T100,50" stroke="url(%23rain)" stroke-width="1" fill="none" /></svg>') repeat;
   animation: rain 1s linear infinite;
   z-index: 100;
+}
+
+/* Enhanced quick actions - Responsivo */
+.q-actions {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+.q-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.q-btn {
+  background: #0a0600;
+  border: 1px solid #1e1400;
+  border-radius: 4px;
+  color: #6b4a1a;
+  font-size: 9px;
+  padding: 6px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  letter-spacing: 1px;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.q-btn:active {
+  background: #1a0e00;
+  border-color: #4a2c00;
+  transform: scale(0.95);
+}
+
+.q-btn:hover {
+  background: #1a0e00;
+  border-color: #4a2c00;
+  color: #8b6a2a;
+}
+
+.q-btn.q-dice {
+  background: linear-gradient(135deg, #1a0d3a, #0a031a);
+  border-color: #2a1e6a;
+  color: #9a7afa;
+  font-weight: bold;
+}
+
+.q-btn.q-dice:hover {
+  background: linear-gradient(135deg, #2a1e4a, #1a0a2a);
+  border-color: #4a3a8a;
+  color: #ba9afa;
+}
+
+/* Responsividade para quick actions */
+@media (max-width: 768px) {
+  .q-actions {
+    padding: 0 8px 6px;
+    gap: 4px;
+  }
+  
+  .q-btn {
+    font-size: 8px;
+    padding: 5px 8px;
+    letter-spacing: 0.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .q-actions {
+    padding: 0 6px 4px;
+    gap: 3px;
+  }
+  
+  .q-btn {
+    font-size: 7px;
+    padding: 4px 6px;
+    border-radius: 3px;
+  }
+  
+  .q-btn span {
+    display: none;
+  }
+  
+  .q-btn.q-dice::before {
+    content: "🎲";
+  }
+  
+  .q-btn:nth-child(2)::before {
+    content: "💪";
+  }
+  
+  .q-btn:nth-child(3)::before {
+    content: "🎒";
+  }
+  
+  .q-btn:nth-child(4)::before {
+    content: "📋";
+  }
+  
+  .q-btn:nth-child(5)::before {
+    content: "✓";
+  }
+  
+  .q-btn:nth-child(6)::before {
+    content: "🎒";
+  }
+  
+  .q-btn:nth-child(7)::before {
+    content: "⚔️";
+  }
+  
+  .q-btn:nth-child(8)::before {
+    content: "📜";
+  }
+  
+  .q-btn:nth-child(9)::before {
+    content: "🎨";
+  }
+}
+
+@media (max-width: 320px) {
+  .q-actions {
+    gap: 2px;
+  }
+  
+  .q-btn {
+    padding: 3px 4px;
+    font-size: 6px;
+  }
 }
 .damage-flash { animation: damageFlash .3s ease-in-out; }
 `;

@@ -1,9 +1,9 @@
 // pages/api/gm.js
 
-// ── Cooldown de chaves em rate-limit ──────────────────────────────
-// Guarda o timestamp até quando cada chave está de pausa.
-// Em serverless isso vive por instância, mas já ajuda muito.
-const keyCooldown = {};
+import { keyManagement } from '../../lib/supabase';
+
+// ── Cooldown de chaves em rate-limit com Supabase ──────────────────────
+// O cooldown agora é persistente através do Supabase
 const COOLDOWN_MS = 60_000; // 1 minuto de pausa após rate-limit
 
 // Índice global para round-robin base
@@ -37,11 +37,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Nenhuma chave de API configurada." });
   }
 
+  // Limpa cooldowns expirados e obtém cooldowns ativos do Supabase
+  await keyManagement.cleanupExpiredCooldowns();
+  const cooldownsFromDb = await keyManagement.getCooldowns();
+
   // Remove chaves ainda em cooldown
-  const agora = Date.now();
   const chaves = todasChaves.filter((_, i) => {
-    const liberadaEm = keyCooldown[i];
-    return !liberadaEm || agora >= liberadaEm;
+    const liberadaEm = cooldownsFromDb[i];
+    return !liberadaEm || Date.now() >= liberadaEm;
   });
 
   // Se TODAS estão em cooldown, usa todas mesmo assim (melhor tentar do que recusar)
@@ -100,9 +103,9 @@ export default async function handler(req, res) {
         return texto;
       } catch (e) {
         if (e.rateLimited) {
-          // Coloca a chave em cooldown por 1 minuto
-          keyCooldown[idx] = Date.now() + COOLDOWN_MS;
-          console.warn(`Chave ${idx + 1} em rate-limit — pausada por 60s.`);
+          // Coloca a chave em cooldown por 1 minuto no Supabase
+          await keyManagement.addCooldown(idx, COOLDOWN_MS);
+          console.warn(`Chave ${idx + 1} em rate-limit — pausada por 60s (salvo no Supabase).`);
         } else if (e.name === "AbortError") {
           console.warn(`Chave ${idx + 1} timeout.`);
         } else {

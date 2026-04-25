@@ -257,6 +257,7 @@ export default function RPG() {
   const [autoDetectionEnabled, setAutoDetectionEnabled] = useState(true);
   const [characterAge, setCharacterAge] = useState(0);
   const [campaignStartTime, setCampaignStartTime] = useState(Date.now());
+  const [showTestDropdown, setShowTestDropdown] = useState(false);
 
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
@@ -1398,139 +1399,9 @@ Termine com a situação atual do personagem e o que mudou em sua vida.
             <div className="hp-mini-bar" style={{ width: `${hp}%`, background: hpColor }} />
             <span className="hp-mini-val">{hp}</span>
           </div>
-          {activeMissions.length > 0 && (
-            <div className="mission-badge" onClick={() => setShowChar(v => !v)} title="Missões ativas">
-              📋{activeMissions.length}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 4 }}>
-            <button className="btn-sm" onClick={() => setShowChar(v => !v)}>📜</button>
-            <button className="btn-sm" onClick={resetChat}>↺</button>
-          </div>
         </div>
 
-        {showChar && (
-          <div className="cpanel">
-            {/* Character info */}
-            <div className="cp-lbl">▸ PERSONAGEM</div>
-            {c.charName        && <div><span className="dd">Nome:</span> {c.charName}</div>}
-            {c.charTitle       && <div><span className="dd">Título:</span> {c.charTitle}</div>}
-            {c.charAge         && <div><span className="dd">Idade:</span> {c.charAge}</div>}
-            {c.charBg          && <div><span className="dd">Origem:</span> {c.charBg}</div>}
-            {c.charPersonality && <div><span className="dd">Personalidade:</span> {c.charPersonality}</div>}
-            {c.charSkills      && <div><span className="dd">Habilidades:</span> {c.charSkills}</div>}
-            {c.appearance      && <div style={{ marginTop: 4 }}><span className="dd">Aparência:</span> {buildAppearance(c.appearance)}</div>}
-
-            {/* HP tracker */}
-            <div className="cp-divider" />
-            <div className="cp-lbl">❤ VIDA</div>
-            <div className="hp-ctrl">
-              <button className="hp-btn" onClick={() => changeHp(-10)}>−10</button>
-              <button className="hp-btn" onClick={() => changeHp(-5)}>−5</button>
-              <div className="hp-bar-wrap">
-                <div className="hp-bar-fill" style={{ width: `${hp}%`, background: hpColor }} />
-                <span className="hp-val">{hp}/100</span>
-              </div>
-              <button className="hp-btn" onClick={() => changeHp(+5)}>+5</button>
-              <button className="hp-btn" onClick={() => changeHp(+10)}>+10</button>
-            </div>
-
-            {/* Missions */}
-            {missions.length > 0 && <>
-              <div className="cp-divider" />
-              <div className="cp-lbl">📋 MISSÕES</div>
-              {activeMissions.map(m => (
-                <div key={m.id} className="mission-row active">
-                  <span className="mission-dot">◦</span>
-                  <span>{m.text}</span>
-                </div>
-              ))}
-              {doneMissions.map(m => (
-                <div key={m.id} className="mission-row done">
-                  <span className="mission-dot">✓</span>
-                  <span>{m.text}</span>
-                </div>
-              ))}
-            </>}
-
-            {/* Items */}
-            {c.items && c.items.length > 0 && (
-              <div>
-                <div className="cp-divider" />
-                <div className="cp-lbl">🎒 MOCHILA</div>
-                <div className="items-list">
-                  {c.items.map((item, i) => (
-                    <div key={i} className="item">{item}</div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Relationships */}
-            {c.relationships && Object.entries(c.relationships).length > 0 && (
-              <div>
-                <div className="cp-divider" />
-                <div className="cp-lbl">🤝 RELACIONAMENTOS</div>
-                {Object.entries(c.relationships).map(([npc, attitude]) => (
-                  <div key={npc} className="relationship">
-                    <span className="relationship-npc">{npc}</span>
-                    <span className={`relationship-attitude ${attitude.toLowerCase()}`}>{attitude}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Saves */}
-            <div className="cp-divider" />
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <div className="cp-lbl" style={{ margin: 0 }}>💾 SAVES ({(active.saves || []).length}/5)</div>
-              <button
-                className={`btn-save ${saveFlash ? "flash" : ""}`}
-                onClick={saveSlot}
-              >{saveFlash ? "✓ SALVO" : "SALVAR"}</button>
-            </div>
-            {!(active.saves || []).length && (
-              <div className="save-empty">Nenhum save ainda. Salve para não perder o progresso.</div>
-            )}
-            {(active.saves || []).map(s => (
-              <div key={s.id} className="save-item">
-                <div className="save-info">
-                  <div className="save-name">{s.name}</div>
-                  <div className="save-meta">
-                    <span className="save-hp">❤ {s.hp ?? "—"}</span>
-                    <span>{fmtDate(s.timestamp)} {fmtTime(s.timestamp)}</span>
-                    {(s.missions || []).filter(m => !m.completed).length > 0 && (
-                      <span className="save-missions">📋 {(s.missions || []).filter(m => !m.completed).length}</span>
-                    )}
-                  </div>
-                </div>
-                <div className="save-btns">
-                  <button className="save-btn-load" onClick={() => loadSlot(s)}>▶</button>
-                  <button className="save-btn-del"  onClick={() => deleteSlot(s.id)}>✕</button>
-                </div>
-              </div>
-            ))}
-
-            {/* Badges & export */}
-            <div className="cp-divider" />
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {!c.useImages && <span className="badge">⚡ SEM IMAGENS</span>}
-              {campLore     && <span className="badge">🔍 LORE OFICIAL</span>}
-            </div>
-            <button onClick={exportToBook} className="btn-export">📖 EXPORTAR COMO LIVRO (PDF)</button>
-          </div>
-        )}
-      </div>
-
-      {!showChar && activeMissions.length > 0 && (
-        <div className="missions-strip" onClick={() => setShowChar(true)}>
-          {activeMissions.slice(0, 2).map(m => (
-            <div key={m.id} className="missions-strip-item">◦ {m.text}</div>
-          ))}
-          {activeMissions.length > 2 && <div className="missions-strip-more">+{activeMissions.length - 2} mais</div>}
-        </div>
-      )}
-
+      
       {/* Mensagens */}
       <div className="msgs">
         {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
@@ -1616,10 +1487,28 @@ Termine com a situação atual do personagem e o que mudou em sua vida.
       {/* Quick Actions */}
       <div className="q-actions">
         <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
-        <button className="q-btn" onClick={() => insertCmd("[TESTE:Força] ")}>💪 TESTE</button>
+        <div className="test-dropdown">
+          <button className="q-btn test-btn" onClick={() => setShowTestDropdown(!showTestDropdown)}>
+            💪 TESTE ▼
+          </button>
+          {showTestDropdown && (
+            <div className="test-dropdown-menu">
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Força] "); setShowTestDropdown(false); }}>💪 Força</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Destreza] "); setShowTestDropdown(false); }}>🏃 Destreza</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Constituição] "); setShowTestDropdown(false); }}>🛡️ Constituição</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Inteligência] "); setShowTestDropdown(false); }}>🧠 Inteligência</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Sabedoria] "); setShowTestDropdown(false); }}>📿 Sabedoria</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Carisma] "); setShowTestDropdown(false); }}>✨ Carisma</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Percepção] "); setShowTestDropdown(false); }}>👁️ Percepção</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Furtividade] "); setShowTestDropdown(false); }}>🥷 Furtividade</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Intimidação] "); setShowTestDropdown(false); }}>😠 Intimidação</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Persuasão] "); setShowTestDropdown(false); }}>🗣️ Persuasão</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Investigação] "); setShowTestDropdown(false); }}>🔍 Investigação</button>
+              <button className="test-option" onClick={() => { insertCmd("[TESTE:Arcana] "); setShowTestDropdown(false); }}>🔮 Arcana</button>
+            </div>
+          )}
+        </div>
         <button className="q-btn" onClick={() => setShowInventory(!showInventory)}>🎒 INVENTÁRIO</button>
-        <button className="q-btn" onClick={() => setShowCombat(!showCombat)}>⚔️ COMBATE</button>
-        <button className="q-btn" onClick={() => setShowCharacterSheet(!showCharacterSheet)}>📜 FICHA</button>
         <button className="q-btn" onClick={toggleTheme}>🎨 TEMA</button>
         <button className="q-btn" onClick={() => setShowStatusDashboard(!showStatusDashboard)}>
           📊 {showStatusDashboard ? 'OCULTAR' : 'STATUS'}
@@ -1636,43 +1525,63 @@ Termine com a situação atual do personagem e o que mudou em sua vida.
         </button>
       </div>
 
-      {/* Modais sobrepostos */}
+      
+      {/* Modal Inventory */}
       {showInventory && (
         <div className="modal-overlay" onClick={() => setShowInventory(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <Inventory 
-              items={c.items || []}
-              onAddItem={addItem}
-              onRemoveItem={removeItem}
-              onUseItem={useItem}
-            />
-          </div>
-        </div>
-      )}
-
-      {showCombat && (
-        <div className="modal-overlay" onClick={() => setShowCombat(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <CombatSystem 
-              character={{ ...c, hp, attributes, skills }}
-              onCombatStart={handleCombatStart}
-              onCombatEnd={handleCombatEnd}
-              onDamage={handleCombatDamage}
-              onHeal={(amount) => changeHp(amount)}
-              isActive={true}
-            />
-          </div>
-        </div>
-      )}
-
-      {showCharacterSheet && (
-        <div className="modal-overlay" onClick={() => setShowCharacterSheet(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <CharacterSheet 
-              character={{ ...c, hp, experience, level, attributes, skills }}
-              onUpdateCharacter={handleUpdateCharacter}
-              onLevelUp={handleLevelUp}
-            />
+            <div className="modal-header">
+              <h3>🎒 Inventário</h3>
+              <button className="modal-close" onClick={() => setShowInventory(false)}>✕</button>
+            </div>
+            
+            <div className="modal-body">
+              <div className="inventory-section">
+                <div className="inventory-label">Itens ({(c.items || []).length})</div>
+                {!(c.items || []).length ? (
+                  <div className="inventory-empty">Nenhum item no inventário</div>
+                ) : (
+                  <div className="inventory-list">
+                    {(c.items || []).map((item, i) => (
+                      <div key={i} className="inventory-item">
+                        <span className="item-name">{item}</span>
+                        <button 
+                          className="item-remove" 
+                          onClick={() => removeItem(item)}
+                          title="Remover item"
+                        >✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="inventory-add">
+                <input
+                  type="text"
+                  placeholder="Adicionar novo item..."
+                  className="inventory-input"
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && e.target.value.trim()) {
+                      addItem(e.target.value.trim());
+                      e.target.value = '';
+                    }
+                  }}
+                />
+                <button 
+                  className="inventory-add-btn"
+                  onClick={() => {
+                    const input = document.querySelector('.inventory-input');
+                    if (input && input.value.trim()) {
+                      addItem(input.value.trim());
+                      input.value = '';
+                    }
+                  }}
+                >
+                  + Adicionar
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -2251,6 +2160,208 @@ body.light .btn-export {
   50% {
     box-shadow: 0 0 0 8px rgba(122, 250, 250, 0.1);
   }
+}
+
+/* Test Dropdown */
+.test-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.test-btn {
+  position: relative;
+  padding-right: 20px !important;
+}
+
+.test-dropdown-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: rgba(20, 15, 40, 0.98);
+  border: 1px solid #3a2e6a;
+  border-radius: 8px;
+  min-width: 140px;
+  max-height: 300px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  margin-bottom: 5px;
+}
+
+.test-option {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: #c4a060;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 1px solid rgba(58, 46, 106, 0.2);
+}
+
+.test-option:hover {
+  background: rgba(58, 46, 106, 0.3);
+  color: #d4a843;
+}
+
+.test-option:last-child {
+  border-bottom: none;
+}
+
+/* Modal Header */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #3a2e6a;
+  background: rgba(26, 15, 40, 0.8);
+  border-radius: 12px 12px 0 0;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: #d4a843;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #8b7a6a;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: rgba(139, 122, 106, 0.2);
+  color: #d4a843;
+}
+
+.modal-body {
+  padding: 20px;
+}
+
+/* Inventory Styles */
+.inventory-section {
+  margin-bottom: 20px;
+}
+
+.inventory-label {
+  display: block;
+  font-size: 12px;
+  color: #d4a843;
+  font-weight: bold;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.inventory-empty {
+  text-align: center;
+  padding: 20px;
+  color: #8b7a6a;
+  font-style: italic;
+  background: rgba(26, 15, 40, 0.3);
+  border-radius: 8px;
+  border: 1px dashed #3a2e6a;
+}
+
+.inventory-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #3a2e6a;
+  border-radius: 8px;
+  background: rgba(20, 15, 40, 0.5);
+}
+
+.inventory-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(58, 46, 106, 0.2);
+  transition: background 0.2s;
+}
+
+.inventory-item:hover {
+  background: rgba(58, 46, 106, 0.2);
+}
+
+.inventory-item:last-child {
+  border-bottom: none;
+}
+
+.item-name {
+  color: #c4a060;
+  font-size: 13px;
+}
+
+.item-remove {
+  background: rgba(139, 26, 26, 0.2);
+  border: 1px solid rgba(139, 26, 26, 0.4);
+  color: #d44a4a;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.item-remove:hover {
+  background: rgba(139, 26, 26, 0.4);
+  color: #ff6a6a;
+}
+
+.inventory-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.inventory-input {
+  flex: 1;
+  background: rgba(20, 15, 40, 0.8);
+  border: 1px solid #3a2e6a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #c4a060;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.inventory-input:focus {
+  border-color: #4a3e8a;
+}
+
+.inventory-input::placeholder {
+  color: #8b7a6a;
+}
+
+.inventory-add-btn {
+  background: rgba(74, 46, 106, 0.8);
+  border: 1px solid #4a3e8a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #d4a843;
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.inventory-add-btn:hover {
+  background: rgba(74, 46, 106, 1);
+  border-color: #6a5eaa;
 }
 
 /* Status Dashboard */

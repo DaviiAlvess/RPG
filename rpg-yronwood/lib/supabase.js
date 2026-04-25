@@ -69,7 +69,7 @@ export const keyManagement = {
           key_index: keyIndex,
           cooldown_until: cooldownUntil,
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'key_index' }); // <--- ESSA LINHA É A MÁGICA
       
       if (error) console.error('Erro ao adicionar cooldown:', error);
     } catch (err) {

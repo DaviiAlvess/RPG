@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
   // ── Carrega e filtra chaves disponíveis ───────────────────────────
   const todasChaves = [
-    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_1 || process.env.GEMINI_KEY, // Agora aceita a do README
     process.env.GEMINI_KEY_2,
     process.env.GEMINI_KEY_3,
     process.env.GEMINI_KEY_4,
@@ -51,7 +51,7 @@ export default async function handler(req, res) {
   const indicesParaUsar = chavesParaUsar.map((k) => todasChaves.indexOf(k));
 
   // ── Chamada ao Gemini com timeout ─────────────────────────────────
-  const TIMEOUT_MS = 25_000;
+  const TIMEOUT_MS = 8_000; // Reduzido para caber no limite da Vercel (10s)
 
   const callGemini = async (key, body) => {
     const controller = new AbortController();

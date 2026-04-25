@@ -241,6 +241,22 @@ export default function RPG() {
   const [lastRoll, setLastRoll] = useState(null);
   const [showRollButton, setShowRollButton] = useState(false);
   const [pendingTest, setPendingTest] = useState(null);
+  const [showStatusDashboard, setShowStatusDashboard] = useState(true);
+  const [connectionStatus, setConnectionStatus] = useState('online');
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [lastSaved, setLastSaved] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [showTimeSkipModal, setShowTimeSkipModal] = useState(false);
+  const [timeSkipConfig, setTimeSkipConfig] = useState({
+    amount: 1,
+    unit: 'dias',
+    focus: '',
+    includeEvents: true,
+    includeProgression: true
+  });
+  const [autoDetectionEnabled, setAutoDetectionEnabled] = useState(true);
+  const [characterAge, setCharacterAge] = useState(0);
+  const [campaignStartTime, setCampaignStartTime] = useState(Date.now());
 
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
@@ -530,6 +546,12 @@ export default function RPG() {
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
+    
+    // Inicializar idade do personagem
+    const initialAge = parseInt(form.charAge) || 18;
+    setCharacterAge(initialAge);
+    setCampaignStartTime(Date.now());
+    
     let lore = "";
     if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
     else { setStatus("⚗️ A preparar mundo..."); }
@@ -629,6 +651,15 @@ export default function RPG() {
         if (testMatch) {
           setPendingTest({ attribute: testMatch[1], description: testMatch[2] });
           setShowRollButton(true);
+        }
+      }
+
+      // Aplicar auto-detecção na resposta da IA
+      if (autoDetectionEnabled) {
+        try {
+          await applyAutoDetection(raw);
+        } catch (error) {
+          console.error('Erro na auto-detecção:', error);
         }
       }
 
@@ -808,81 +839,366 @@ export default function RPG() {
     const updated = { ...active, ...updatedCharacter };
     setActive(updated);
     saveCamp(active.id, updated);
-    showNotification('💾 Ficha de personagem atualizada!');
+    showNotification('Ficha de personagem atualizada!', 'info');
   };
 
   // ─── Utilitários ───────────────────────────────────────────────────────
-  const showNotification = (message, type = 'info') => {
-    if (!notificationsEnabled || !message) return;
+  const showNotification = (text, type = 'info') => {
+    if (!notificationsEnabled) return;
+    
+    const toast = {
+      id: Date.now(),
+      text,
+      type,
+      timestamp: new Date()
+    };
+    
+    setToasts(prev => [...prev, toast]);
+    
+    // Remove automaticamente após 3 segundos
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== toast.id));
+    }, 3000);
+  };
+
+  const quickSave = async () => {
+    if (!active) return;
     
     try {
-      // Remover notificações existentes
-      const existingNotifications = document.querySelectorAll('.notification');
-      existingNotifications.forEach(n => n.remove());
+      await saveCamp(active.id, active);
+      setLastSaved(Date.now());
+      showNotification('Jogo salvo rapidamente!', 'success');
       
-      // Criar notificação temporária
-      const notification = document.createElement('div');
-      notification.className = `notification notification-${type}`;
-      notification.textContent = message;
-      
-      // Estilos base
-      const baseStyles = {
-        position: 'fixed',
-        top: '20px',
-        right: '20px',
-        padding: '12px 16px',
-        borderRadius: '6px',
-        zIndex: '1000',
-        animation: 'slideIn 0.3s ease',
-        maxWidth: '300px',
-        fontSize: '12px',
-        fontFamily: 'inherit',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-      };
-      
-      // Estilos por tipo
-      const typeStyles = {
-        info: {
-          background: '#2a0d00',
-          border: '1px solid #8b5a14',
-          color: '#d4a843'
-        },
-        success: {
-          background: '#1a3a0a',
-          border: '1px solid #4a8a14',
-          color: '#a0d060'
-        },
-        error: {
-          background: '#3a0a0a',
-          border: '1px solid #8a1414',
-          color: '#d06060'
-        },
-        warning: {
-          background: '#3a3a0a',
-          border: '1px solid #8a8a14',
-          color: '#d0d060'
-        }
-      };
-      
-      // Aplicar estilos
-      const styles = { ...baseStyles, ...typeStyles[type] };
-      Object.assign(notification.style, styles);
-      
-      document.body.appendChild(notification);
-      
-      // Auto remover após 3 segundos
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.style.animation = 'slideOut 0.3s ease';
-          setTimeout(() => {
-            if (notification.parentNode) {
-              document.body.removeChild(notification);
-            }
-          }, 300);
-        }
-      }, 3000);
+      // Feedback sonoro se habilitado
+      if (soundEnabled) {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
+        audio.volume = 0.3;
+        audio.play().catch(() => {});
+      }
     } catch (error) {
-      console.error('Erro ao mostrar notificação:', error);
+      console.error('Erro no quick save:', error);
+      showNotification('Erro ao salvar rapidamente', 'error');
+    }
+  };
+
+  // Detectar status de conexão
+  useEffect(() => {
+    const handleOnline = () => setConnectionStatus('online');
+    const handleOffline = () => setConnectionStatus('offline');
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Auto-save periódico
+  useEffect(() => {
+    if (!autoSaveEnabled || !active) return;
+    
+    const interval = setInterval(() => {
+      quickSave();
+    }, 60000); // Auto-save a cada 60 segundos
+    
+    return () => clearInterval(interval);
+  }, [autoSaveEnabled, active]);
+
+  // Quick save com Ctrl+S
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.key === 's') {
+        e.preventDefault();
+        quickSave();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [active]);
+
+  // Sistema de Auto-Detecção Inteligente
+  const parseMessageForAutoDetection = useCallback((message) => {
+    if (!autoDetectionEnabled || !active) return { items: [], missions: [], status: null };
+
+    const detected = {
+      items: [],
+      missions: [],
+      status: null
+    };
+
+    // Detectar itens
+    const itemPatterns = [
+      /(?:ganhou|recebeu|encontrou|obteve|adquiriu|pegou|conseguiu)\s+(?:uma?|o?)\s*([a-zA-Zà-ú\s]+?)(?:\s|\.|,|$)/gi,
+      /(?:foi\s+entregue|foi\s+dado|lhe\s+deram)\s+(?:uma?|o?)\s*([a-zA-Zà-ú\s]+?)(?:\s|\.|,|$)/gi,
+      /(?:adicionou\s+ao\s+inventário|colocou\s+no\s+inventário)\s+(?:uma?|o?)\s*([a-zA-Zà-ú\s]+?)(?:\s|\.|,|$)/gi,
+      /([a-zA-Zà-ú\s]+?)\s+(?:foi\s+adicionado|foi\s+guardado|está\s+agora\s+no\s+inventário)/gi
+    ];
+
+    // Detectar missões
+    const missionPatterns = [
+      /(?:nova\s+missão|missão|quest|tarefa)\s*[:\-]?\s*([^.!?]+)/gi,
+      /(?:precisa\s+deve|deve\s+precisa)\s+([^.!?]+)/gi,
+      /(?:objetivo|meta|alvo)\s*[:\-]?\s*([^.!?]+)/gi
+    ];
+
+    // Detectar conclusão de missões
+    const missionCompletionPatterns = [
+      /(?:missão|quest|tarefa)\s+(?:concluída|completa|terminada|finalizada)\s*[:\-]?\s*([^.!?]+)/gi,
+      /(?:concluiu|completou|terminou|finalizou)\s+(?:a\s+)?(?:missão|quest|tarefa)\s+(?:de|do|da)?\s*([^.!?]+)/gi,
+      /(?:objetivo|meta|alvo)\s+(?:alcançado|atingido|conquistado)\s*[:\-]?\s*([^.!?]+)/gi
+    ];
+
+    // Detectar status do personagem
+    const statusPatterns = [
+      /(?:hp|vida|health)\s*[:\-]?\s*(\d+)/gi,
+      /(?:nível|level)\s*[:\-]?\s*(\d+)/gi,
+      /(?:experiência|xp)\s*[:\-]?\s*(\d+)/gi,
+      /(?:ferido|machucado|dano)\s*[:\-]?\s*(\d+)/gi
+    ];
+
+    // Detectar idade do personagem
+    const agePatterns = [
+      /(?:idade|age)\s*[:\-]?\s*(\d+)\s*(?:anos|years)/gi,
+      /(?:tem|possui|tem\s+agora)\s+(\d+)\s*(?:anos|years)/gi,
+      /(?:personagem|você|seu)\s+(?:tem|possui)\s+(\d+)\s*(?:anos|years)/gi,
+      /(\d+)\s*(?:anos|years)\s+(?:de\s+idade|de idade)/gi
+    ];
+
+    // Extrair itens
+    itemPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(message)) !== null) {
+        const item = match[1].trim();
+        // Filtrar palavras irrelevantes
+        if (item.length > 2 && !['o', 'a', 'os', 'as', 'um', 'uma', 'uns', 'umas', 'de', 'da', 'do', 'dos', 'das'].includes(item.toLowerCase())) {
+          detected.items.push(item);
+        }
+      }
+    });
+
+    // Extrair missões
+    missionPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(message)) !== null) {
+        const mission = match[1].trim();
+        if (mission.length > 5) {
+          detected.missions.push({
+            id: Date.now() + Math.random(),
+            title: mission,
+            completed: false,
+            createdAt: Date.now()
+          });
+        }
+      }
+    });
+
+    // Extrair conclusão de missões
+    missionCompletionPatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(message)) !== null) {
+        const missionTitle = match[1].trim();
+        if (missionTitle.length > 3) {
+          // Procurar missão existente com título similar
+          const existingMission = missions.find(m => 
+            m.title.toLowerCase().includes(missionTitle.toLowerCase()) ||
+            missionTitle.toLowerCase().includes(m.title.toLowerCase())
+          );
+          
+          if (existingMission && !existingMission.completed) {
+            detected.missions.push({
+              id: existingMission.id,
+              title: existingMission.title,
+              completed: true,
+              completedAt: Date.now()
+            });
+          }
+        }
+      }
+    });
+
+    // Extrair idade
+    agePatterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(message)) !== null) {
+        const age = parseInt(match[1]);
+        if (age >= 0 && age <= 150) { // Idade razoável para RPG
+          detected.age = age;
+        }
+      }
+    });
+
+    // Extrair status
+    const statusMatch = message.match(/(?:personagem|você|seu)\s+(?:está|ficou|ficou\s+com)\s+([^.!?]+)/gi);
+    if (statusMatch) {
+      detected.status = statusMatch[0].trim();
+    }
+
+    return detected;
+  }, [autoDetectionEnabled, active]);
+
+  const applyAutoDetection = useCallback(async (message) => {
+    const detected = parseMessageForAutoDetection(message);
+    
+    if (detected.items.length > 0) {
+      for (const item of detected.items) {
+        await addItem(item);
+        showNotification(`🎒 Item detectado: ${item}`, 'success');
+      }
+    }
+
+    if (detected.missions.length > 0) {
+      let newMissions = [...missions];
+      
+      // Processar cada missão detectada
+      detected.missions.forEach(detectedMission => {
+        if (detectedMission.completed) {
+          // Marcar missão existente como concluída
+          newMissions = newMissions.map(m => 
+            m.id === detectedMission.id 
+              ? { ...m, completed: true, completedAt: detectedMission.completedAt }
+              : m
+          );
+          showNotification(`✅ Missão concluída: ${detectedMission.title}`, 'success');
+        } else {
+          // Adicionar nova missão
+          const existingMission = newMissions.find(m => m.title === detectedMission.title);
+          if (!existingMission) {
+            newMissions.push(detectedMission);
+            showNotification(`📋 Nova missão: ${detectedMission.title}`, 'info');
+          }
+        }
+      });
+      
+      setMissions(newMissions);
+      
+      if (active) {
+        const updated = { ...active, missions: newMissions };
+        setActive(updated);
+        await saveCamp(active.id, updated);
+      }
+    }
+
+    if (detected.status) {
+      showNotification(`📊 Status atualizado: ${detected.status}`, 'info');
+    }
+
+    // Aplicar idade detectada
+    if (detected.age !== undefined) {
+      setCharacterAge(detected.age);
+      showNotification(`👤 Idade atualizada: ${detected.age} anos`, 'info');
+      
+      if (active) {
+        const updated = { ...active, charAge: detected.age.toString() };
+        setActive(updated);
+        await saveCamp(active.id, updated);
+      }
+    }
+
+    return detected;
+  }, [parseMessageForAutoDetection, addItem, missions, active, saveCamp]);
+
+  // Sistema de Time-Skip
+  const executeTimeSkip = async () => {
+    if (!active || !timeSkipConfig.focus.trim()) {
+      showNotification('Preencha o foco do personagem', 'warning');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setShowTimeSkipModal(false);
+
+      // Construir prompt para o Mestre
+      const timePrompt = `
+[TIMESKIP: ${timeSkipConfig.amount} ${timeSkipConfig.unit}]
+FOCO: ${timeSkipConfig.focus}
+PERSONAGEM: ${active.charName} - ${active.charTitle}
+PERSONALIDADE: ${active.charPersonality}
+HABILIDADES: ${active.charSkills}
+NÍVEL ATUAL: ${level}
+
+${timeSkipConfig.includeProgression ? 'INCLUIR PROGRESSÃO: Sim' : 'INCLUIR PROGRESSÃO: Não'}
+${timeSkipConfig.includeEvents ? 'INCLUIR EVENTOS: Sim' : 'INCLUIR EVENTOS: Não'}
+
+Por favor, gere uma narrativa detalhada sobre o que ${active.charName} fez durante este período de ${timeSkipConfig.amount} ${timeSkipConfig.unit}, focando em: ${timeSkipConfig.focus}.
+Descreva as atividades, aprendizados, eventos importantes e consequências.
+${timeSkipConfig.includeProgression ? 'Inclua ganho de experiência e desenvolvimento de habilidades relevante.' : ''}
+${timeSkipConfig.includeEvents ? 'Crie 1-2 eventos significativos que aconteceram durante este período.' : ''}
+Termine com a situação atual do personagem e o que mudou em sua vida.
+`;
+
+      // Enviar para o Mestre
+      await sendMsg(timePrompt, msgs, disp, active, campLore, false);
+      
+      showNotification(`Avançando ${timeSkipConfig.amount} ${timeSkipConfig.unit} no tempo...`, 'info');
+      
+      // Calcular ganho de XP baseado no tempo
+      if (timeSkipConfig.includeProgression) {
+        const xpMultiplier = {
+          'dias': 5,
+          'semanas': 25,
+          'meses': 100,
+          'anos': 500
+        };
+        const xpGained = timeSkipConfig.amount * (xpMultiplier[timeSkipConfig.unit] || 5);
+        setExperience(prev => prev + xpGained);
+        
+        // Verificar se subiu de nível
+        const newLevel = Math.floor((experience + xpGained) / 100) + 1;
+        if (newLevel > level) {
+          setLevel(newLevel);
+          showNotification(`⬆️ Você alcançou o nível ${newLevel} durante o time-skip!`, 'success');
+        }
+      }
+
+      // Aplicar envelhecimento do personagem
+      const ageMultiplier = {
+        'dias': 1/365,
+        'semanas': 1/52,
+        'meses': 1/12,
+        'anos': 1
+      };
+      const ageIncrease = timeSkipConfig.amount * (ageMultiplier[timeSkipConfig.unit] || 0);
+      const newAge = Math.max(0, characterAge + ageIncrease);
+      
+      if (newAge !== characterAge) {
+        setCharacterAge(newAge);
+        
+        // Arredondar para exibição
+        const displayAge = Math.floor(newAge);
+        
+        // Atualizar personagem
+        if (active) {
+          const updated = { 
+            ...active, 
+            charAge: displayAge.toString(),
+            updatedAt: Date.now()
+          };
+          setActive(updated);
+          await saveCamp(active.id, updated);
+        }
+        
+        showNotification(`👤 Seu personagem agora tem ${displayAge} anos!`, 'info');
+        
+        // Eventos baseados em idade
+        if (displayAge >= 60) {
+          showNotification(`🎂 Seu personagem está atingindo uma idade avançada!`, 'warning');
+        } else if (displayAge >= 30) {
+          showNotification(`🌟 Seu personagem está na maturidade!`, 'info');
+        } else if (displayAge >= 18) {
+          showNotification(`🎯 Seu personagem atingiu a maioridade!`, 'success');
+        }
+      }
+      
+    } catch (error) {
+      console.error('Erro no time-skip:', error);
+      showNotification('Erro ao avançar no tempo', 'error');
+      setShowTimeSkipModal(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1258,6 +1574,45 @@ export default function RPG() {
         <div ref={bottomRef} />
       </div>
 
+      {/* Status Dashboard */}
+      {showStatusDashboard && (
+        <div className="status-dashboard">
+          <div className="status-section">
+            <div className="status-item">
+              <span className="status-label">HP</span>
+              <div className="hp-bar">
+                <div className="hp-fill" style={{ width: `${hp}%` }}></div>
+                <span className="hp-text">{hp}/100</span>
+              </div>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Nível {level}</span>
+              <div className="xp-bar">
+                <div className="xp-fill" style={{ width: `${(experience % 100)}%` }}></div>
+                <span className="xp-text">{experience % 100}/100 XP</span>
+              </div>
+            </div>
+            <div className="status-item">
+              <span className="status-label">Idade</span>
+              <div className="age-display">
+                <span className="age-text">{Math.floor(characterAge)} anos</span>
+                <span className="age-icon">👤</span>
+              </div>
+            </div>
+          </div>
+          <div className="status-info">
+            <span className={`connection-indicator ${connectionStatus}`}>
+              {connectionStatus === 'online' ? '🟢' : '🔴'}
+            </span>
+            {lastSaved && (
+              <span className="last-saved">
+                💾 {new Date(lastSaved).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Quick Actions */}
       <div className="q-actions">
         <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
@@ -1269,6 +1624,19 @@ export default function RPG() {
         <button className="q-btn" onClick={() => setShowCombat(!showCombat)}>⚔️ COMBATE</button>
         <button className="q-btn" onClick={() => setShowCharacterSheet(!showCharacterSheet)}>📜 FICHA</button>
         <button className="q-btn" onClick={toggleTheme}>🎨 TEMA</button>
+        <button className="q-btn" onClick={() => setShowStatusDashboard(!showStatusDashboard)}>
+          📊 {showStatusDashboard ? 'OCULTAR' : 'STATUS'}
+        </button>
+        <button className="q-btn q-time" onClick={() => setShowTimeSkipModal(!showTimeSkipModal)}>
+          ⏰ TIME-SKIP
+        </button>
+        <button 
+          className={`q-btn ${autoDetectionEnabled ? 'q-auto-on' : 'q-auto-off'}`} 
+          onClick={() => setAutoDetectionEnabled(!autoDetectionEnabled)}
+          title={autoDetectionEnabled ? "Desativar auto-detecção" : "Ativar auto-detecção"}
+        >
+          🤖 {autoDetectionEnabled ? 'AUTO-ON' : 'AUTO-OFF'}
+        </button>
       </div>
 
       {/* Modais sobrepostos */}
@@ -1312,6 +1680,107 @@ export default function RPG() {
         </div>
       )}
 
+      {/* Modal Time-Skip */}
+      {showTimeSkipModal && (
+        <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
+          <div className="modal-content time-skip-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="time-skip-header">
+              <h3>⏰ Avançar no Tempo</h3>
+              <button className="modal-close" onClick={() => setShowTimeSkipModal(false)}>✕</button>
+            </div>
+            
+            <div className="time-skip-body">
+              <div className="time-config-section">
+                <label>Quanto tempo deseja avançar?</label>
+                <div className="time-input-group">
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={timeSkipConfig.amount}
+                    onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, amount: parseInt(e.target.value) || 1 }))}
+                    className="time-input"
+                  />
+                  <select
+                    value={timeSkipConfig.unit}
+                    onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, unit: e.target.value }))}
+                    className="time-select"
+                  >
+                    <option value="dias">Dias</option>
+                    <option value="semanas">Semanas</option>
+                    <option value="meses">Meses</option>
+                    <option value="anos">Anos</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="time-config-section">
+                <label>O que seu personagem vai fazer durante este tempo?</label>
+                <textarea
+                  value={timeSkipConfig.focus}
+                  onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, focus: e.target.value }))}
+                  placeholder="Ex: Treinar combate, estudar magia, viajar para outra cidade, focar em negócios..."
+                  className="time-textarea"
+                  rows={3}
+                />
+              </div>
+
+              <div className="time-config-section">
+                <div className="time-options">
+                  <label className="time-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={timeSkipConfig.includeEvents}
+                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeEvents: e.target.checked }))}
+                    />
+                    <span>Incluir eventos importantes</span>
+                  </label>
+                  <label className="time-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={timeSkipConfig.includeProgression}
+                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeProgression: e.target.checked }))}
+                    />
+                    <span>Incluir progressão (XP e habilidades)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="time-preview">
+                <h4>Preview:</h4>
+                <p>
+                  {c.charName} vai passar <strong>{timeSkipConfig.amount} {timeSkipConfig.unit}</strong> 
+                  {timeSkipConfig.focus && ` focado em: ${timeSkipConfig.focus}`}
+                </p>
+                {timeSkipConfig.includeProgression && (
+                  <p className="xp-preview">
+                    Ganho estimado: {timeSkipConfig.amount * {
+                      'dias': 5,
+                      'semanas': 25,
+                      'meses': 100,
+                      'anos': 500
+                    }[timeSkipConfig.unit]} XP
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="time-skip-footer">
+              <button className="btn-cancel" onClick={() => setShowTimeSkipModal(false)}>
+                Cancelar
+              </button>
+              <button 
+                className="btn-confirm" 
+                onClick={executeTimeSkip}
+                disabled={!timeSkipConfig.focus.trim() || loading}
+              >
+                {loading ? 'Avançando...' : 'Avançar no Tempo ⏰'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="iarea">
         <button
@@ -1343,7 +1812,22 @@ export default function RPG() {
         >⚔</button>
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST }} />
+      {/* Toast Notifications */}
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            <span className="toast-icon">
+              {toast.type === 'success' && '✅'}
+              {toast.type === 'error' && '❌'}
+              {toast.type === 'warning' && '⚠️'}
+              {toast.type === 'info' && 'ℹ️'}
+            </span>
+            <span className="toast-message">{toast.text}</span>
+          </div>
+        ))}
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST + TOAST_ST + TIME_SKIP_ST }} />
     </div>
   );
 }
@@ -1723,6 +2207,224 @@ body.light .btn-export {
   color: #ba9afa;
 }
 
+.q-btn.q-time {
+  background: linear-gradient(135deg, #1a3a2a, #0a1a1a);
+  border-color: #2a4a2a;
+  color: #7afa7a;
+  font-weight: bold;
+}
+
+.q-btn.q-time:hover {
+  background: linear-gradient(135deg, #2a4a2a, #1a2a1a);
+  border-color: #4a6a4a;
+  color: #bafaba;
+}
+
+.q-btn.q-auto-on {
+  background: linear-gradient(135deg, #1a3a3a, #0a1a1a);
+  border-color: #2a4a4a;
+  color: #7afafa;
+  font-weight: bold;
+  animation: autoPulse 2s infinite;
+}
+
+.q-btn.q-auto-on:hover {
+  background: linear-gradient(135deg, #2a4a4a, #1a2a1a);
+  border-color: #4a6a6a;
+  color: #bafafa;
+}
+
+.q-btn.q-auto-off {
+  background: linear-gradient(135deg, #3a1a1a, #1a0a0a);
+  border-color: #4a2a2a;
+  color: #fa7a7a;
+  font-weight: bold;
+}
+
+.q-btn.q-auto-off:hover {
+  background: linear-gradient(135deg, #4a2a2a, #2a1a1a);
+  border-color: #6a4a4a;
+  color: #fa9a9a;
+}
+
+@keyframes autoPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(122, 250, 250, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(122, 250, 250, 0.1);
+  }
+}
+
+/* Status Dashboard */
+.status-dashboard {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: rgba(20, 15, 40, 0.95);
+  border: 1px solid #3a2e6a;
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 280px;
+  max-width: 350px;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-label {
+  color: #9a7afa;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.hp-bar, .xp-bar {
+  position: relative;
+  height: 20px;
+  background: rgba(10, 5, 20, 0.8);
+  border: 1px solid #2a1e6a;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff3838, #ff6b6b);
+  transition: width 0.5s ease;
+  border-radius: 8px;
+}
+
+.xp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4a9eff, #7ac5ff);
+  transition: width 0.5s ease;
+  border-radius: 8px;
+}
+
+.hp-text, .xp-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.age-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(26, 15, 40, 0.8);
+  border: 1px solid #2a1e6a;
+  border-radius: 10px;
+  padding: 8px 12px;
+  min-height: 20px;
+}
+
+.age-text {
+  color: #d4a843;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.age-icon {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.status-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(58, 46, 106, 0.3);
+}
+
+.connection-indicator {
+  font-size: 12px;
+}
+
+.connection-indicator.online {
+  filter: drop-shadow(0 0 4px #4eff4a);
+}
+
+.connection-indicator.offline {
+  filter: drop-shadow(0 0 4px #ff3838);
+}
+
+.last-saved {
+  color: #9a7afa;
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+/* Animações para o dashboard */
+.status-dashboard {
+  animation: slideInRight 0.3s ease;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Responsividade para dashboard */
+@media (max-width: 768px) {
+  .status-dashboard {
+    top: 5px;
+    right: 5px;
+    min-width: 240px;
+    max-width: 280px;
+    padding: 8px;
+  }
+  
+  .status-label {
+    font-size: 10px;
+  }
+  
+  .hp-bar, .xp-bar {
+    height: 16px;
+  }
+  
+  .hp-text, .xp-text {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .status-dashboard {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin: 10px;
+    min-width: auto;
+    max-width: none;
+  }
+}
+
 /* Responsividade para quick actions */
 @media (max-width: 768px) {
   .q-actions {
@@ -1801,4 +2503,368 @@ body.light .btn-export {
   }
 }
 .damage-flash { animation: damageFlash .3s ease-in-out; }
+`;
+
+// Toast Notifications CSS
+const TOAST_ST = `
+.toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  animation: slideInDown 0.3s ease;
+  pointer-events: auto;
+  max-width: 400px;
+  min-width: 250px;
+}
+
+.toast-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.toast-message {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.toast-success {
+  background: rgba(26, 58, 10, 0.95);
+  border: 1px solid #4a8a14;
+  color: #a0d060;
+}
+
+.toast-error {
+  background: rgba(58, 10, 10, 0.95);
+  border: 1px solid #8a1414;
+  color: #d06060;
+}
+
+.toast-warning {
+  background: rgba(58, 58, 10, 0.95);
+  border: 1px solid #8a8a14;
+  color: #d0d060;
+}
+
+.toast-info {
+  background: rgba(42, 13, 0, 0.95);
+  border: 1px solid #8b5a14;
+  color: #d4a843;
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+}
+
+/* Responsividade para toasts */
+@media (max-width: 768px) {
+  .toast-container {
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    transform: none;
+  }
+  
+  .toast {
+    max-width: none;
+    min-width: auto;
+    padding: 10px 12px;
+  }
+  
+  .toast-message {
+    font-size: 12px;
+  }
+  
+  .toast-icon {
+    font-size: 14px;
+  }
+}
+`;
+
+// Time-Skip Modal CSS
+const TIME_SKIP_ST = `
+.time-skip-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.time-skip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #3a2e6a;
+}
+
+.time-skip-header h3 {
+  color: #9a7afa;
+  font-size: 18px;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #9a7afa;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+  background: rgba(154, 122, 250, 0.1);
+  color: #ba9afa;
+}
+
+.time-skip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.time-config-section label {
+  display: block;
+  color: #9a7afa;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.time-input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.time-input {
+  flex: 0 0 80px;
+  background: rgba(10, 5, 20, 0.8);
+  border: 1px solid #2a1e6a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #c4a060;
+  font-size: 14px;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.time-input:focus {
+  border-color: #4a3e8a;
+  box-shadow: 0 0 0 2px rgba(154, 122, 250, 0.2);
+}
+
+.time-select {
+  flex: 1;
+  background: rgba(10, 5, 20, 0.8);
+  border: 1px solid #2a1e6a;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #c4a060;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.time-select:focus {
+  border-color: #4a3e8a;
+  box-shadow: 0 0 0 2px rgba(154, 122, 250, 0.2);
+}
+
+.time-textarea {
+  width: 100%;
+  background: rgba(10, 5, 20, 0.8);
+  border: 1px solid #2a1e6a;
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: #c4a060;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.time-textarea:focus {
+  border-color: #4a3e8a;
+  box-shadow: 0 0 0 2px rgba(154, 122, 250, 0.2);
+}
+
+.time-textarea::placeholder {
+  color: rgba(196, 160, 96, 0.4);
+}
+
+.time-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.time-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: #c4a060;
+  font-size: 13px;
+  transition: all 0.3s ease;
+}
+
+.time-checkbox:hover {
+  color: #d4b070;
+}
+
+.time-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #9a7afa;
+}
+
+.time-preview {
+  background: rgba(26, 15, 40, 0.5);
+  border: 1px solid #3a2e6a;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 10px;
+}
+
+.time-preview h4 {
+  color: #9a7afa;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0 0 10px 0;
+}
+
+.time-preview p {
+  color: #c4a060;
+  font-size: 13px;
+  margin: 5px 0;
+  line-height: 1.4;
+}
+
+.time-preview strong {
+  color: #d4b070;
+}
+
+.xp-preview {
+  color: #7afa7a !important;
+  font-weight: bold;
+}
+
+.time-skip-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #3a2e6a;
+}
+
+.btn-cancel, .btn-confirm {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.btn-cancel {
+  background: rgba(58, 10, 10, 0.8);
+  color: #d06060;
+  border: 1px solid #8a1414;
+}
+
+.btn-cancel:hover {
+  background: rgba(78, 20, 20, 0.9);
+  color: #e08080;
+}
+
+.btn-confirm {
+  background: linear-gradient(135deg, #1a3a0a, #0a1a0a);
+  color: #a0d060;
+  border: 1px solid #4a8a14;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2a4a1a, #1a2a1a);
+  color: #b0e070;
+}
+
+.btn-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Responsividade para time-skip modal */
+@media (max-width: 768px) {
+  .time-skip-modal {
+    width: 95%;
+    max-width: none;
+    margin: 10px;
+  }
+  
+  .time-input-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .time-input {
+    flex: 1;
+  }
+  
+  .time-skip-footer {
+    flex-direction: column;
+  }
+  
+  .btn-cancel, .btn-confirm {
+    width: 100%;
+  }
+}
 `;

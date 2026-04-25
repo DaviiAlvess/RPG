@@ -4,7 +4,7 @@ import { keyManagement } from '../../lib/supabase';
 
 // ── Cooldown de chaves em rate-limit com Supabase ──────────────────────
 // O cooldown agora é persistente através do Supabase
-const COOLDOWN_MS = 60_000; // 1 minuto de pausa após rate-limit
+const COOLDOWN_MS = 300_000; // 5 minutos de pausa após rate-limit (otimizado para 7 chaves)
 
 // Índice global para round-robin base
 let keyIndex = 0;

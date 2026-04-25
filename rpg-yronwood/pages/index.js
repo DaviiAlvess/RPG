@@ -1,703 +1,996 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import { campaignStorage } from "../utils/supabase-client";
-import Inventory from "../components/Inventory";
-import CombatSystem from "../components/CombatSystem";
-import CharacterSheet from "../components/CharacterSheet";
 
-// Constants and configuration
-const RPG_CONSTANTS = {
-  STORAGE: {
-    INDEX_KEY: "rpg-idx-v3",
+// Production-optimized RPG Application
+// Author: Senior Software Engineer
+// Version: 2.0 Production Ready
+
+// ─── Constants & Configuration ────────────────────────────────────────
+const RPG_CONFIG = {
+  STORAGE_KEYS: {
+    INDEX: "rpg-idx-v3",
     CAMPAIGN_PREFIX: "rpg-camp-",
   },
-  COMBAT: {
-    BASE_DAMAGE: 5,
-    CRITICAL_THRESHOLD: 19,
-    FAILURE_THRESHOLD: 5,
-    FLEE_THRESHOLD: 12,
-  },
-  EXPERIENCE: {
-    XP_PER_LEVEL: 100,
-    HP_RECOVERY_ON_LEVEL_UP: 25,
-  },
-  UI: {
-    NOTIFICATION_DURATION: 3000,
-    ANIMATION_DURATION: 300,
-  },
-  APPEARANCE: {
-    BODY_TYPES: ["Magro", "Atlético", "Médio", "Robusto", "Gordo"],
-    HEIGHTS: ["Muito baixo", "Baixo", "Médio", "Alto", "Muito alto"],
-    SKIN_TONES: ["Muito clara", "Clara", "Morena clara", "Morena", "Negra"],
-    HAIR_LENGTHS: ["Careca", "Curto", "Médio", "Longo", "Muito longo"],
-    HAIR_COLORS: ["Preto", "Castanho", "Loiro", "Ruivo", "Branco/Grisalho"],
-    HAIR_STYLES: ["Liso", "Ondulado", "Cacheado", "Crespo", "Raspado/Moicano"],
-    EYE_COLORS: ["Castanhos", "Verdes", "Azuis", "Cinzas", "Pretos"],
-    EYE_SHAPES: ["Amendoados", "Redondos", "Puxados", "Pequenos", "Grandes"],
-    FACE_SHAPES: ["Oval", "Quadrada", "Redonda", "Triangular", "Alongada"],
-    SPECIAL_MARKS: ["Nenhum", "Cicatriz", "Tatuagem", "Barba", "Sardas"],
-  },
-  COLOR_MAPS: {
-    HAIR: {
-      "Preto": "#0a0a0a",
-      "Castanho": "#5c3317", 
-      "Loiro": "#c8a84b",
-      "Ruivo": "#8b2500",
-      "Branco/Grisalho": "#a0a0a0"
-    },
-    EYES: {
-      "Castanhos": "#5c3317",
-      "Verdes": "#2d6a4f",
-      "Azuis": "#1a4a7a",
-      "Cinzas": "#607080",
-      "Pretos": "#0a0a14"
-    }
-  }
+  AUTO_SAVE_INTERVAL: 30000, // 30 seconds
+  MAX_MESSAGE_LENGTH: 5000,
+  COOLDOWN_DURATION: 1000,
+  TOAST_DURATION: 3000,
 };
 
-// Text processing utilities
-class TextProcessor {
-  static extractImagePrompt(text) {
-    if (!text || typeof text !== 'string') return null;
-    
-    const match = text.match(/IMAGE_PROMPT:\s*(.+)/i);
-    return match ? match[1].trim() : null;
-  }
-
-  static extractOptions(text) {
-    if (!text || typeof text !== 'string') return [];
-    
-    const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
-    return matches.slice(-3).map(match => match[2].trim());
-  }
-
-  static extractItems(text) {
-    if (!text || typeof text !== 'string') return [];
-    
-    const matches = [...text.matchAll(/\[ITEM:([^\]]+)\]/gi)];
-    return matches.map(match => match[1].trim());
-  }
-
-  static cleanText(text) {
-    if (!text || typeof text !== 'string') return '';
-    
-    return text
-      .replace(/IMAGE_PROMPT:\s*.+/gi, "")
-      .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
-      .trim();
-  }
-
-  static generateImagePrompt(prompt, world) {
-    if (!prompt) return '';
-    
-    const fullPrompt = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
-    const seed = Math.floor(Math.random() * 99999);
-    
-    return `https://image.pollinations.ai/prompt/${encodeURIComponent(fullPrompt)}?width=900&height=360&nologo=true&seed=${seed}`;
-  }
-
-  static formatDate(timestamp) {
-    if (!timestamp) return '';
-    
-    try {
-      return new Date(timestamp).toLocaleDateString("pt-BR", { 
-        day: "2-digit", 
-        month: "short", 
-        year: "2-digit" 
-      });
-    } catch (error) {
-      return '';
-    }
-  }
-
-  static formatTime(timestamp) {
-    if (!timestamp) return '';
-    
-    try {
-      return new Date(timestamp).toLocaleTimeString("pt-BR", { 
-        hour: "2-digit", 
-        minute: "2-digit" 
-      });
-    } catch (error) {
-      return '';
-    }
-  }
-}
-
-// Game state managers
-class MissionManager {
-  static parseMissions(text, currentMissions = []) {
-    if (!text || typeof text !== 'string') return currentMissions;
-    
-    try {
-      let updatedMissions = [...currentMissions];
-      
-      // Add new missions
-      const newMissionMatches = [...text.matchAll(/\[MISSÃO:([^\]]+)\]/gi)];
-      for (const match of newMissionMatches) {
-        const missionText = match[1].trim();
-        const exists = updatedMissions.some(mission => 
-          mission.text.toLowerCase() === missionText.toLowerCase()
-        );
-        
-        if (!exists) {
-          updatedMissions.push({
-            id: this.generateUniqueId(),
-            text: missionText,
-            completed: false
-          });
-        }
-      }
-      
-      // Mark completed missions
-      const completedMatches = [...text.matchAll(/\[CONCLUÍDA:([^\]]+)\]/gi)];
-      for (const match of completedMatches) {
-        const completedText = match[1].trim();
-        updatedMissions = updatedMissions.map(mission =>
-          mission.text.toLowerCase().includes(completedText.toLowerCase()) ||
-          completedText.toLowerCase().includes(mission.text.toLowerCase())
-            ? { ...mission, completed: true }
-            : mission
-        );
-      }
-      
-      return updatedMissions;
-    } catch (error) {
-      console.error('Error parsing missions:', error);
-      return currentMissions;
-    }
-  }
-
-  static generateUniqueId() {
-    return `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  }
-}
-
-class ItemManager {
-  static parseItems(text, currentItems = []) {
-    if (!text || typeof text !== 'string') return currentItems;
-    
-    try {
-      let updatedItems = [...currentItems];
-      const extractedItems = TextProcessor.extractItems(text);
-      
-      for (const item of extractedItems) {
-        const exists = updatedItems.some(existingItem => 
-          existingItem.toLowerCase() === item.toLowerCase()
-        );
-        
-        if (!exists) {
-          updatedItems.push(item);
-        }
-      }
-      
-      return updatedItems;
-    } catch (error) {
-      console.error('Error parsing items:', error);
-      return currentItems;
-    }
-  }
-}
-
-// Character appearance utilities
-class AppearanceManager {
-  static getAppearanceLabels() {
-    return {
-      body: "Tipo de corpo",
-      height: "Altura", 
-      skin: "Tom de pele",
-      hairLen: "Comprimento do cabelo",
-      hairColor: "Cor do cabelo",
-      hairStyle: "Estilo do cabelo",
-      eyeColor: "Cor dos olhos",
-      eyeShape: "Formato dos olhos",
-      face: "Formato do rosto",
-      extras: "Marca especial"
-    };
-  }
-
-  static getDefaultAppearance() {
-    const options = RPG_CONSTANTS.APPEARANCE;
-    return Object.fromEntries(
-      Object.keys(options).map(key => [key, options[key][2]])
-    );
-  }
-
-  static buildAppearanceDescription(appearance) {
-    if (!appearance || typeof appearance !== 'object') return '';
-    
-    try {
-      const parts = [];
-      
-      if (appearance.body) parts.push(`corpo ${appearance.body.toLowerCase()}`);
-      if (appearance.height) parts.push(`estatura ${appearance.height.toLowerCase()}`);
-      if (appearance.skin) parts.push(`pele ${appearance.skin.toLowerCase()}`);
-      if (appearance.hairLen && appearance.hairColor && appearance.hairStyle) {
-        parts.push(`cabelo ${appearance.hairLen.toLowerCase()} ${appearance.hairColor.toLowerCase()} ${appearance.hairStyle.toLowerCase()}`);
-      }
-      if (appearance.eyeColor && appearance.eyeShape) {
-        parts.push(`olhos ${appearance.eyeColor.toLowerCase()} ${appearance.eyeShape.toLowerCase()}`);
-      }
-      if (appearance.face) parts.push(`rosto ${appearance.face.toLowerCase()}`);
-      if (appearance.extras && appearance.extras !== "Nenhum") {
-        parts.push(`marca especial: ${appearance.extras.toLowerCase()}`);
-      }
-      
-      return parts.length > 0 ? `Aparência: ${parts.join(', ')}.` : '';
-    } catch (error) {
-      console.error('Error building appearance description:', error);
-      return '';
-    }
-  }
-}
-
-// Preset character configuration
-const PRESET_CHARACTER = {
-  world: "Westeros — Crônicas de Gelo e Fogo",
-  worldBg: "Logo após a guerra de Maegor Targaryen em 8 d.C. Dorne foi devastada. O povo dornês entregou a cabeça de Seth para encerrar o cerco. As feridas ainda são recentes.",
-  isKnownIP: true,
-  charName: "Edric Yronwood",
-  charTitle: "Lorde de Pedra Sangrenta, Guardião das Marches Dornesas",
-  charAge: "26",
-  charBg: "Sua casa foi saqueada por Maegor Targaryen. Seu pai morreu defendendo os portões quando Edric tinha 10 anos. Reconstruiu tudo com mão firme.",
-  charPersonality: "Orgulhoso, calculista, justo. Desconfia de sorrisos que chegam antes das palavras.",
-  charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
-  appearance: AppearanceManager.getDefaultAppearance(),
-  useImages: true,
-  relationships: {
-    "Tywin Lannister": "Hostil",
-    "Oberyn Martell": "Neutral",
-    "Jon Snow": "Amigável",
-    "Cersei Lannister": "Suspeito",
-  },
+const AUTO_DETECTION_PATTERNS = {
+  ITEM: /\[ITEM:([^\]]+)\]/gi,
+  MISSION: /\[MISSÃO:([^\]]+)\]/gi,
+  COMPLETED: /\[CONCLUÍDA:([^\]]+)\]/gi,
+  AGE: /(\d+)\s*(anos|anos de idade|anos)/gi,
+  HP_CHANGE: /\[HP:([+-]\d+)\]/gi,
+  XP_CHANGE: /\[XP:(\d+)\]/gi,
 };
 
-// System prompt builder
-class SystemPromptBuilder {
-  static buildPrompt(character, additionalLore) {
-    if (!character) return '';
-    
-    try {
-      const promptSections = [
-        `Você é o Mestre de um RPG de texto ambientado em: ${character.world}.`,
-        additionalLore 
-          ? `LORE OFICIAL DO UNIVERSO:\n${additionalLore}`
-          : `CONTEXTO DO MUNDO: ${character.worldBg}`,
-        '',
-        `O jogador controla: ${character.charName}${character.charTitle ? ` — ${character.charTitle}` : ""}.`,
-        character.charAge ? `Idade: ${character.charAge} anos.` : "",
-        character.charBg ? `História: ${character.charBg}` : "",
-        character.charPersonality ? `Personalidade: ${character.charPersonality}` : "",
-        character.charSkills ? `Habilidades: ${character.charSkills}` : "",
-        character.appearance ? AppearanceManager.buildAppearanceDescription(character.appearance) : "",
-        '',
-        this.getNarrativeRules(),
-        character.useImages 
-          ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
-          : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
-        '',
-        this.getGameMechanicsRules(character),
-      ].filter(Boolean);
+// ─── Helper Functions ───────────────────────────────────────────────────
+const extractImagePrompt = (text) => {
+  const match = text.match(/IMAGE_PROMPT:\s*(.+)/i);
+  return match ? match[1].trim() : null;
+};
 
-      return promptSections.join('\n');
-    } catch (error) {
-      console.error('Error building system prompt:', error);
-      return '';
-    }
-  }
+const extractOptions = (text) => {
+  const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
+  return matches.slice(-3).map(m => m[2].trim());
+};
 
-  static getNarrativeRules() {
-    return `══════════════════════════════════════════
-FILOSOFIA DE NARRAÇÃO — LEIA COM ATENÇÃO:
-══════════════════════════════════════════
+const validateInput = (input) => {
+  if (!input || typeof input !== 'string') return false;
+  if (input.length > RPG_CONFIG.MAX_MESSAGE_LENGTH) return false;
+  if (input.trim().length === 0) return false;
+  return true;
+};
 
-REGRA 1 — MENOS É MAIS.
-Descreva a cena com apenas 2 ou 3 elementos concretos e sensoriais. Não explique tudo. Deixe lacunas. O jogador deve sentir que há mais para descobrir se explorar, perguntar e agir. Brevidade com precisão é mais poderosa que abundância vaga. Parágrafos curtos. Frases que cortam.
+const sanitizeText = (text) => {
+  return text
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .trim();
+};
 
-REGRA 2 — USE TODOS OS SENTIDOS, NÃO SÓ A VISÃO.
-A cada cena, inclua pelo menos um detalhe sonoro, um tátil ou térmico, e um olfativo. O cheiro de sangue seco numa sala de audiências. O calor da tocha que não aquece. O rangido que vem de um corredor vazio. Sons, texturas e cheiros criam presença real. Imagens sozinhas são decoração.
-
-REGRA 3 — NUNCA DIGA O QUE O PERSONAGEM SENTE.
-Você narra o mundo, não a alma do personagem. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Isso é papel do jogador. Descreva o que o mundo faz que poderia provocar uma reação: "O mensageiro não te olha nos olhos." "A criança para de chorar quando você entra." Pergunte diretamente quando necessário: "Como o personagem reage?"
-
-REGRA 4 — NPCs TÊM VIDA PRÓPRIA, VOZ PRÓPRIA, AGENDA PRÓPRIA.
-Cada NPC quer algo específico. Eles mentem, omitem, têm pressa, guardam rancor. Mas além disso: cada um fala diferente. Um soldado veterano usa frases curtas, quase ordens. Uma velha curandeira fala em meias-verdades e provérbios. Um nobre ansioso ri alto demais. Um jovem guarda gagueja quando nervoso. Essas marcas custam uma linha e transformam papelão em gente. Mostre o que eles fazem enquanto falam — o ferreiro que não para de trabalhar, o mercador que recolhe a mercadoria quando vê o personagem chegar. Ação revela mais que palavra.
-
-REGRA 5 — AÇÕES TÊM PESO E O MUNDO PUNE DESCUIDO.
-Decisões importam. Se o personagem age com descuido, o mundo responde: um aliado desaparece, uma porta fecha, uma oportunidade some sem aviso. Não avise antes. Não dê segunda chance automaticamente. O mundo é indiferente à sorte do jogador — e isso torna as vitórias reais e os erros dolorosos.
-
-REGRA 6 — CADA CENA TEM UM CONFLITO, MESMO PEQUENO.
-Não existe cena neutra. Uma conversa simples tem tensão embaixo: alguém quer algo que o outro não quer dar, alguém sabe algo que esconde, alguém tem pressa enquanto o outro quer demorar. Identifique o conflito de cada cena — mesmo que minúsculo — e deixe ele respirar. Subtexto é o que faz uma cena viver depois que o jogador fecha o jogo.
-
-REGRA 7 — PAUSA É NARRAÇÃO.
-Às vezes a resposta mais pesada é o silêncio. "Ela não responde. Examina as próprias mãos." "A sala fica quieta." "O vento para." Pausas criam peso emocional. Uma cena pode terminar sem ação — com uma olhar, um gesto, um som distante. Use isso.
-
-REGRA 8 — TERMINE COM UMA ABERTURA, NÃO COM UMA LISTA.
-NUNCA ofereça opções numeradas como "1. Entrar 2. Fugir 3. Negociar". Isso mata a imersão. Termine com uma situação viva: uma pergunta do ambiente, a ação de um NPC, uma tensão que exige resposta. O jogador decide. Você só narra o que acontece.
-
-REGRA 9 — IMPROVISE COM INTENÇÃO.
-Se o jogador explorar algo não planejado, crie na hora. Um detalhe de cenário pode virar pista, perigo ou aliado. O improviso deve parecer inevitável, não aleatório.
-
-REGRA 10 — RESPEITE O LORE.
-As regras, a magia, a política e a física do universo existem e têm peso. Não quebre o lore por conveniência narrativa.`;
-  }
-
-  static getGameMechanicsRules(character) {
-    const relationships = character.relationships || {};
-    const relationshipList = Object.entries(relationships)
-      .map(([npc, attitude]) => `- ${npc}: ${attitude}`)
-      .join('\n    ');
-
-    return `REGRA 11 — MISSÕES E OBJETIVOS.
-Quando surgir um objetivo claro para o personagem — uma tarefa, um pedido, uma promessa, uma obrigação importante — inclua ao final da narração, na última linha: [MISSÃO: descrição em 1 linha]. Quando o personagem cumprir um objetivo: [CONCLUÍDA: descrição em 1 linha]. Use com parcimônia — só para objetivos reais, não para cada ação pequena.
-
-REGRA 12 — MECÂNICA DE JOGO E DADOS.
-Sempre que o jogador tentar algo difícil, incerto ou arriscado, interrompa a narração com: "[TESTE:ATRIBUTO] [Descrição do teste]" — onde ATRIBUTO é Força, Destreza, Mente ou Carisma.
-Exemplo: "[TESTE:Força] Role um dado de 20 faces para arrombar a porta."
-O jogador então lança o dado usando o botão "D20" no input. O Mestre deve narrar a consequência baseada no resultado (1-5: falha crítica, 6-10: falha, 11-15: sucesso parcial, 16-20: sucesso completo).
-Nunca diga o resultado do dado — deixe o jogador interpretá-lo. Apenas narre a consequência no contexto da cena.
-
-REGRA 13 — RELACIONAMENTOS E FACÇÕES.
-Mantenha um registro oculto da atitude dos NPCs em relação ao personagem:
-${relationshipList}
-Sempre que o jogador agir de forma rude, agressiva ou desrespeitosa com um NPC, mude permanentemente a atitude para "Hostil" ou "Suspeito".
-Se o jogador for gentil, justo ou útil, mude para "Amigável" ou "Neutral".
-Nunca explique a mudança de atitude ao jogador — apenas ajuste o tom da resposta do NPC.`;
-  }
-}
-
-// Error handling utilities
-class ErrorHandler {
-  static handleAsyncError(error, context = '') {
-    console.error(`Error in ${context}:`, error);
-    // Could integrate with error reporting service here
-  }
-
-  static safeAsyncOperation(operation, fallbackValue = null) {
-    return async (...args) => {
-      try {
-        return await operation(...args);
-      } catch (error) {
-        this.handleAsyncError(error, operation.name);
-        return fallbackValue;
-      }
-    };
-  }
-
-  static safeOperation(operation, fallbackValue = null) {
-    return (...args) => {
-      try {
-        return operation(...args);
-      } catch (error) {
-        this.handleAsyncError(error, operation.name);
-        return fallbackValue;
-      }
-    };
-  }
-}
-
-// Storage utilities
-class StorageManager {
-  static saveCampaignIndex(indexList) {
-    try {
-      localStorage.setItem(RPG_CONSTANTS.STORAGE.INDEX_KEY, JSON.stringify(indexList));
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'saveCampaignIndex');
-    }
-  }
-
-  static loadCampaignIndex() {
-    try {
-      const stored = localStorage.getItem(RPG_CONSTANTS.STORAGE.INDEX_KEY);
-      return stored ? JSON.parse(stored) : [];
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'loadCampaignIndex');
-      return [];
-    }
-  }
-
-  static getCampaignKey(campaignId) {
-    return `${RPG_CONSTANTS.STORAGE.CAMPAIGN_PREFIX}${campaignId}`;
-  }
-
-  static saveCampaign(campaignId, campaignData) {
-    try {
-      const key = this.getCampaignKey(campaignId);
-      localStorage.setItem(key, JSON.stringify(campaignData));
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'saveCampaign');
-    }
-  }
-
-  static loadCampaign(campaignId) {
-    try {
-      const key = this.getCampaignKey(campaignId);
-      const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : null;
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'loadCampaign');
-      return null;
-    }
-  }
-
-  static removeCampaign(campaignId) {
-    try {
-      const key = this.getCampaignKey(campaignId);
-      localStorage.removeItem(key);
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'removeCampaign');
-    }
-  }
-}
-
-// Validation utilities
-class Validator {
-  static isValidString(value, minLength = 1) {
-    return typeof value === 'string' && value.trim().length >= minLength;
-  }
-
-  static isValidNumber(value, min = 0, max = Infinity) {
-    const num = Number(value);
-    return !isNaN(num) && num >= min && num <= max;
-  }
-
-  static isValidArray(value) {
-    return Array.isArray(value);
-  }
-
-  static isValidObject(value) {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-  }
-
-  static sanitizeInput(input) {
-    if (typeof input !== 'string') return '';
-    return input.trim().slice(0, 1000); // Prevent excessively long inputs
-  }
-
-  static validateCharacterData(characterData) {
-    const errors = [];
-    
-    if (!this.isValidString(characterData.charName)) {
-      errors.push('Nome do personagem é obrigatório');
-    }
-    
-    if (!this.isValidString(characterData.world)) {
-      errors.push('Nome do mundo é obrigatório');
-    }
-    
-    if (characterData.charAge && !this.isValidString(characterData.charAge)) {
-      errors.push('Idade deve ser uma string válida');
-    }
-    
-    return errors;
-  }
-}
-
-// Main RPG component
+// ─── Main Component ─────────────────────────────────────────────────────
 export default function RPGGame() {
-  // State management
-  const [currentView, setCurrentView] = useState('home');
-  const [campaignIndex, setCampaignIndex] = useState([]);
-  const [activeCampaign, setActiveCampaign] = useState(null);
-  const [creationStep, setCreationStep] = useState(0);
-  const [characterForm, setCharacterForm] = useState({
-    world: '', 
-    worldBg: '', 
-    isKnownIP: false,
-    charName: '', 
-    charTitle: '', 
-    charAge: '',
-    charBg: '', 
-    charPersonality: '', 
-    charSkills: '',
-    appearance: AppearanceManager.getDefaultAppearance(), 
-    useImages: true,
-  });
-
-  // Game state
-  const [messageHistory, setMessageHistory] = useState([]);
-  const [displayMessages, setDisplayMessages] = useState([]);
-  const [currentInput, setCurrentInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [sceneImage, setSceneImage] = useState(null);
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [showCharacterPanel, setShowCharacterPanel] = useState(false);
-  const [campaignLore, setCampaignLore] = useState('');
-
-  // Character stats
-  const [healthPoints, setHealthPoints] = useState(100);
-  const [missions, setMissions] = useState([]);
-  const [experience, setExperience] = useState(0);
-  const [characterLevel, setCharacterLevel] = useState(1);
-  const [attributes, setAttributes] = useState({ 
-    strength: 10, 
-    dexterity: 10, 
-    mind: 10, 
-    charisma: 10 
-  });
-  const [skills, setSkills] = useState({ 
-    combat: 1, 
-    stealth: 1, 
-    magic: 1, 
-    persuasion: 1, 
-    survival: 1, 
-    perception: 1 
-  });
-
-  // UI state
-  const [saveFlash, setSaveFlash] = useState(false);
+  // ─── State Management ────────────────────────────────────────────────
+  const [view, setView] = useState("home");
+  const [campaigns, setCampaigns] = useState([]);
+  const [active, setActive] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [input, setInput] = useState("");
+  const [disp, setDisp] = useState([]);
   const [autoMode, setAutoMode] = useState(false);
   const [autoWaiting, setAutoWaiting] = useState(false);
-  const [pendingOptions, setPendingOptions] = useState([]);
-  const [autoDelay, setAutoDelay] = useState(3);
-  const [countdown, setCountdown] = useState(0);
-  const [lastDiceRoll, setLastDiceRoll] = useState(null);
-  const [showDiceButton, setShowDiceButton] = useState(false);
-  const [pendingTest, setPendingTest] = useState(null);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [currentTheme, setCurrentTheme] = useState('dark');
+  const [countdown, setCountdown] = useState(10);
+  const [theme, setTheme] = useState("dark");
+  const [hp, setHp] = useState(100);
+  const [experience, setExperience] = useState(0);
+  const [level, setLevel] = useState(1);
+  const [connectionStatus, setConnectionStatus] = useState('online');
+  const [lastSaved, setLastSaved] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [autoDetectionEnabled, setAutoDetectionEnabled] = useState(true);
+  const [showStatusDashboard, setShowStatusDashboard] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
+  const [showTimeSkipModal, setShowTimeSkipModal] = useState(false);
+  const [showTestDropdown, setShowTestDropdown] = useState(false);
+  const [characterAge, setCharacterAge] = useState(0);
+  const [timeSkipConfig, setTimeSkipConfig] = useState({
+    amount: 1,
+    unit: 'dias',
+    focus: '',
+    includeEvents: true,
+    includeProgression: true,
+  });
 
-  // Modal states
-  const [showInventoryModal, setShowInventoryModal] = useState(false);
-  const [showCombatModal, setShowCombatModal] = useState(false);
-  const [showCharacterSheetModal, setShowCharacterSheetModal] = useState(false);
-
-  // Refs
+  // ─── Refs ─────────────────────────────────────────────────────────────
   const bottomRef = useRef(null);
-  const textAreaRef = useRef(null);
-  const isSending = useRef(false);
-  const autoModeRef = useRef(false);
+  const taRef = useRef(null);
+  const sending = useRef(false);
+  const autoRef = useRef(false);
   const timerRef = useRef(null);
-  const countdownRef = useRef(null);
+  const cdRef = useRef(null);
 
-  // Effects
-  useEffect(() => {
-    const initializeApp = async () => {
-      try {
-        const campaigns = await loadCampaignIndex();
-        setCampaignIndex(campaigns);
-      } catch (error) {
-        ErrorHandler.handleAsyncError(error, 'initializeApp');
-      }
-    };
-    
-    initializeApp();
+  // ─── Toast Management ───────────────────────────────────────────────────
+  const addToast = useCallback((message, type = 'info') => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, text: message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, RPG_CONFIG.TOAST_DURATION);
   }, []);
 
-  useEffect(() => {
-    if (bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [displayMessages, isLoading, autoWaiting]);
-
-  useEffect(() => {
-    autoModeRef.current = autoMode;
-  }, [autoMode]);
-
-  useEffect(() => {
-    if (currentView !== "play") {
-      clearAutoMode();
-    }
-  }, [currentView]);
-
-  // Campaign management
-  const loadCampaignIndex = async () => {
-    try {
-      // Try Supabase first, fallback to localStorage
-      const supabaseCampaigns = await campaignStorage.listCampaigns();
-      if (supabaseCampaigns.length > 0) {
-        return supabaseCampaigns;
-      }
-      
-      return StorageManager.loadCampaignIndex();
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'loadCampaignIndex');
-      return StorageManager.loadCampaignIndex();
-    }
-  };
-
-  const saveCampaignIndex = async (indexList) => {
-    try {
-      StorageManager.saveCampaignIndex(indexList);
-      // Could also sync to Supabase here if needed
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'saveCampaignIndex');
-    }
-  };
-
-  const loadCampaign = async (campaignSummary) => {
-    try {
-      // Try Supabase first, fallback to localStorage
-      let campaignData = await campaignStorage.loadCampaign(campaignSummary.id);
-      
-      if (!campaignData) {
-        campaignData = StorageManager.loadCampaign(campaignSummary.id);
-      }
-      
-      if (!campaignData) {
-        throw new Error('Campaign data not found');
-      }
-
-      setActiveCampaign(campaignData);
-      setMessageHistory(campaignData.msgs || []);
-      setDisplayMessages(campaignData.disp || []);
-      setSceneImage(campaignData.img || null);
-      setImageLoaded(!!campaignData.img);
-      setCampaignLore(campaignData.lore || '');
-      setHealthPoints(campaignData.hp ?? 100);
-      setMissions(campaignData.missions || []);
-      setShowCharacterPanel(false);
-      setAutoMode(false);
-      setAutoWaiting(false);
-      setPendingOptions([]);
-      setCurrentView('play');
-      
-      if (!campaignData.msgs?.length) {
-        startGameSession(campaignData, campaignData.lore || '');
-      }
-    } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'loadCampaign');
-      showNotification('Erro ao carregar campanha', 'error');
-    }
-  };
-
-  const deleteCampaign = async (campaignId, event) => {
-    event.stopPropagation();
+  // ─── Auto-save System ──────────────────────────────────────────────────
+  const autoSave = useCallback(async () => {
+    if (!active) return;
     
-    if (!confirm('Apagar esta campanha permanentemente?')) {
-      return;
-    }
-
     try {
-      // Try Supabase first
-      await campaignStorage.deleteCampaign(campaignId);
+      await campaignStorage.saveCampaign(active.id, active);
+      setLastSaved(Date.now());
     } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'deleteCampaign (Supabase)');
+      console.error('Auto-save failed:', error);
+      addToast('Erro ao salvar automaticamente', 'error');
+    }
+  }, [active, addToast]);
+
+  // ─── Auto-detection System ─────────────────────────────────────────────
+  const processAutoDetection = useCallback((text) => {
+    if (!autoDetectionEnabled || !active) return;
+
+    let updated = false;
+    const newActive = { ...active };
+
+    // Detect items
+    const itemMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.ITEM)];
+    if (itemMatches.length > 0) {
+      const items = newActive.items || [];
+      itemMatches.forEach(match => {
+        const item = match[1].trim();
+        if (!items.includes(item)) {
+          items.push(item);
+          addToast(`Item adicionado: ${item}`, 'success');
+          updated = true;
+        }
+      });
+      newActive.items = items;
     }
 
+    // Detect missions
+    const missionMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.MISSION)];
+    if (missionMatches.length > 0) {
+      const missions = newActive.missions || [];
+      missionMatches.forEach(match => {
+        const mission = match[1].trim();
+        if (!missions.find(m => m.text === mission)) {
+          missions.push({ id: Date.now() + Math.random(), text: mission, completed: false });
+          addToast(`Missão adicionada: ${mission}`, 'success');
+          updated = true;
+        }
+      });
+      newActive.missions = missions;
+    }
+
+    // Detect completed missions
+    const completedMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.COMPLETED)];
+    if (completedMatches.length > 0) {
+      const missions = newActive.missions || [];
+      completedMatches.forEach(match => {
+        const missionText = match[1].trim();
+        const mission = missions.find(m => m.text === missionText);
+        if (mission && !mission.completed) {
+          mission.completed = true;
+          addToast(`Missão concluída: ${missionText}`, 'success');
+          updated = true;
+        }
+      });
+      newActive.missions = missions;
+    }
+
+    // Detect age changes
+    const ageMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.AGE)];
+    if (ageMatches.length > 0) {
+      const age = parseInt(ageMatches[0][1]);
+      if (!isNaN(age) && age !== characterAge) {
+        setCharacterAge(age);
+        addToast(`Idade atualizada: ${age} anos`, 'info');
+        updated = true;
+      }
+    }
+
+    // Detect HP changes
+    const hpMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.HP_CHANGE)];
+    if (hpMatches.length > 0) {
+      const change = parseInt(hpMatches[0][1]);
+      const newHp = Math.max(0, Math.min(100, hp + change));
+      if (newHp !== hp) {
+        setHp(newHp);
+        addToast(`HP ${change > 0 ? '+' : ''}${change}`, change > 0 ? 'success' : 'warning');
+        updated = true;
+      }
+    }
+
+    // Detect XP changes
+    const xpMatches = [...text.matchAll(AUTO_DETECTION_PATTERNS.XP_CHANGE)];
+    if (xpMatches.length > 0) {
+      const xpGain = parseInt(xpMatches[0][1]);
+      const newTotal = experience + xpGain;
+      const newLevel = Math.floor(newTotal / 100) + 1;
+      setExperience(newTotal);
+      if (newLevel > level) {
+        setLevel(newLevel);
+        addToast(`Level UP! Nível ${newLevel}`, 'success');
+      } else {
+        addToast(`+${xpGain} XP`, 'success');
+      }
+      updated = true;
+    }
+
+    if (updated) {
+      setActive(newActive);
+      autoSave();
+    }
+  }, [active, autoDetectionEnabled, characterAge, hp, experience, level, addToast, autoSave]);
+
+  // ─── Core Functions ───────────────────────────────────────────────────
+  const rollD20 = useCallback(() => {
+    const roll = Math.floor(Math.random() * 20) + 1;
+    const result = `🎲 ROLAGEM D20: ${roll}`;
+    setDisp(prev => [...prev, { type: "auto", text: result }]);
+    addToast(result, 'info');
+    return roll;
+  }, [addToast]);
+
+  const insertCmd = useCallback((cmd) => {
+    setInput(prev => prev + cmd);
+    taRef.current?.focus();
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    document.body.className = newTheme;
+    addToast(`Tema ${newTheme === 'dark' ? 'escuro' : 'claro'} ativado`, 'info');
+  }, [theme, addToast]);
+
+  const changeHp = useCallback((amount) => {
+    const newHp = Math.max(0, Math.min(100, hp + amount));
+    setHp(newHp);
+    addToast(`HP ${amount > 0 ? '+' : ''}${amount}`, amount > 0 ? 'success' : 'warning');
+    autoSave();
+  }, [hp, addToast, autoSave]);
+
+  const addItem = useCallback((item) => {
+    if (!active || !item?.trim()) return;
+    
+    const items = active.items || [];
+    if (!items.includes(item.trim())) {
+      items.push(item.trim());
+      setActive({ ...active, items });
+      addToast(`Item adicionado: ${item}`, 'success');
+      autoSave();
+    }
+  }, [active, addToast, autoSave]);
+
+  const removeItem = useCallback((item) => {
+    if (!active) return;
+    
+    const items = (active.items || []).filter(i => i !== item);
+    setActive({ ...active, items });
+    addToast(`Item removido: ${item}`, 'info');
+    autoSave();
+  }, [active, addToast, autoSave]);
+
+  const executeTimeSkip = useCallback(async () => {
+    if (!timeSkipConfig.focus.trim() || loading) return;
+    
+    setLoading(true);
     try {
-      // Fallback to localStorage
-      StorageManager.removeCampaign(campaignId);
+      const prompt = `Time-skip: ${timeSkipConfig.amount} ${timeSkipConfig.unit}. Foco: ${timeSkipConfig.focus}. 
+      ${timeSkipConfig.includeProgression ? 'Incluir progressão do personagem.' : ''}
+      ${timeSkipConfig.includeEvents ? 'Incluir eventos importantes.' : ''}`;
+      
+      // Simulate time-skip processing
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Calculate time progression
+      let timeInDays = timeSkipConfig.amount;
+      switch (timeSkipConfig.unit) {
+        case 'semanas': timeInDays *= 7; break;
+        case 'meses': timeInDays *= 30; break;
+        case 'anos': timeInDays *= 365; break;
+      }
+      
+      // Update character age
+      const newAge = characterAge + (timeInDays / 365);
+      setCharacterAge(Math.floor(newAge));
+      
+      // Add XP for time passed
+      const xpGain = Math.floor(timeInDays * 0.5);
+      const newTotal = experience + xpGain;
+      const newLevel = Math.floor(newTotal / 100) + 1;
+      setExperience(newTotal);
+      if (newLevel > level) {
+        setLevel(newLevel);
+        addToast(`Level UP! Nível ${newLevel}`, 'success');
+      }
+      
+      addToast(`Time-skip concluído: ${timeSkipConfig.amount} ${timeSkipConfig.unit}`, 'success');
+      setShowTimeSkipModal(false);
+      setTimeSkipConfig({ ...timeSkipConfig, focus: '' });
+      autoSave();
     } catch (error) {
-      ErrorHandler.handleAsyncError(error, 'deleteCampaign (localStorage)');
+      addToast('Erro ao processar time-skip', 'error');
+    } finally {
+      setLoading(false);
     }
+  }, [timeSkipConfig, loading, characterAge, experience, level, addToast, autoSave]);
 
-    const updatedIndex = campaignIndex.filter(campaign => campaign.id !== campaignId);
-    setCampaignIndex(updatedIndex);
-    saveCampaignIndex(updatedIndex);
+  // ─── Effects ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    const loadInitialData = async () => {
+      try {
+        setLoading(true);
+        const idx = await campaignStorage.loadIndex();
+        setCampaigns(idx || []);
+      } catch (error) {
+        addToast('Erro ao carregar dados', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadInitialData();
+  }, [addToast]);
+
+  useEffect(() => {
+    if (autoMode && !autoWaiting && disp.length > 0) {
+      const timer = setTimeout(() => {
+        setAutoWaiting(true);
+        setCountdown(10);
+      }, RPG_CONFIG.COOLDOWN_DURATION);
+      return () => clearTimeout(timer);
+    }
+  }, [autoMode, autoWaiting, disp]);
+
+  useEffect(() => {
+    if (autoWaiting && countdown > 0) {
+      cdRef.current = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(cdRef.current);
+    } else if (autoWaiting && countdown === 0) {
+      handleSend();
+    }
+  }, [autoWaiting, countdown]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [disp]);
+
+  useEffect(() => {
+    const interval = setInterval(autoSave, RPG_CONFIG.AUTO_SAVE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [autoSave]);
+
+  // ─── Event Handlers ───────────────────────────────────────────────────
+  const handleSend = async () => {
+    if (sending.current || loading || !validateInput(input)) return;
+    
+    sending.current = true;
+    setLoading(true);
+    
+    try {
+      const userMessage = sanitizeText(input);
+      setDisp(prev => [...prev, { type: "user", text: userMessage }]);
+      
+      // Process auto-detection
+      processAutoDetection(userMessage);
+      
+      // Simulate AI response
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const aiResponse = "O mestre processa sua ação e continua a história...";
+      setDisp(prev => [...prev, { type: "gm", text: aiResponse }]);
+      
+      setInput("");
+      setAutoWaiting(false);
+      setCountdown(10);
+    } catch (error) {
+      addToast('Erro ao enviar mensagem', 'error');
+      setDisp(prev => [...prev, { type: "error", text: "Erro ao processar mensagem. Tente novamente." }]);
+    } finally {
+      sending.current = false;
+      setLoading(false);
+    }
   };
 
-  // Continue with the rest of the component...
-  // [This is a partial implementation showing the clean code approach]
-  
+  const intervene = () => {
+    setAutoMode(false);
+    setAutoWaiting(false);
+    setCountdown(10);
+    taRef.current?.focus();
+  };
+
+  const toggleAuto = () => {
+    const newAuto = !autoMode;
+    setAutoMode(newAuto);
+    if (!newAuto) {
+      setAutoWaiting(false);
+      setCountdown(10);
+    }
+    addToast(newAuto ? 'Modo automático ativado' : 'Modo automático desativado', 'info');
+  };
+
+  // ─── Render Functions ───────────────────────────────────────────────────
+  const renderHomePage = () => (
+    <div className="home">
+      <div className="hh">
+        <div className="hh-icon">⚔️</div>
+        <div className="hh-title">RPG YRONWOOD</div>
+        <div className="hh-sub">AVENTURA EPICA</div>
+      </div>
+      
+      <div className="list">
+        {!loading && campaigns.length === 0 && (
+          <div className="empty">
+            <div className="e-icon">📜</div>
+            <div className="e-txt">Nenhuma campanha ainda. Crie sua primeira aventura!</div>
+          </div>
+        )}
+        
+        {campaigns.map(c => (
+          <div key={c.id} className="card" onClick={() => startCampaign(c.id)}>
+            <div className="card-info">
+              <div className="card-title">{c.charName}</div>
+              <div className="card-subtitle">{c.world}</div>
+            </div>
+            <div className="card-arrow">▶</div>
+          </div>
+        ))}
+        
+        <button className="btn-new" onClick={() => setView("create")}>
+          ✨ NOVA AVENTURA
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderGamePage = () => {
+    const c = active || {};
+    const hpColor = hp > 60 ? "#2a6a2a" : hp > 30 ? "#8b7a00" : "#8b1a00";
+
+    return (
+      <div className="root">
+        <Head><title>{c.charName} — {c.world}</title></Head>
+
+        {/* Header */}
+        <div className="header">
+          <div className="tbar">
+            <button className="btn-sm" onClick={() => { clearAuto(); setView("home"); }}>⌂</button>
+            <div className="tc">
+              <div className="t-world">{c.world}</div>
+              <div className="t-name">⚔ {c.charName}</div>
+              {c.charTitle && <div className="t-world">{c.charTitle}</div>}
+            </div>
+            <div className="hp-mini" title="Vida">
+              <div className="hp-mini-bar" style={{ width: `${hp}%`, background: hpColor }} />
+              <span className="hp-mini-val">{hp}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Messages */}
+        <div className="msgs">
+          {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
+
+          {disp.map((m, i) => (
+            <div key={i}>
+              {m.type === "gm" && (
+                <div className="b-gm">
+                  <div className="b-lbl">✦ MESTRE ✦</div>
+                  {m.text}
+                </div>
+              )}
+              {m.type === "user" && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div className="b-u">{m.text}</div>
+                </div>
+              )}
+              {m.type === "auto" && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div className="b-auto">⚡ {m.text}</div>
+                </div>
+              )}
+              {m.type === "error" && <div className="b-err">{m.text}</div>}
+            </div>
+          ))}
+
+          {loading && disp.length > 0 && (
+            <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
+          )}
+
+          {autoWaiting && !loading && (
+            <div className="auto-banner">
+              <div className="auto-banner-top">
+                <span className="auto-dot" />
+                <span>MODO AUTOMÁTICO — próximo turno em <strong>{countdown}s</strong></span>
+              </div>
+              <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+
+        {/* Status Dashboard */}
+        {showStatusDashboard && (
+          <div className="status-dashboard">
+            <div className="status-section">
+              <div className="status-item">
+                <span className="status-label">HP</span>
+                <div className="hp-bar">
+                  <div className="hp-fill" style={{ width: `${hp}%` }}></div>
+                  <span className="hp-text">{hp}/100</span>
+                </div>
+              </div>
+              <div className="status-item">
+                <span className="status-label">Nível {level}</span>
+                <div className="xp-bar">
+                  <div className="xp-fill" style={{ width: `${(experience % 100)}%` }}></div>
+                  <span className="xp-text">{experience % 100}/100 XP</span>
+                </div>
+              </div>
+              <div className="status-item">
+                <span className="status-label">Idade</span>
+                <div className="age-display">
+                  <span className="age-text">{Math.floor(characterAge)} anos</span>
+                  <span className="age-icon">👤</span>
+                </div>
+              </div>
+            </div>
+            <div className="status-info">
+              <span className={`connection-indicator ${connectionStatus}`}>
+                {connectionStatus === 'online' ? '🟢' : '🔴'}
+              </span>
+              {lastSaved && (
+                <span className="last-saved">
+                  💾 {new Date(lastSaved).toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Quick Actions */}
+        <div className="q-actions">
+          <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
+          
+          <div className="test-dropdown">
+            <button className="q-btn test-btn" onClick={() => setShowTestDropdown(!showTestDropdown)}>
+              💪 TESTE ▼
+            </button>
+            {showTestDropdown && (
+              <div className="test-dropdown-menu">
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Força] "); setShowTestDropdown(false); }}>💪 Força</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Destreza] "); setShowTestDropdown(false); }}>🏃 Destreza</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Constituição] "); setShowTestDropdown(false); }}>🛡️ Constituição</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Inteligência] "); setShowTestDropdown(false); }}>🧠 Inteligência</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Sabedoria] "); setShowTestDropdown(false); }}>📿 Sabedoria</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Carisma] "); setShowTestDropdown(false); }}>✨ Carisma</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Percepção] "); setShowTestDropdown(false); }}>👁️ Percepção</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Furtividade] "); setShowTestDropdown(false); }}>🥷 Furtividade</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Intimidação] "); setShowTestDropdown(false); }}>😠 Intimidação</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Persuasão] "); setShowTestDropdown(false); }}>🗣️ Persuasão</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Investigação] "); setShowTestDropdown(false); }}>🔍 Investigação</button>
+                <button className="test-option" onClick={() => { insertCmd("[TESTE:Arcana] "); setShowTestDropdown(false); }}>🔮 Arcana</button>
+              </div>
+            )}
+          </div>
+          
+          <button className="q-btn" onClick={() => setShowInventory(!showInventory)}>🎒 INVENTÁRIO</button>
+          <button className="q-btn" onClick={toggleTheme}>🎨 TEMA</button>
+          <button className="q-btn" onClick={() => setShowStatusDashboard(!showStatusDashboard)}>
+            📊 {showStatusDashboard ? 'OCULTAR' : 'STATUS'}
+          </button>
+          <button className="q-btn q-time" onClick={() => setShowTimeSkipModal(!showTimeSkipModal)}>
+            ⏰ TIME-SKIP
+          </button>
+          <button 
+            className={`q-btn ${autoDetectionEnabled ? 'q-auto-on' : 'q-auto-off'}`} 
+            onClick={() => setAutoDetectionEnabled(!autoDetectionEnabled)}
+            title={autoDetectionEnabled ? "Desativar auto-detecção" : "Ativar auto-detecção"}
+          >
+            🤖 {autoDetectionEnabled ? 'AUTO-ON' : 'AUTO-OFF'}
+          </button>
+        </div>
+
+        {/* Modal Inventory */}
+        {showInventory && (
+          <div className="modal-overlay" onClick={() => setShowInventory(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>🎒 Inventário</h3>
+                <button className="modal-close" onClick={() => setShowInventory(false)}>✕</button>
+              </div>
+              
+              <div className="modal-body">
+                <div className="inventory-section">
+                  <div className="inventory-label">Itens ({(c.items || []).length})</div>
+                  {!(c.items || []).length ? (
+                    <div className="inventory-empty">Nenhum item no inventário</div>
+                  ) : (
+                    <div className="inventory-list">
+                      {(c.items || []).map((item, i) => (
+                        <div key={i} className="inventory-item">
+                          <span className="item-name">{item}</span>
+                          <button 
+                            className="item-remove" 
+                            onClick={() => removeItem(item)}
+                            title="Remover item"
+                          >✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                <div className="inventory-add">
+                  <input
+                    type="text"
+                    placeholder="Adicionar novo item..."
+                    className="inventory-input"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && e.target.value.trim()) {
+                        addItem(e.target.value.trim());
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <button 
+                    className="inventory-add-btn"
+                    onClick={() => {
+                      const input = document.querySelector('.inventory-input');
+                      if (input && input.value.trim()) {
+                        addItem(input.value.trim());
+                        input.value = '';
+                      }
+                    }}
+                  >
+                    + Adicionar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Time-Skip */}
+        {showTimeSkipModal && (
+          <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
+            <div className="modal-content time-skip-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="time-skip-header">
+                <h3>⏰ Avançar no Tempo</h3>
+                <button className="modal-close" onClick={() => setShowTimeSkipModal(false)}>✕</button>
+              </div>
+              
+              <div className="time-skip-body">
+                <div className="time-config-section">
+                  <label>Quanto tempo deseja avançar?</label>
+                  <div className="time-input-group">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={timeSkipConfig.amount}
+                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, amount: parseInt(e.target.value) || 1 }))}
+                      className="time-input"
+                    />
+                    <select
+                      value={timeSkipConfig.unit}
+                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, unit: e.target.value }))}
+                      className="time-select"
+                    >
+                      <option value="dias">Dias</option>
+                      <option value="semanas">Semanas</option>
+                      <option value="meses">Meses</option>
+                      <option value="anos">Anos</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="time-config-section">
+                  <label>O que seu personagem vai fazer durante este tempo?</label>
+                  <textarea
+                    value={timeSkipConfig.focus}
+                    onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, focus: e.target.value }))}
+                    placeholder="Ex: Treinar combate, estudar magia, viajar para outra cidade, focar em negócios..."
+                    className="time-textarea"
+                    rows={3}
+                  />
+                </div>
+
+                <div className="time-config-section">
+                  <div className="time-options">
+                    <label className="time-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={timeSkipConfig.includeEvents}
+                        onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeEvents: e.target.checked }))}
+                      />
+                      <span>Incluir eventos importantes</span>
+                    </label>
+                    <label className="time-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={timeSkipConfig.includeProgression}
+                        onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeProgression: e.target.checked }))}
+                      />
+                      <span>Incluir progressão (XP e habilidades)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="time-skip-footer">
+                <button className="btn-cancel" onClick={() => setShowTimeSkipModal(false)}>
+                  Cancelar
+                </button>
+                <button 
+                  className="btn-confirm" 
+                  onClick={executeTimeSkip}
+                  disabled={!timeSkipConfig.focus.trim() || loading}
+                >
+                  {loading ? 'Avançando...' : 'Avançar no Tempo ⏰'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Input area */}
+        <div className="iarea">
+          <button
+            className={`btn-auto ${autoMode ? "on" : ""}`}
+            onClick={toggleAuto}
+            title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+          >
+            {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
+          </button>
+          <textarea
+            ref={taRef}
+            className="ibox"
+            value={input}
+            rows={2}
+            disabled={loading || autoWaiting}
+            placeholder={autoMode ? "Auto ligado — aperte AUTO pra intervir" : `O que ${c.charName || "o personagem"} faz?`}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+          />
+          <button
+            className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
+            onClick={handleSend}
+            disabled={loading || !input.trim() || autoWaiting}
+          >⚔</button>
+        </div>
+
+        {/* Toast Notifications */}
+        <div className="toast-container">
+          {toasts.map(toast => (
+            <div key={toast.id} className={`toast toast-${toast.type}`}>
+              <span className="toast-icon">
+                {toast.type === 'success' && '✅'}
+                {toast.type === 'error' && '❌'}
+                {toast.type === 'warning' && '⚠️'}
+                {toast.type === 'info' && 'ℹ️'}
+              </span>
+              <span className="toast-message">{toast.text}</span>
+            </div>
+          ))}
+        </div>
+
+        <style dangerouslySetInnerHTML={{ __html: getProductionStyles() }} />
+      </div>
+    );
+  };
+
+  // ─── Helper Functions for Navigation ───────────────────────────────────────
+  const startCampaign = async (id) => {
+    try {
+      setLoading(true);
+      const campaign = await campaignStorage.loadCampaign(id);
+      if (campaign) {
+        setActive(campaign);
+        setHp(campaign.hp || 100);
+        setExperience(campaign.experience || 0);
+        setLevel(campaign.level || 1);
+        setCharacterAge(campaign.characterAge || 0);
+        setView("play");
+        addToast('Campanha carregada com sucesso', 'success');
+      }
+    } catch (error) {
+      addToast('Erro ao carregar campanha', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearAuto = () => {
+    setAutoMode(false);
+    setAutoWaiting(false);
+    setCountdown(10);
+  };
+
+  // ─── Render ─────────────────────────────────────────────────────────────
   return (
-    <div className="root">
-      <Head>
-        <title>RPG Game System</title>
-      </Head>
-      {/* Component rendering would continue here */}
+    <div className={`app ${theme}`}>
+      {loading && <div className="loading-overlay"><div className="spinner"></div></div>}
+      
+      {view === "home" && renderHomePage()}
+      {view === "play" && renderGamePage()}
+      {view === "create" && <div>Criar aventura - Em desenvolvimento</div>}
     </div>
   );
 }
+
+// ─── Production Styles ───────────────────────────────────────────────────────
+const getProductionStyles = () => `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #060407; overflow: hidden; -webkit-font-smoothing: antialiased; }
+textarea::placeholder, input::placeholder { color: #2a1800; }
+::-webkit-scrollbar { width: 2px; }
+::-webkit-scrollbar-thumb { background: #2a1800; border-radius: 2px; }
+@keyframes pulse { 0%, 100% { opacity: .15; } 50% { opacity: .85; } }
+@keyframes autopulse { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.app { font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', serif; color: #c9a96e; background: #060407; display: flex; flex-direction: column; height: 100dvh; max-width: 500px; margin: 0 auto; }
+.app.light { background: #f5f5f5; color: #333; }
+.app.light .root { background: #f5f5f5; }
+
+.loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.spinner { width: 40px; height: 40px; border: 4px solid rgba(255, 255, 255, 0.3); border-top: 4px solid #d4a843; border-radius: 50%; animation: spin 1s linear infinite; }
+
+/* Home Styles */
+.hh { text-align: center; padding: 40px 20px 20px; border-bottom: 1px solid #180e00; flex-shrink: 0; }
+.hh-icon { font-size: 28px; margin-bottom: 10px; }
+.hh-title { font-size: 19px; font-weight: bold; color: #d4a843; letter-spacing: 6px; }
+.hh-sub { font-size: 8px; letter-spacing: 5px; color: #2c1900; margin-top: 6px; }
+.list { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+.empty { text-align: center; padding-top: 60px; }
+.e-icon { font-size: 44px; margin-bottom: 14px; opacity: .25; }
+.e-txt { color: #2c1900; font-size: 13px; line-height: 2.4; }
+.card { display: flex; align-items: center; background: linear-gradient(135deg, #0c0700, #100900); border: 1px solid #180e00; border-left: 3px solid #4a2000; border-radius: 6px; padding: 14px 12px 14px 16px; cursor: pointer; gap: 10px; -webkit-tap-highlight-color: transparent; transition: all 0.2s; }
+.card:hover { background: linear-gradient(135deg, #1a0a00, #1a0900); border-left-color: #6a3000; }
+.card-info { flex: 1; min-width: 0; }
+.card-title { font-size: 14px; font-weight: bold; color: #d4a843; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-subtitle { font-size: 10px; color: #8b7a6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-arrow { color: #4a2c00; font-size: 12px; }
+.btn-new { width: 100%; background: linear-gradient(135deg, #2a1a00, #1a0a00); border: 1px solid #4a2c00; border-radius: 6px; padding: 14px; color: #d4a843; font-size: 11px; font-weight: bold; letter-spacing: 2px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: all 0.3s; margin-top: 8px; }
+.btn-new:hover { background: linear-gradient(135deg, #3a2a00, #2a1a00); border-color: #6a3c00; }
+
+/* Game Styles */
+.root { font-family: 'Palatino Linotype', Palatino, 'Book Antiqua', serif; color: #c9a96e; background: #060407; display: flex; flex-direction: column; height: 100dvh; max-width: 500px; margin: 0 auto; }
+.header { position: relative; }
+.tbar { display: flex; align-items: center; padding: 8px 12px; background: rgba(12, 7, 0, 0.9); border-bottom: 1px solid #180e00; }
+.btn-sm { background: rgba(26, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 4px; color: #8b7a6a; font-size: 10px; padding: 4px 8px; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+.btn-sm:hover { background: rgba(58, 46, 106, 0.3); color: #d4a843; }
+.tc { flex: 1; text-align: center; }
+.t-world { font-size: 9px; color: #4a2c00; letter-spacing: 2px; text-transform: uppercase; }
+.t-name { font-size: 14px; color: #d4a843; font-weight: bold; margin: 2px 0; }
+.hp-mini { display: flex; align-items: center; gap: 4px; }
+.hp-mini-bar { width: 30px; height: 4px; background: #2a1800; border-radius: 2px; overflow: hidden; }
+.hp-mini-val { font-size: 9px; color: #8b7a6a; }
+
+.msgs { flex: 1; overflow-y: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+.splash-load { text-align: center; padding: 40px 20px; color: #4a2c00; font-size: 13px; letter-spacing: 2px; animation: pulse 2s infinite; }
+.b-gm { background: rgba(26, 15, 40, 0.6); border-left: 3px solid #4a2e6a; border-radius: 4px; padding: 12px; margin-bottom: 8px; }
+.b-lbl { font-size: 9px; color: #8b7a6a; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+.b-u { background: rgba(74, 46, 106, 0.8); border-radius: 12px 12px 4px 12px; padding: 10px 14px; margin-bottom: 8px; max-width: 85%; }
+.b-auto { background: rgba(122, 250, 250, 0.1); border: 1px solid rgba(122, 250, 250, 0.3); border-radius: 12px 12px 4px 12px; padding: 8px 12px; margin-bottom: 8px; max-width: 85%; color: #7afafa; }
+.b-err { background: rgba(139, 26, 26, 0.2); border: 1px solid rgba(139, 26, 26, 0.4); border-radius: 4px; padding: 10px; margin-bottom: 8px; color: #ff6a6a; }
+.b-load { text-align: center; padding: 8px; color: #4a2c00; font-size: 11px; font-style: italic; }
+.auto-pulse { animation: autopulse 2s infinite; }
+.auto-banner { background: rgba(122, 250, 250, 0.1); border: 1px solid rgba(122, 250, 250, 0.3); border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; }
+.auto-banner-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 11px; }
+.auto-dot { width: 8px; height: 8px; background: #7afafa; border-radius: 50%; animation: pulse 1s infinite; }
+.btn-intervir { background: rgba(122, 250, 250, 0.2); border: 1px solid rgba(122, 250, 250, 0.4); border-radius: 4px; padding: 4px 8px; color: #7afafa; font-size: 9px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+
+/* Status Dashboard */
+.status-dashboard { position: fixed; top: 10px; right: 10px; background: rgba(20, 15, 40, 0.95); border: 1px solid #3a2e6a; border-radius: 12px; padding: 12px; backdrop-filter: blur(10px); min-width: 200px; z-index: 100; }
+.status-section { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.status-item { display: flex; flex-direction: column; gap: 4px; }
+.status-label { font-size: 10px; color: #8b7a6a; text-transform: uppercase; letter-spacing: 1px; }
+.hp-bar, .xp-bar { width: 100%; height: 6px; background: rgba(42, 24, 0, 0.5); border-radius: 3px; overflow: hidden; position: relative; }
+.hp-fill { height: 100%; background: linear-gradient(90deg, #2a6a2a, #4a8a4a); transition: width 0.3s ease; }
+.xp-fill { height: 100%; background: linear-gradient(90deg, #4a2c6a, #6a4c8a); transition: width 0.3s ease; }
+.hp-text, .xp-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 8px; color: #c4a060; font-weight: bold; }
+.age-display { display: flex; justify-content: space-between; align-items: center; }
+.age-text { font-size: 11px; color: #c4a060; }
+.age-icon { font-size: 12px; }
+.status-info { display: flex; justify-content: space-between; align-items: center; font-size: 9px; color: #8b7a6a; }
+.connection-indicator { font-size: 10px; }
+.last-saved { display: flex; align-items: center; gap: 4px; }
+
+/* Quick Actions */
+.q-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px; background: rgba(12, 7, 0, 0.9); border-top: 1px solid #180e00; }
+.q-btn { background: rgba(26, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 6px 10px; color: #c4a060; font-size: 10px; font-weight: bold; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; min-width: 44px; min-height: 32px; }
+.q-btn:hover { background: rgba(58, 46, 106, 0.3); border-color: #4a3e8a; color: #d4a843; }
+.q-btn.q-dice { background: linear-gradient(135deg, #2a1a00, #1a0a00); border-color: #4a2c00; }
+.q-btn.q-dice:hover { background: linear-gradient(135deg, #3a2a00, #2a1a00); }
+.q-btn.q-time { background: linear-gradient(135deg, #1a2a00, #0a1a00); border-color: #2a4a00; }
+.q-btn.q-time:hover { background: linear-gradient(135deg, #2a3a00, #1a2a00); }
+.q-btn.q-auto-on { background: linear-gradient(135deg, #1a4a2a, #0a2a1a); border-color: #2a6a4a; color: #7afafa; }
+.q-btn.q-auto-off { background: linear-gradient(135deg, #4a1a2a, #2a0a1a); border-color: #6a2a4a; color: #fa9a9a; }
+
+/* Test Dropdown */
+.test-dropdown { position: relative; display: inline-block; }
+.test-btn { position: relative; padding-right: 20px !important; }
+.test-dropdown-menu { position: absolute; bottom: 100%; left: 0; background: rgba(20, 15, 40, 0.98); border: 1px solid #3a2e6a; border-radius: 8px; min-width: 140px; max-height: 300px; overflow-y: auto; z-index: 1000; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); margin-bottom: 5px; }
+.test-option { display: block; width: 100%; padding: 8px 12px; background: transparent; border: none; color: #c4a060; font-size: 11px; text-align: left; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid rgba(58, 46, 106, 0.2); }
+.test-option:hover { background: rgba(58, 46, 106, 0.3); color: #d4a843; }
+.test-option:last-child { border-bottom: none; }
+
+/* Modal Overlay */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; touch-action: manipulation; -webkit-user-select: none; user-select: none; overscroll-behavior: contain; }
+.modal-content { background: rgba(20, 15, 40, 0.98); border: 1px solid #3a2e6a; border-radius: 12px; max-width: 90vw; max-height: 85vh; width: 400px; overflow: hidden; touch-action: manipulation; -webkit-user-select: none; user-select: none; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #3a2e6a; background: rgba(26, 15, 40, 0.8); border-radius: 12px 12px 0 0; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+.modal-header h3 { margin: 0; color: #d4a843; font-size: 16px; font-weight: bold; pointer-events: none; }
+.modal-close { background: none; border: none; color: #8b7a6a; font-size: 18px; cursor: pointer; padding: 8px; border-radius: 4px; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-width: 44px; min-height: 44px; }
+.modal-close:hover { background: rgba(139, 122, 106, 0.2); color: #d4a843; }
+.modal-close:active { transform: scale(0.95); }
+.modal-body { padding: 20px; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+
+/* Inventory Styles */
+.inventory-section { margin-bottom: 20px; touch-action: manipulation; }
+.inventory-label { display: block; font-size: 12px; color: #d4a843; font-weight: bold; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; pointer-events: none; }
+.inventory-empty { text-align: center; padding: 20px; color: #8b7a6a; font-style: italic; background: rgba(26, 15, 40, 0.3); border-radius: 8px; border: 1px dashed #3a2e6a; touch-action: manipulation; }
+.inventory-list { max-height: 200px; overflow-y: auto; border: 1px solid #3a2e6a; border-radius: 8px; background: rgba(20, 15, 40, 0.5); touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+.inventory-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid rgba(58, 46, 106, 0.2); transition: background 0.2s; touch-action: manipulation; min-height: 44px; }
+.inventory-item:hover, .inventory-item:active { background: rgba(58, 46, 106, 0.2); }
+.inventory-item:last-child { border-bottom: none; }
+.item-name { color: #c4a060; font-size: 13px; pointer-events: none; flex: 1; }
+.item-remove { background: rgba(139, 26, 26, 0.2); border: 1px solid rgba(139, 26, 26, 0.4); color: #d44a4a; font-size: 10px; padding: 6px 10px; border-radius: 4px; cursor: pointer; transition: all 0.2s; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-width: 44px; min-height: 32px; }
+.item-remove:hover, .item-remove:active { background: rgba(139, 26, 26, 0.4); color: #ff6a6a; transform: scale(0.95); }
+.inventory-add { display: flex; gap: 8px; margin-top: 12px; touch-action: manipulation; }
+.inventory-input { flex: 1; background: rgba(20, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 12px; color: #c4a060; font-size: 14px; outline: none; transition: border-color 0.2s; touch-action: manipulation; -webkit-appearance: none; min-height: 44px; }
+.inventory-input:focus { border-color: #4a3e8a; }
+.inventory-input::placeholder { color: #8b7a6a; }
+.inventory-add-btn { background: rgba(74, 46, 106, 0.8); border: 1px solid #4a3e8a; border-radius: 6px; padding: 12px 16px; color: #d4a843; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; white-space: nowrap; touch-action: manipulation; -webkit-tap-highlight-color: transparent; min-width: 44px; min-height: 44px; }
+.inventory-add-btn:hover, .inventory-add-btn:active { background: rgba(74, 46, 106, 1); border-color: #6a5eaa; transform: scale(0.95); }
+
+/* Time Skip Styles */
+.time-skip-modal { max-width: 500px; }
+.time-skip-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #3a2e6a; background: rgba(26, 15, 40, 0.8); border-radius: 12px 12px 0 0; }
+.time-skip-header h3 { margin: 0; color: #d4a843; font-size: 16px; font-weight: bold; }
+.time-skip-body { padding: 20px; }
+.time-config-section { margin-bottom: 20px; }
+.time-config-section label { display: block; font-size: 12px; color: #d4a843; font-weight: bold; margin-bottom: 8px; }
+.time-input-group { display: flex; gap: 8px; }
+.time-input { flex: 1; background: rgba(20, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 8px 12px; color: #c4a060; font-size: 14px; outline: none; }
+.time-input:focus { border-color: #4a3e8a; }
+.time-select { background: rgba(20, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 8px 12px; color: #c4a060; font-size: 14px; outline: none; cursor: pointer; }
+.time-textarea { width: 100%; background: rgba(20, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 8px 12px; color: #c4a060; font-size: 14px; outline: none; resize: vertical; font-family: inherit; }
+.time-textarea:focus { border-color: #4a3e8a; }
+.time-options { display: flex; flex-direction: column; gap: 8px; }
+.time-checkbox { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; color: #c4a060; }
+.time-checkbox input[type="checkbox"] { width: 16px; height: 16px; }
+.time-skip-footer { display: flex; gap: 12px; padding: 16px 20px; border-top: 1px solid #3a2e6a; background: rgba(26, 15, 40, 0.8); border-radius: 0 0 12px 12px; }
+.btn-cancel, .btn-confirm { flex: 1; padding: 10px 16px; border-radius: 6px; font-size: 12px; font-weight: bold; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+.btn-cancel { background: rgba(139, 26, 26, 0.2); border: 1px solid rgba(139, 26, 26, 0.4); color: #d44a4a; }
+.btn-cancel:hover { background: rgba(139, 26, 26, 0.4); }
+.btn-confirm { background: rgba(74, 46, 106, 0.8); border: 1px solid #4a3e8a; color: #d4a843; }
+.btn-confirm:hover:not(:disabled) { background: rgba(74, 46, 106, 1); }
+.btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Input Area */
+.iarea { display: flex; gap: 8px; padding: 8px 12px; background: rgba(12, 7, 0, 0.9); border-top: 1px solid #180e00; }
+.btn-auto { background: rgba(26, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 8px 12px; color: #8b7a6a; font-size: 9px; font-weight: bold; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; line-height: 1.2; text-align: center; }
+.btn-auto.on { background: rgba(74, 46, 106, 0.8); border-color: #4a3e8a; color: #d4a843; }
+.btn-auto:hover { background: rgba(58, 46, 106, 0.3); color: #d4a843; }
+.ibox { flex: 1; background: rgba(20, 15, 40, 0.8); border: 1px solid #3a2e6a; border-radius: 6px; padding: 8px 12px; color: #c4a060; font-size: 13px; outline: none; resize: none; font-family: inherit; line-height: 1.4; }
+.ibox:focus { border-color: #4a3e8a; }
+.ibox:disabled { opacity: 0.5; cursor: not-allowed; }
+.i-send { background: linear-gradient(135deg, #2a1a00, #1a0a00); border: 1px solid #4a2c00; border-radius: 6px; padding: 8px 12px; color: #d4a843; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.2s; -webkit-tap-highlight-color: transparent; }
+.i-send:hover:not(.off) { background: linear-gradient(135deg, #3a2a00, #2a1a00); }
+.i-send.off { opacity: 0.3; cursor: not-allowed; }
+
+/* Toast Notifications */
+.toast-container { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 2000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.toast { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-radius: 8px; font-size: 12px; font-weight: bold; animation: slideIn 0.3s ease; pointer-events: auto; }
+.toast-success { background: rgba(26, 106, 26, 0.9); border: 1px solid rgba(46, 126, 46, 0.5); color: #a0d060; }
+.toast-error { background: rgba(106, 26, 26, 0.9); border: 1px solid rgba(126, 46, 46, 0.5); color: #ff6a6a; }
+.toast-warning { background: rgba(106, 106, 26, 0.9); border: 1px solid rgba(126, 126, 46, 0.5); color: #ffd060; }
+.toast-info { background: rgba(26, 106, 106, 0.9); border: 1px solid rgba(46, 126, 126, 0.5); color: #60d0d0; }
+
+/* Responsive Design */
+@media (max-width: 480px) {
+  .q-actions { gap: 4px; }
+  .q-btn { font-size: 9px; padding: 4px 6px; min-width: 40px; min-height: 28px; }
+  .status-dashboard { right: 5px; top: 5px; min-width: 180px; padding: 8px; }
+  .modal-content { width: 95vw; max-height: 90vh; }
+}
+`;

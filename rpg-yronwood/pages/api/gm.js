@@ -6,8 +6,7 @@ import { keyManagement } from '../../lib/supabase';
 // O cooldown agora é persistente através do Supabase
 const COOLDOWN_MS = 300_000; // 5 minutos de pausa após rate-limit (otimizado para 7 chaves)
 
-// Índice global para round-robin base
-let keyIndex = 0;
+// Sem índice global - usamos rotação aleatória para evitar cold start
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
@@ -87,25 +86,23 @@ export default async function handler(req, res) {
   const comRotacao = async (body) => {
     const total = indicesParaUsar.length;
 
-    // Ponto de partida: avança o keyIndex global entre chamadas
-    const inicio = keyIndex % total;
+    // Sorteia um ponto de partida para espalhar o peso entre todas as chaves disponíveis!
+    const inicioAleatorio = Math.floor(Math.random() * total);
     let lastErr = null;
 
     for (let tentativa = 0; tentativa < total; tentativa++) {
-      const slot = (inicio + tentativa) % total;
+      const slot = (inicioAleatorio + tentativa) % total;
       const idx = indicesParaUsar[slot];        // índice real na lista original
       const key = todasChaves[idx];
 
       try {
         const texto = await callGemini(key, body);
-        // Sucesso: avança o ponteiro para a próxima chave na próxima chamada
-        keyIndex = (slot + 1) % total;
-        return texto;
+        return texto; // Sucesso absoluto, retorna direto!
       } catch (e) {
         if (e.rateLimited) {
-          // Coloca a chave em cooldown por 1 minuto no Supabase
+          // Agora o upsert do Supabase vai funcionar de verdade
           await keyManagement.addCooldown(idx, COOLDOWN_MS);
-          console.warn(`Chave ${idx + 1} em rate-limit — pausada por 60s (salvo no Supabase).`);
+          console.warn(`Chave ${idx + 1} em rate-limit — pausada por ${COOLDOWN_MS}ms (salvo no Supabase).`);
         } else if (e.name === "AbortError") {
           console.warn(`Chave ${idx + 1} timeout.`);
         } else {
@@ -115,7 +112,7 @@ export default async function handler(req, res) {
       }
     }
 
-    throw lastErr ?? new Error("Todas as chaves falharam.");
+    throw lastErr ?? new Error("Todas as chaves falharam ou estão em cooldown.");
   };
 
   // ══════════════════════════════════════════════════════════════════

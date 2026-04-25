@@ -1617,9 +1617,6 @@ Termine com a situação atual do personagem e o que mudou em sua vida.
       <div className="q-actions">
         <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
         <button className="q-btn" onClick={() => insertCmd("[TESTE:Força] ")}>💪 TESTE</button>
-        <button className="q-btn" onClick={() => insertCmd("[ITEM:Item] ")}>🎒 ITEM</button>
-        <button className="q-btn" onClick={() => insertCmd("[MISSÃO:Nova Missão] ")}>📋 MISSÃO</button>
-        <button className="q-btn" onClick={() => insertCmd("[CONCLUÍDA:Missão] ")}>✓ OK</button>
         <button className="q-btn" onClick={() => setShowInventory(!showInventory)}>🎒 INVENTÁRIO</button>
         <button className="q-btn" onClick={() => setShowCombat(!showCombat)}>⚔️ COMBATE</button>
         <button className="q-btn" onClick={() => setShowCharacterSheet(!showCharacterSheet)}>📜 FICHA</button>

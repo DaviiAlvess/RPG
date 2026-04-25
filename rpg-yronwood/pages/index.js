@@ -2162,6 +2162,39 @@ body.light .btn-export {
   }
 }
 
+/* Modal Overlay - Mobile Optimized */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  overscroll-behavior: contain;
+}
+
+.modal-content {
+  background: rgba(20, 15, 40, 0.98);
+  border: 1px solid #3a2e6a;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 85vh;
+  width: 400px;
+  max-height: 600px;
+  overflow: hidden;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
 /* Test Dropdown */
 .test-dropdown {
   position: relative;
@@ -2220,6 +2253,9 @@ body.light .btn-export {
   border-bottom: 1px solid #3a2e6a;
   background: rgba(26, 15, 40, 0.8);
   border-radius: 12px 12px 0 0;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 .modal-header h3 {
@@ -2227,6 +2263,7 @@ body.light .btn-export {
   color: #d4a843;
   font-size: 16px;
   font-weight: bold;
+  pointer-events: none;
 }
 
 .modal-close {
@@ -2235,9 +2272,13 @@ body.light .btn-export {
   color: #8b7a6a;
   font-size: 18px;
   cursor: pointer;
-  padding: 4px;
+  padding: 8px;
   border-radius: 4px;
   transition: all 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .modal-close:hover {
@@ -2245,13 +2286,21 @@ body.light .btn-export {
   color: #d4a843;
 }
 
+.modal-close:active {
+  transform: scale(0.95);
+}
+
 .modal-body {
   padding: 20px;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Inventory Styles */
 .inventory-section {
   margin-bottom: 20px;
+  touch-action: manipulation;
 }
 
 .inventory-label {
@@ -2262,6 +2311,7 @@ body.light .btn-export {
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  pointer-events: none;
 }
 
 .inventory-empty {
@@ -2272,6 +2322,7 @@ body.light .btn-export {
   background: rgba(26, 15, 40, 0.3);
   border-radius: 8px;
   border: 1px dashed #3a2e6a;
+  touch-action: manipulation;
 }
 
 .inventory-list {
@@ -2280,18 +2331,23 @@ body.light .btn-export {
   border: 1px solid #3a2e6a;
   border-radius: 8px;
   background: rgba(20, 15, 40, 0.5);
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .inventory-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 12px;
   border-bottom: 1px solid rgba(58, 46, 106, 0.2);
   transition: background 0.2s;
+  touch-action: manipulation;
+  min-height: 44px;
 }
 
-.inventory-item:hover {
+.inventory-item:hover,
+.inventory-item:active {
   background: rgba(58, 46, 106, 0.2);
 }
 
@@ -2302,6 +2358,8 @@ body.light .btn-export {
 .item-name {
   color: #c4a060;
   font-size: 13px;
+  pointer-events: none;
+  flex: 1;
 }
 
 .item-remove {
@@ -2309,21 +2367,28 @@ body.light .btn-export {
   border: 1px solid rgba(139, 26, 26, 0.4);
   color: #d44a4a;
   font-size: 10px;
-  padding: 2px 6px;
+  padding: 6px 10px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 44px;
+  min-height: 32px;
 }
 
-.item-remove:hover {
+.item-remove:hover,
+.item-remove:active {
   background: rgba(139, 26, 26, 0.4);
   color: #ff6a6a;
+  transform: scale(0.95);
 }
 
 .inventory-add {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+  touch-action: manipulation;
 }
 
 .inventory-input {
@@ -2331,11 +2396,14 @@ body.light .btn-export {
   background: rgba(20, 15, 40, 0.8);
   border: 1px solid #3a2e6a;
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 12px;
   color: #c4a060;
-  font-size: 12px;
+  font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
+  touch-action: manipulation;
+  -webkit-appearance: none;
+  min-height: 44px;
 }
 
 .inventory-input:focus {
@@ -2350,18 +2418,24 @@ body.light .btn-export {
   background: rgba(74, 46, 106, 0.8);
   border: 1px solid #4a3e8a;
   border-radius: 6px;
-  padding: 8px 12px;
+  padding: 12px 16px;
   color: #d4a843;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 44px;
+  min-height: 44px;
 }
 
-.inventory-add-btn:hover {
+.inventory-add-btn:hover,
+.inventory-add-btn:active {
   background: rgba(74, 46, 106, 1);
   border-color: #6a5eaa;
+  transform: scale(0.95);
 }
 
 /* Status Dashboard */

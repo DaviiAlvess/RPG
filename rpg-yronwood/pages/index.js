@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
-import { campaignStorage } from "../utils/supabase-client";
+import { campaignStorage } from "../lib/supabase";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -530,7 +530,7 @@ export default function RPG() {
 
       sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
     }, autoDelay * 1000);
-  }, [autoDelay]);
+  }, [autoDelay, sendMsg, autoRef, cdRef, timerRef, setAutoWaiting, setCountdown]);
 
   const toggleAuto = () => {
     const next = !autoMode;
@@ -601,7 +601,7 @@ export default function RPG() {
     const camp = { id, ...form, lore, msgs: [], disp: [], img: null, hp: 100, missions: [], saves: [], items: [], relationships: form.relationships || {}, createdAt: Date.now() };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
-    setIdx(next); saveIdx(next); saveCamp(id, camp);
+    setIdx(next); saveIdx(next); await saveCamp(id, camp);
     setActive(camp); setCampLore(lore); setShowChar(false);
     setAutoMode(false); setAutoWaiting(false); setPending([]);
     setLoading(false); doStart(camp, lore);
@@ -728,13 +728,13 @@ export default function RPG() {
     sendMsg(input, msgs, disp, active, campLore, false);
   };
 
-  const resetChat = () => {
+  const resetChat = async () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
     clearAuto(); setAutoMode(false); autoRef.current = false;
     const updated = { ...active, msgs: [], disp: [], img: null, missions: [], items: [], hp: 100 };
     setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
     setMissions([]); setHp(100); setPending([]);
-    saveCamp(active.id, updated); doStart(updated, campLore);
+    await saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
   const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));

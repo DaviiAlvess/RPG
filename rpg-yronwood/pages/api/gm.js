@@ -6,10 +6,9 @@ import { keyManagement } from '../../lib/supabase';
 const TIMEOUT_MS  = 10_000;
 const COOLDOWN_MS = 30_000;
 
-// Modelos ideais por modo:
-// - GM usa 1.5-pro para melhor qualidade narrativa e coerência de longo prazo
-// - Lore usa 2.0-flash porque suporta google_search nativo e é mais preciso em grounding
-const MODELO_GM   = "gemini-1.5-pro";
+// gemini-1.5-pro-latest → nome correto na API v1beta (sem sufixo causa 404)
+// gemini-2.0-flash      → único que suporta { google_search: {} } nativamente
+const MODELO_GM   = "gemini-1.5-pro-latest";
 const MODELO_LORE = "gemini-2.0-flash";
 
 // ── Monta lista de chaves sem duplicatas ───────────────────────────────
@@ -22,10 +21,10 @@ const getTodasChaves = () => {
     process.env.GEMINI_KEY_5,
     process.env.GEMINI_KEY_6,
     process.env.GEMINI_KEY_7,
-    process.env.GEMINI_KEY, // entra como slot próprio
+    process.env.GEMINI_KEY,
   ].filter(Boolean);
 
-  return [...new Set(chaves)]; // remove duplicatas mantendo ordem
+  return [...new Set(chaves)];
 };
 
 export default async function handler(req, res) {
@@ -51,24 +50,18 @@ export default async function handler(req, res) {
 
   console.log(`✅ ${todasChaves.length} chaves Gemini configuradas`);
 
-  // Limpa cooldowns expirados e obtém cooldowns ativos do Supabase
   await keyManagement.cleanupExpiredCooldowns();
   const cooldownsFromDb = await keyManagement.getCooldowns();
 
-  // Remove chaves ainda em cooldown
   const chaves = todasChaves.filter((_, i) => {
     const liberadaEm = cooldownsFromDb[i];
     return !liberadaEm || Date.now() >= liberadaEm;
   });
 
-  // Se TODAS estão em cooldown, usa todas mesmo assim
   const chavesParaUsar = chaves.length > 0 ? chaves : todasChaves;
-
-  // Índice sempre mapeado em relação à lista original
   const indicesParaUsar = chavesParaUsar.map((k) => todasChaves.indexOf(k));
 
   // ── Chamada à API Gemini ───────────────────────────────────────────
-  // modelo é passado por parâmetro para que GM e Lore usem modelos diferentes
   const callGemini = async (key, body, modelo) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -90,27 +83,18 @@ export default async function handler(req, res) {
 
       if (response.status === 429) {
         console.warn("⚠️ Rate limit atingido");
-        throw Object.assign(new Error("Rate limit atingido"), {
-          rateLimited: true,
-          status: 429,
-        });
+        throw Object.assign(new Error("Rate limit atingido"), { rateLimited: true, status: 429 });
       }
 
       if (response.status === 403) {
         console.error("❌ API key inválida ou sem permissão");
-        throw Object.assign(new Error("API key inválida"), {
-          invalidKey: true,
-          status: 403,
-        });
+        throw Object.assign(new Error("API key inválida"), { invalidKey: true, status: 403 });
       }
 
       if (response.status === 400) {
         const errorData = await response.json();
         console.error("❌ Bad Request:", errorData);
-        throw Object.assign(new Error("Requisição inválida"), {
-          badRequest: true,
-          details: errorData,
-        });
+        throw Object.assign(new Error("Requisição inválida"), { badRequest: true, details: errorData });
       }
 
       if (!response.ok) {
@@ -160,8 +144,7 @@ export default async function handler(req, res) {
       const key  = todasChaves[idx];
 
       try {
-        const texto = await callGemini(key, body, modelo);
-        return texto;
+        return await callGemini(key, body, modelo);
       } catch (e) {
         if (e.rateLimited) {
           await keyManagement.addCooldown(idx, COOLDOWN_MS);
@@ -180,7 +163,6 @@ export default async function handler(req, res) {
 
   // ══════════════════════════════════════════════════════════════════
   // MODO: Busca de lore com Google Search grounding
-  // Usa gemini-2.0-flash — único que suporta { google_search: {} } nativamente
   // ══════════════════════════════════════════════════════════════════
   if (useLoreSearch) {
     try {
@@ -211,7 +193,6 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
 
   // ══════════════════════════════════════════════════════════════════
   // MODO: Narração normal do Mestre
-  // Usa gemini-1.5-pro — melhor qualidade narrativa e coerência de longo prazo
   // ══════════════════════════════════════════════════════════════════
   try {
     const contents = messages.map((m) => ({

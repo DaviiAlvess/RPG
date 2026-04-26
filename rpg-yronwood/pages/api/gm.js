@@ -3,12 +3,17 @@
 import { keyManagement } from '../../lib/supabase';
 
 // ── Configurações ──────────────────────────────────────────────────────
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS  = 10_000;
 const COOLDOWN_MS = 30_000;
+
+// Modelos ideais por modo:
+// - GM usa 1.5-pro para melhor qualidade narrativa e coerência de longo prazo
+// - Lore usa 2.0-flash porque suporta google_search nativo e é mais preciso em grounding
+const MODELO_GM   = "gemini-1.5-pro";
+const MODELO_LORE = "gemini-2.0-flash";
 
 // ── Monta lista de chaves sem duplicatas ───────────────────────────────
 const getTodasChaves = () => {
-  // FIX BUG 5: GEMINI_KEY entra separado, sem fallback junto com GEMINI_KEY_1
   const chaves = [
     process.env.GEMINI_KEY_1,
     process.env.GEMINI_KEY_2,
@@ -17,11 +22,10 @@ const getTodasChaves = () => {
     process.env.GEMINI_KEY_5,
     process.env.GEMINI_KEY_6,
     process.env.GEMINI_KEY_7,
-    process.env.GEMINI_KEY, // entra como slot próprio, sem sobrescrever o 1
+    process.env.GEMINI_KEY, // entra como slot próprio
   ].filter(Boolean);
 
-  // Remove duplicatas mantendo a ordem
-  return [...new Set(chaves)];
+  return [...new Set(chaves)]; // remove duplicatas mantendo ordem
 };
 
 export default async function handler(req, res) {
@@ -37,8 +41,7 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Campo obrigatório ausente: world." });
   }
 
-  // ── Carrega chaves disponíveis ─────────────────────────────────────
-  // FIX BUG 4: validateEnvironment agora está inline e de fato executada
+  // ── Carrega e valida chaves ────────────────────────────────────────
   const todasChaves = getTodasChaves();
 
   if (todasChaves.length === 0) {
@@ -61,25 +64,24 @@ export default async function handler(req, res) {
   // Se TODAS estão em cooldown, usa todas mesmo assim
   const chavesParaUsar = chaves.length > 0 ? chaves : todasChaves;
 
-  // FIX BUG 6: índice sempre mapeado em relação à lista original (todasChaves)
+  // Índice sempre mapeado em relação à lista original
   const indicesParaUsar = chavesParaUsar.map((k) => todasChaves.indexOf(k));
 
   // ── Chamada à API Gemini ───────────────────────────────────────────
-  // FIX BUG 1, 2 e 3: callGemini agora usa o body recebido integralmente.
-  // system_instruction, contents, tools e generationConfig chegam à API corretamente.
-  const callGemini = async (key, body) => {
+  // modelo é passado por parâmetro para que GM e Lore usem modelos diferentes
+  const callGemini = async (key, body, modelo) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
     try {
-      console.log(`🔍 Chamando Gemini com chave ${key.substring(0, 10)}...`);
+      console.log(`🔍 Chamando ${modelo} com chave ${key.substring(0, 10)}...`);
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body), // ← usa o body completo passado como parâmetro
+          body: JSON.stringify(body),
           signal: controller.signal,
         }
       );
@@ -147,18 +149,18 @@ export default async function handler(req, res) {
   };
 
   // ── Rotação round-robin com cooldown ──────────────────────────────
-  const comRotacao = async (body) => {
+  const comRotacao = async (body, modelo) => {
     const total = indicesParaUsar.length;
     const inicioAleatorio = Math.floor(Math.random() * total);
     let lastErr = null;
 
     for (let tentativa = 0; tentativa < total; tentativa++) {
       const slot = (inicioAleatorio + tentativa) % total;
-      const idx = indicesParaUsar[slot];
-      const key = todasChaves[idx];
+      const idx  = indicesParaUsar[slot];
+      const key  = todasChaves[idx];
 
       try {
-        const texto = await callGemini(key, body);
+        const texto = await callGemini(key, body, modelo);
         return texto;
       } catch (e) {
         if (e.rateLimited) {
@@ -178,11 +180,10 @@ export default async function handler(req, res) {
 
   // ══════════════════════════════════════════════════════════════════
   // MODO: Busca de lore com Google Search grounding
+  // Usa gemini-2.0-flash — único que suporta { google_search: {} } nativamente
   // ══════════════════════════════════════════════════════════════════
   if (useLoreSearch) {
     try {
-      // FIX BUG 3: loreBody é passado inteiro para callGemini,
-      // incluindo tools: [{ google_search: {} }] e system_instruction
       const loreBody = {
         system_instruction: {
           parts: [{
@@ -196,11 +197,11 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
           role: "user",
           parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}" para uso como base de um RPG de texto. Use fontes atualizadas e precisas.` }],
         }],
-        tools: [{ google_search: {} }],
+        tools: [{ google_search: {} }], // sintaxe correta para gemini-2.0-flash
         generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
       };
 
-      const lore = await comRotacao(loreBody);
+      const lore = await comRotacao(loreBody, MODELO_LORE);
       return res.status(200).json({ lore: lore ?? "" });
     } catch (e) {
       console.error("Erro no lore search:", e.message);
@@ -210,10 +211,9 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
 
   // ══════════════════════════════════════════════════════════════════
   // MODO: Narração normal do Mestre
+  // Usa gemini-1.5-pro — melhor qualidade narrativa e coerência de longo prazo
   // ══════════════════════════════════════════════════════════════════
   try {
-    // FIX BUG 2: contents usa o histórico completo e system_instruction
-    // chega à API via body completo, não mais ignorado
     const contents = messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
@@ -225,7 +225,7 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
       generationConfig: { maxOutputTokens: 8192, temperature: 0.9 },
     };
 
-    const text = await comRotacao(gmBody);
+    const text = await comRotacao(gmBody, MODELO_GM);
     return res.status(200).json({ text });
   } catch (e) {
     console.error("Erro geral:", e.message);

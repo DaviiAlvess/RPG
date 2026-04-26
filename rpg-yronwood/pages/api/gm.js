@@ -4,7 +4,7 @@ import { keyManagement } from '../../lib/supabase';
 
 // ── Cooldown de chaves em rate-limit com Supabase ──────────────────────
 // O cooldown agora é persistente através do Supabase
-const COOLDOWN_MS = 300_000; // 5 minutos de pausa após rate-limit (otimizado para 7 chaves)
+const COOLDOWN_MS = 30_000; // 30 segundos de pausa após rate-limit (otimizado para testes)
 
 // Sem índice global - usamos rotação aleatória para evitar cold start
 
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
 
     try {
       const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

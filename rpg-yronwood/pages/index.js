@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
-import { campaignStorage } from "../lib/supabase";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -272,7 +271,7 @@ export default function RPG() {
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
 
-  // ─── Storage ──────────────────────────────────────────────────────
+  // ─── Storage (100% LocalStorage sem Supabase) ─────────────────────
   const saveIdx = async (l) => {
     try {
       localStorage.setItem(IDX_KEY, JSON.stringify(l));
@@ -283,45 +282,26 @@ export default function RPG() {
 
   const saveCamp = useCallback(async (id, d) => {
     try {
-      await campaignStorage.saveCampaign(d);
+      localStorage.setItem(campKey(id), JSON.stringify(d));
     } catch (error) {
-      console.error('Erro ao salvar no Supabase, usando fallback:', error);
-      try {
-        localStorage.setItem(campKey(id), JSON.stringify(d));
-      } catch (fallbackError) {
-        console.error('Erro no fallback localStorage:', fallbackError);
-      }
+      console.error('Erro ao salvar no localStorage:', error);
     }
   }, []);
 
   const readCamp = async (id) => {
     try {
-      const data = await campaignStorage.loadCampaign(id);
-      if (data) return data;
-    } catch (error) {
-      console.error('Erro ao carregar do Supabase, usando fallback:', error);
-    }
-    try {
       return JSON.parse(localStorage.getItem(campKey(id)));
     } catch (error) {
-      console.error('Erro no fallback localStorage:', error);
+      console.error('Erro ao ler localStorage:', error);
       return null;
     }
   };
 
   const loadIdx = async () => {
     try {
-      const campaigns = await campaignStorage.listCampaigns();
-      if (campaigns.length > 0) {
-        return campaigns;
-      }
-    } catch (error) {
-      console.error('Erro ao carregar índice do Supabase, usando fallback:', error);
-    }
-    try {
       return JSON.parse(localStorage.getItem(IDX_KEY) || "[]");
     } catch (error) {
-      console.error('Erro no fallback localStorage:', error);
+      console.error('Erro ao carregar índice:', error);
       return [];
     }
   };
@@ -568,11 +548,6 @@ export default function RPG() {
   const delCamp = async (id, e) => {
     e.stopPropagation();
     if (!confirm("Apagar esta campanha permanentemente?")) return;
-    try {
-      await campaignStorage.deleteCampaign(id);
-    } catch (err) {
-      console.error('Erro ao deletar do Supabase:', err);
-    }
     const next = idx.filter((c) => c.id !== id);
     setIdx(next);
     saveIdx(next);
@@ -755,7 +730,6 @@ export default function RPG() {
     }
   }, [active, saveCamp, showNotification]);
 
-  // ✅ FIX: recebe índice numérico, não string
   const removeItem = useCallback(async (index) => {
     if (!active || index < 0 || index >= (active.items || []).length) return;
     try {
@@ -847,7 +821,6 @@ export default function RPG() {
     };
   }, []);
 
-  // ✅ FIX: quickSave adicionado às dependências
   useEffect(() => {
     if (!autoSaveEnabled || !active) return;
     const interval = setInterval(() => { quickSave(); }, 60000);
@@ -1101,7 +1074,6 @@ export default function RPG() {
     <div className="root">
       <Head><title>{c.charName} — {c.world}</title></Head>
 
-      {/* ✅ FIX: header agora tem a tag de fechamento </div> correta */}
       <div className="header">
         {c.useImages && sceneImg && (
           <div className="si-wrap">
@@ -1123,7 +1095,6 @@ export default function RPG() {
           </div>
         </div>
       </div>
-      {/* ↑ header fechado aqui — estava faltando no código original */}
 
       {/* Mensagens */}
       <div className="msgs">
@@ -1261,7 +1232,6 @@ export default function RPG() {
                   <div className="inventory-empty">Nenhum item no inventário</div>
                 ) : (
                   <div className="inventory-list">
-                    {/* ✅ FIX: removeItem(i) com índice numérico, não removeItem(item) */}
                     {(c.items || []).map((item, i) => (
                       <div key={i} className="inventory-item">
                         <span className="item-name">{item}</span>
@@ -1658,3 +1628,5 @@ const TIME_SKIP_ST = `
 .btn-confirm:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:768px){.time-skip-modal{width:95%;max-width:none}.time-input-group{flex-direction:column;align-items:stretch}.time-input{flex:1}.time-skip-footer{flex-direction:column}.btn-cancel,.btn-confirm{width:100%}}
 `;
+
+```

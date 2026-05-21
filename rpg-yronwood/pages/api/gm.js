@@ -1,27 +1,25 @@
 // pages/api/gm.js
 
-import { keyManagement } from '../../lib/supabase';
-
 // ── Configurações ──────────────────────────────────────────────────────
-const TIMEOUT_MS  = 10_000;
-const COOLDOWN_MS = 30_000;
+const TIMEOUT_MS  = 15_000;
 
-// gemini-1.5-pro-latest → nome correto na API v1beta (sem sufixo causa 404)
-// gemini-2.0-flash      → único que suporta { google_search: {} } nativamente
+// gemini-1.5-pro-latest → nome correto na API v1beta
+// gemini-2.0-flash      → suporte a google_search
 const MODELO_GM   = "gemini-1.5-pro-latest";
 const MODELO_LORE = "gemini-2.0-flash";
 
 // ── Monta lista de chaves sem duplicatas ───────────────────────────────
 const getTodasChaves = () => {
+  // Busca tanto GEMINI_KEY quanto GEMINI_API_KEY para garantir compatibilidade
   const chaves = [
-    process.env.GEMINI_KEY_1,
-    process.env.GEMINI_KEY_2,
-    process.env.GEMINI_KEY_3,
-    process.env.GEMINI_KEY_4,
-    process.env.GEMINI_KEY_5,
-    process.env.GEMINI_KEY_6,
-    process.env.GEMINI_KEY_7,
-    process.env.GEMINI_KEY,
+    process.env.GEMINI_KEY_1, process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_KEY_2, process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_KEY_3, process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_KEY_4, process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_KEY_5, process.env.GEMINI_API_KEY_5,
+    process.env.GEMINI_KEY_6, process.env.GEMINI_API_KEY_6,
+    process.env.GEMINI_KEY_7, process.env.GEMINI_API_KEY_7,
+    process.env.GEMINI_KEY,   process.env.GEMINI_API_KEY,
   ].filter(Boolean);
 
   return [...new Set(chaves)];
@@ -41,124 +39,72 @@ export default async function handler(req, res) {
   }
 
   // ── Carrega e valida chaves ────────────────────────────────────────
-  const todasChaves = getTodasChaves();
+  const chaves = getTodasChaves();
 
-  if (todasChaves.length === 0) {
+  if (chaves.length === 0) {
     console.error('❌ Nenhuma API key Gemini configurada');
     return res.status(500).json({ error: "Nenhuma chave de API configurada." });
   }
 
-  console.log(`✅ ${todasChaves.length} chaves Gemini configuradas`);
-
-  await keyManagement.cleanupExpiredCooldowns();
-  const cooldownsFromDb = await keyManagement.getCooldowns();
-
-  const chaves = todasChaves.filter((_, i) => {
-    const liberadaEm = cooldownsFromDb[i];
-    return !liberadaEm || Date.now() >= liberadaEm;
-  });
-
-  const chavesParaUsar = chaves.length > 0 ? chaves : todasChaves;
-  const indicesParaUsar = chavesParaUsar.map((k) => todasChaves.indexOf(k));
-
-  // ── Chamada à API Gemini ───────────────────────────────────────────
-  const callGemini = async (key, body, modelo) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
-    try {
-      console.log(`🔍 Chamando ${modelo} com chave ${key.substring(0, 10)}...`);
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        }
-      );
-
-      console.log(`📊 Status HTTP: ${response.status}`);
-
-      if (response.status === 429) {
-        console.warn("⚠️ Rate limit atingido");
-        throw Object.assign(new Error("Rate limit atingido"), { rateLimited: true, status: 429 });
-      }
-
-      if (response.status === 403) {
-        console.error("❌ API key inválida ou sem permissão");
-        throw Object.assign(new Error("API key inválida"), { invalidKey: true, status: 403 });
-      }
-
-      if (response.status === 400) {
-        const errorData = await response.json();
-        console.error("❌ Bad Request:", errorData);
-        throw Object.assign(new Error("Requisição inválida"), { badRequest: true, details: errorData });
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ Erro HTTP ${response.status}:`, errorText);
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-
-      if (data.error) {
-        console.error("❌ Erro da API:", data.error);
-        throw new Error(`API error ${data.error.code}: ${data.error.message}`);
-      }
-
-      if (!data.candidates?.[0]) {
-        console.error("❌ Resposta vazia do Gemini");
-        throw new Error("Resposta vazia do Gemini");
-      }
-
-      const text = data.candidates[0].content.parts[0].text;
-      console.log(`✅ Resposta recebida: ${text.length} caracteres`);
-
-      return text;
-
-    } catch (error) {
-      if (error.name === "AbortError") {
-        console.error("❌ Timeout da requisição");
-        throw new Error("Timeout da requisição");
-      }
-      console.error("❌ Erro na chamada:", error.message);
-      throw error;
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  // ── Rotação round-robin com cooldown ──────────────────────────────
+  // ── Rotação round-robin simplificada (Inspirada no RPG_TOP) ───────
   const comRotacao = async (body, modelo) => {
-    const total = indicesParaUsar.length;
-    const inicioAleatorio = Math.floor(Math.random() * total);
+    // Embaralha as chaves para distribuir a carga
+    const shuffled = [...chaves].sort(() => Math.random() - 0.5);
     let lastErr = null;
 
-    for (let tentativa = 0; tentativa < total; tentativa++) {
-      const slot = (inicioAleatorio + tentativa) % total;
-      const idx  = indicesParaUsar[slot];
-      const key  = todasChaves[idx];
+    for (const key of shuffled) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       try {
-        return await callGemini(key, body, modelo);
-      } catch (e) {
-        if (e.rateLimited) {
-          await keyManagement.addCooldown(idx, COOLDOWN_MS);
-          console.warn(`Chave ${idx + 1} em rate-limit — pausada por ${COOLDOWN_MS}ms.`);
-        } else if (e.name === "AbortError") {
-          console.warn(`Chave ${idx + 1} timeout.`);
-        } else {
-          console.warn(`Chave ${idx + 1} erro: ${e.message}`);
+        console.log(`🔍 Chamando ${modelo} com chave ${key.substring(0, 10)}...`);
+
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          }
+        );
+
+        clearTimeout(timer);
+
+        if (response.status === 429 || response.status === 503) {
+          console.warn(`⚠️ Rate limit ou indisponibilidade na chave, tentando a próxima...`);
+          lastErr = new Error(`Erro ${response.status}: Rate limit/Indisponibilidade`);
+          continue; // Pula para a próxima chave
         }
-        lastErr = e;
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`❌ Erro HTTP ${response.status}:`, errorText);
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(`API error ${data.error.code}: ${data.error.message}`);
+        }
+
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          throw new Error("Resposta vazia do Gemini");
+        }
+
+        return text;
+
+      } catch (error) {
+        clearTimeout(timer);
+        lastErr = error;
+        // Em caso de erro de timeout ou outro erro, o loop continua e tenta a próxima chave
+        console.warn(`⚠️ Falha na chamada: ${error.message}. Tentando próxima chave...`);
       }
     }
 
-    throw lastErr ?? new Error("Todas as chaves falharam ou estão em cooldown.");
+    throw lastErr ?? new Error("Todas as chaves falharam ou estão em rate limit.");
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -179,7 +125,7 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
           role: "user",
           parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}" para uso como base de um RPG de texto. Use fontes atualizadas e precisas.` }],
         }],
-        tools: [{ google_search: {} }], // sintaxe correta para gemini-2.0-flash
+        tools: [{ google_search: {} }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
       };
 

@@ -1,16 +1,23 @@
 // pages/api/gm.js
 
 // ── Configurações ──────────────────────────────────────────────────────
-const TIMEOUT_MS  = 15_000;
+const TIMEOUT_MS  = 30_000; // Aumentado para 30 segundos para evitar cortes
 
-// gemini-1.5-pro-latest → nome correto na API v1beta
-// gemini-2.0-flash      → suporte a google_search
-const MODELO_GM   = "gemini-1.5-pro-latest";
+// Vamos usar o modelo Flash, que é muito mais rápido e estável para RPG
+const MODELO_GM   = "gemini-2.0-flash";
 const MODELO_LORE = "gemini-2.0-flash";
 
-// ── Monta lista de chaves sem duplicatas ───────────────────────────────
-const getTodasChaves = () => {
-  // Busca tanto GEMINI_KEY quanto GEMINI_API_KEY para garantir compatibilidade
+export default async function handler(req, res) {
+  if (req.method !== "POST") return res.status(405).end();
+
+  const { messages, systemPrompt, useLoreSearch, world } = req.body ?? {};
+
+  // ── Validação básica ───────────────────────────────────────────────
+  if (!useLoreSearch && (!Array.isArray(messages) || !systemPrompt)) {
+    return res.status(400).json({ error: "Campos obrigatórios ausentes: messages, systemPrompt." });
+  }
+
+  // ── Carrega e valida chaves ────────────────────────────────────────
   const chaves = [
     process.env.GEMINI_KEY_1, process.env.GEMINI_API_KEY_1,
     process.env.GEMINI_KEY_2, process.env.GEMINI_API_KEY_2,
@@ -22,34 +29,17 @@ const getTodasChaves = () => {
     process.env.GEMINI_KEY,   process.env.GEMINI_API_KEY,
   ].filter(Boolean);
 
-  return [...new Set(chaves)];
-};
+  const chavesUnicas = [...new Set(chaves)];
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
-
-  const { messages, systemPrompt, useLoreSearch, world } = req.body ?? {};
-
-  // ── Validação básica ───────────────────────────────────────────────
-  if (!useLoreSearch && (!Array.isArray(messages) || !systemPrompt)) {
-    return res.status(400).json({ error: "Campos obrigatórios ausentes: messages, systemPrompt." });
-  }
-  if (useLoreSearch && !world) {
-    return res.status(400).json({ error: "Campo obrigatório ausente: world." });
-  }
-
-  // ── Carrega e valida chaves ────────────────────────────────────────
-  const chaves = getTodasChaves();
-
-  if (chaves.length === 0) {
-    console.error('❌ Nenhuma API key Gemini configurada');
+  if (chavesUnicas.length === 0) {
+    console.error('❌ Nenhuma API key Gemini configurada no servidor.');
     return res.status(500).json({ error: "Nenhuma chave de API configurada." });
   }
 
-  // ── Rotação round-robin simplificada (Inspirada no RPG_TOP) ───────
+  // ── Rotação round-robin igual ao RPG_TOP ────────────────────────────
   const comRotacao = async (body, modelo) => {
-    // Embaralha as chaves para distribuir a carga
-    const shuffled = [...chaves].sort(() => Math.random() - 0.5);
+    // Embaralha as chaves para distribuir a carga (evita usar sempre a mesma)
+    const shuffled = [...chavesUnicas].sort(() => Math.random() - 0.5);
     let lastErr = null;
 
     for (const key of shuffled) {
@@ -57,7 +47,7 @@ export default async function handler(req, res) {
       const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       try {
-        console.log(`🔍 Chamando ${modelo} com chave ${key.substring(0, 10)}...`);
+        console.log(`🔍 A chamar modelo ${modelo} com chave terminada em ...${key.slice(-4)}`);
 
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
@@ -71,59 +61,54 @@ export default async function handler(req, res) {
 
         clearTimeout(timer);
 
+        const data = await response.json();
+
+        // Se for limite de uso (429) ou erro interno do Google (503), pula para a próxima chave
         if (response.status === 429 || response.status === 503) {
-          console.warn(`⚠️ Rate limit ou indisponibilidade na chave, tentando a próxima...`);
-          lastErr = new Error(`Erro ${response.status}: Rate limit/Indisponibilidade`);
-          continue; // Pula para a próxima chave
+          console.warn(`⚠️ Rate limit ou erro 503 na chave. A tentar a próxima...`);
+          lastErr = new Error(`HTTP ${response.status}`);
+          continue; 
         }
 
         if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`❌ Erro HTTP ${response.status}:`, errorText);
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+          console.error(`❌ Erro HTTP ${response.status}:`, data);
+          // Em caso de chave inválida ou erro no prompt, regista o erro mas tenta a próxima
+          lastErr = new Error(`HTTP ${response.status}: ${data?.error?.message || "Erro desconhecido"}`);
+          continue;
         }
 
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(`API error ${data.error.code}: ${data.error.message}`);
-        }
-
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) {
-          throw new Error("Resposta vazia do Gemini");
+          throw new Error("Resposta vazia da API Gemini");
         }
 
+        console.log("✅ Resposta recebida com sucesso!");
         return text;
 
       } catch (error) {
         clearTimeout(timer);
         lastErr = error;
-        // Em caso de erro de timeout ou outro erro, o loop continua e tenta a próxima chave
-        console.warn(`⚠️ Falha na chamada: ${error.message}. Tentando próxima chave...`);
+        console.warn(`⚠️ Falha na requisição: ${error.message}. A tentar próxima chave...`);
       }
     }
 
-    throw lastErr ?? new Error("Todas as chaves falharam ou estão em rate limit.");
+    throw lastErr ?? new Error("Todas as chaves falharam.");
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // MODO: Busca de lore com Google Search grounding
+  // MODO: Busca de lore com Google Search
   // ══════════════════════════════════════════════════════════════════
   if (useLoreSearch) {
     try {
       const loreBody = {
         system_instruction: {
           parts: [{
-            text: `Você é um pesquisador especialista em lore de animes, mangás, jogos, livros e universos fictícios.
-Sua tarefa: pesquisar e resumir as informações essenciais de um universo para uso em RPG de texto.
-Responda SOMENTE com o resumo em português brasileiro, sem introduções, sem markdown, sem títulos.
-Inclua obrigatoriamente: período/era, facções e organizações, personagens icônicos com suas habilidades, sistema de poderes/magia, conflitos centrais, locais importantes, regras e leis do universo.`,
+            text: `Você é um pesquisador especialista em lore. Resuma as informações essenciais do universo solicitado para RPG. Responda APENAS com o resumo em português brasileiro.`,
           }],
         },
         contents: [{
           role: "user",
-          parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}" para uso como base de um RPG de texto. Use fontes atualizadas e precisas.` }],
+          parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}".` }],
         }],
         tools: [{ google_search: {} }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
@@ -132,8 +117,8 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
       const lore = await comRotacao(loreBody, MODELO_LORE);
       return res.status(200).json({ lore: lore ?? "" });
     } catch (e) {
-      console.error("Erro no lore search:", e.message);
-      return res.status(200).json({ lore: "" });
+      console.error("❌ Erro no lore search:", e.message);
+      return res.status(200).json({ lore: "" }); // Retorna vazio para não bloquear a criação
     }
   }
 
@@ -149,13 +134,13 @@ Inclua obrigatoriamente: período/era, facções e organizações, personagens i
     const gmBody = {
       system_instruction: { parts: [{ text: systemPrompt }] },
       contents,
-      generationConfig: { maxOutputTokens: 8192, temperature: 0.9 },
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.9 }, // 2048 é mais seguro para respostas rápidas
     };
 
     const text = await comRotacao(gmBody, MODELO_GM);
     return res.status(200).json({ text });
   } catch (e) {
-    console.error("Erro geral:", e.message);
+    console.error("❌ Erro final:", e.message);
     return res.status(500).json({ error: e.message });
   }
 }

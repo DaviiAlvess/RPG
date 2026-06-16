@@ -95,7 +95,7 @@ export default async function handler(req, res) {
       const loreBody = {
         system_instruction: {
           parts: [{
-            text: "Você é um pesquisador especialista em lore. Resuma as informações essenciais do universo solicitado para RPG. Responda APENAS com o resumo em português brasileiro.",
+            text: "Você é um pesquisador especialista em lore. Resuma APENAS fatos canônicos e estabelecidos do universo solicitado para RPG. Não invente eventos, personagens ou regras. Responda APENAS com o resumo em português brasileiro.",
           }],
         },
         contents: [{

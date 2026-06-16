@@ -100,6 +100,7 @@ const PRESET = {
   charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
   appearance: { body: "Atlético", height: "Alto", skin: "Morena", hairLen: "Curto", hairColor: "Preto", hairStyle: "Liso", eyeColor: "Castanhos", eyeShape: "Amendoados", face: "Quadrada", extras: "Cicatriz" },
   useImages: true,
+  gameStyle: "aventura",
   relationships: {
     "Tywin Lannister": "Hostil",
     "Oberyn Martell": "Neutral",
@@ -108,25 +109,81 @@ const PRESET = {
   },
 };
 
+// ─── Estilos de jogo ──────────────────────────────────────────────────
+const GAME_STYLES = {
+  aventura: {
+    label: "Aventura",
+    desc: "Narrativa lenta, exploração, mistério e diálogo.",
+    icon: "📖",
+  },
+  acao: {
+    label: "Ação",
+    desc: "Ritmo rápido, combates frequentes, cenas curtas e intensas.",
+    icon: "⚔️",
+  },
+};
+
 // ─── System prompt ────────────────────────────────────────────────────
-const buildPrompt = (c, loreExtra) =>
-  [
+const buildPrompt = (c, loreExtra) => {
+  const style = GAME_STYLES[c.gameStyle] ? c.gameStyle : "aventura";
+  const lines = [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
+    `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
     loreExtra
-      ? `LORE OFICIAL DO UNIVERSO:\n${loreExtra}`
+      ? `LORE OFICIAL DO UNIVERSO (FONTE CANÔNICA — NÃO CONTRADIGA):\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
     ``,
-    `O jogador controla: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}.`,
-    c.charAge         ? `Idade: ${c.charAge} anos.`             : "",
-    c.charBg          ? `História: ${c.charBg}`                 : "",
-    c.charPersonality ? `Personalidade: ${c.charPersonality}`   : "",
-    c.charSkills      ? `Habilidades: ${c.charSkills}`          : "",
-    c.appearance      ? buildAppearance(c.appearance)           : "",
+    `PERSONAGEM DO JOGADOR (referência interna — não repita o nome em excesso na narração):`,
+    `- Nome: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}`,
+    c.charAge         ? `- Idade: ${c.charAge} anos`             : "",
+    c.charBg          ? `- História: ${c.charBg}`                 : "",
+    c.charPersonality ? `- Personalidade: ${c.charPersonality}`   : "",
+    c.charSkills      ? `- Habilidades: ${c.charSkills}`          : "",
+    c.appearance      ? `- ${buildAppearance(c.appearance)}`      : "",
     ``,
     `══════════════════════════════════════════`,
     `FILOSOFIA DE NARRAÇÃO — LEIA COM ATENÇÃO:`,
     `══════════════════════════════════════════`,
     ``,
+    `REGRA 0 — NÃO REPITA O NOME DO PERSONAGEM.`,
+    `Use o nome "${c.charName}" no máximo UMA vez por resposta, e só se for indispensável. Nas demais vezes use "você" na segunda pessoa. Nunca escreva frases como "${c.charName} olha para ${c.charName}" ou repita o nome em parágrafos seguidos. O jogador já sabe quem é o personagem.`,
+    ``,
+  ];
+
+  if (c.isKnownIP) {
+    lines.push(
+      `REGRA 0B — FIDELIDADE AO CANON (UNIVERSO EXISTENTE).`,
+      `Este é um universo com lore oficial. Você DEVE:`,
+      `- Respeitar personagens, poderes, facções e eventos já estabelecidos no lore acima.`,
+      `- NÃO inventar personagens famosos mortos/vivos fora da época, nem mudar o destino de figuras canônicas sem o jogador causar isso.`,
+      `- NÃO criar poderes, tecnologias ou regras que não existem no universo original.`,
+      `- Se não souber algo do canon, improvise NPCs genéricos locais — nunca canon inventado.`,
+      `- Manter o tom e a lógica do universo "${c.world}".`,
+      ``,
+    );
+  }
+
+  if (style === "acao") {
+    lines.push(
+      `MODO AÇÃO — RITMO ACELERADO:`,
+      `- Parágrafos curtos (2-4 frases). Cenas dinâmicas.`,
+      `- Combate e perigo físico são frequentes. Descreva golpes, esquivas, impactos.`,
+      `- Use [TESTE:Atributo] com mais frequência em confrontos.`,
+      `- Menos contemplação, mais consequência imediata. O mundo reage rápido.`,
+      `- Tensão constante — algo pode dar errado a qualquer momento.`,
+      ``,
+    );
+  } else {
+    lines.push(
+      `MODO AVENTURA — RITMO NARRATIVO:`,
+      `- Explore o mundo, mistérios e personagens com calma.`,
+      `- Diálogos e descobertas têm peso. Nem toda cena precisa de combate.`,
+      `- Deixe o jogador investigar, negociar e observar.`,
+      ``,
+    );
+  }
+
+  lines.push(
     `REGRA 1 — MENOS É MAIS.`,
     `Descreva a cena com apenas 2 ou 3 elementos concretos e sensoriais. Não explique tudo. Deixe lacunas. O jogador deve sentir que há mais para descobrir se explorar, perguntar e agir. Brevidade com precisão é mais poderosa que abundância vaga. Parágrafos curtos. Frases que cortam.`,
     ``,
@@ -134,13 +191,13 @@ const buildPrompt = (c, loreExtra) =>
     `A cada cena, inclua pelo menos um detalhe sonoro, um tátil ou térmico, e um olfativo. O cheiro de sangue seco numa sala de audiências. O calor da tocha que não aquece. O rangido que vem de um corredor vazio. Sons, texturas e cheiros criam presença real. Imagens sozinhas são decoração.`,
     ``,
     `REGRA 3 — NUNCA DIGA O QUE O PERSONAGEM SENTE.`,
-    `Você narra o mundo, não a alma de ${c.charName}. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Isso é papel do jogador. Descreva o que o mundo faz que poderia provocar uma reação: "O mensageiro não te olha nos olhos." "A criança para de chorar quando você entra." Pergunte diretamente quando necessário: "Como ${c.charName} reage?"`,
+    `Você narra o mundo, não a alma do jogador. Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Descreva o que o mundo faz que poderia provocar uma reação. Pergunte quando necessário: "Como você reage?"`,
     ``,
     `REGRA 4 — NPCs TÊM VIDA PRÓPRIA, VOZ PRÓPRIA, AGENDA PRÓPRIA.`,
-    `Cada NPC quer algo específico. Eles mentem, omitem, têm pressa, guardam rancor. Mas além disso: cada um fala diferente. Um soldado veterano usa frases curtas, quase ordens. Uma velha curandeira fala em meias-verdades e provérbios. Um nobre ansioso ri alto demais. Um jovem guarda gagueja quando nervoso. Essas marcas custam uma linha e transformam papelão em gente. Mostre o que eles fazem enquanto falam — o ferreiro que não para de trabalhar, o mercador que recolhe a mercadoria quando vê ${c.charName} chegar. Ação revela mais que palavra.`,
+    `Cada NPC quer algo específico. Eles mentem, omitem, têm pressa, guardam rancor. Cada um fala diferente — soldado usa frases curtas, curandeira fala em provérbios, nobre ri alto demais. Mostre o que fazem enquanto falam.`,
     ``,
     `REGRA 5 — AÇÕES TÊM PESO E O MUNDO PUNE DESCUIDO.`,
-    `Decisões importam. Se ${c.charName} age com descuido, o mundo responde: um aliado desaparece, uma porta fecha, uma oportunidade some sem aviso. Não avise antes. Não dê segunda chance automaticamente. O mundo é indiferente à sorte do jogador — e isso torna as vitórias reais e os erros dolorosos.`,
+    `Decisões importam. Descuido gera consequência: aliado some, porta fecha, oportunidade se perde. Não avise antes. O mundo é indiferente — vitórias e erros devem pesar.`,
     ``,
     `REGRA 6 — CADA CENA TEM UM CONFLITO, MESMO PEQUENO.`,
     `Não existe cena neutra. Uma conversa simples tem tensão embaixo: alguém quer algo que o outro não quer dar, alguém sabe algo que esconde, alguém tem pressa enquanto o outro quer demorar. Identifique o conflito de cada cena — mesmo que minúsculo — e deixe ele respirar. Subtexto é o que faz uma cena viver depois que o jogador fecha o jogo.`,
@@ -158,7 +215,7 @@ const buildPrompt = (c, loreExtra) =>
     `As regras, a magia, a política e a física de ${c.world} existem e têm peso. Não quebre o lore por conveniência narrativa.`,
     ``,
     `REGRA 11 — MISSÕES E OBJETIVOS.`,
-    `Quando surgir um objetivo claro para ${c.charName} — uma tarefa, um pedido, uma promessa, uma obrigação importante — inclua ao final da narração, na última linha: [MISSÃO: descrição em 1 linha]. Quando ${c.charName} cumprir um objetivo: [CONCLUÍDA: descrição em 1 linha]. Use com parcimônia — só para objetivos reais, não para cada ação pequena.`,
+    `Quando surgir um objetivo claro — tarefa, pedido, promessa — inclua na última linha: [MISSÃO: descrição em 1 linha]. Ao cumprir: [CONCLUÍDA: descrição]. Use com parcimônia.`,
     ``,
     c.useImages
       ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
@@ -171,16 +228,18 @@ const buildPrompt = (c, loreExtra) =>
     Nunca diga o resultado do dado — deixe o jogador interpretá-lo. Apenas narre a consequência no contexto da cena.`,
     ``,
     `REGRA 13 — RELACIONAMENTOS E FACÇÕES.`,
-    `Mantenha um registro oculto da atitude dos NPCs em relação a ${c.charName}:
-    ${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("\n    ")}
-    Sempre que o jogador agir de forma rude, agressiva ou desrespeitosa com um NPC, mude permanentemente a atitude para "Hostil" ou "Suspeito".
-    Se o jogador for gentil, justo ou útil, mude para "Amigável" ou "Neutral".
-    Nunca explique a mudança de atitude ao jogador — apenas ajuste o tom da resposta do NPC.`,
-  ].filter(Boolean).join("\n");
+    `Atitudes dos NPCs em relação ao jogador:`,
+    `${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("\n") || "- (nenhum definido ainda)"}`,
+    `Ações rudes mudam para Hostil/Suspeito. Gentileza muda para Amigável/Neutral. Nunca explique a mudança — apenas ajuste o tom.`,
+  );
+
+  return lines.filter(Boolean).join("\n");
+};
 
 // ─── Storage ──────────────────────────────────────────────────────────
 const IDX_KEY = "rpg-idx-v3";
 const campKey = (id) => `rpg-camp-${id}`;
+const idxKeyForUser = (userId) => (userId ? `rpg-idx-${userId}` : IDX_KEY);
 
 // ═════════════════════════════════════════════════════════════════════
 export default function RPG() {
@@ -193,6 +252,7 @@ export default function RPG() {
     charName: "", charTitle: "", charAge: "",
     charBg: "", charPersonality: "", charSkills: "",
     appearance: { ...DEFAULT_APP }, useImages: true,
+    gameStyle: "aventura",
   });
 
   // Play
@@ -235,7 +295,8 @@ export default function RPG() {
   const [lastRoll, setLastRoll] = useState(null);
   const [showRollButton, setShowRollButton] = useState(false);
   const [pendingTest, setPendingTest] = useState(null);
-  const [showStatusDashboard, setShowStatusDashboard] = useState(true);
+  const [showStatusDashboard, setShowStatusDashboard] = useState(false);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('online');
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [lastSaved, setLastSaved] = useState(null);
@@ -253,6 +314,14 @@ export default function RPG() {
   const [campaignStartTime, setCampaignStartTime] = useState(Date.now());
   const [showTestDropdown, setShowTestDropdown] = useState(false);
 
+  // Conta / login
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+  const [authTab, setAuthTab] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
   const sending   = useRef(false);
@@ -260,47 +329,147 @@ export default function RPG() {
   const timerRef  = useRef(null);
   const cdRef     = useRef(null);
   const sendMsgRef = useRef(null);
+  const authTokenRef = useRef(null);
+
+  const apiFetch = useCallback((url, options = {}) => {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    if (authTokenRef.current) {
+      headers.Authorization = `Bearer ${authTokenRef.current}`;
+    }
+    return fetch(url, { ...options, headers });
+  }, []);
+
+  const reloadCampaigns = useCallback(async (userId) => {
+    try {
+      const res = await apiFetch("/api/campaign");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          localStorage.setItem(idxKeyForUser(userId), JSON.stringify(data));
+          setIdx(data);
+          return;
+        }
+      }
+    } catch {}
+    try {
+      const local = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
+      setIdx(local);
+    } catch {
+      setIdx([]);
+    }
+  }, [apiFetch]);
 
   useEffect(() => {
-    const loadInitialData = async () => {
-      const campaigns = await loadIdx();
-      setIdx(campaigns);
+    let subscription = null;
+
+    const initAuth = async () => {
+      try {
+        const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+        const sb = getSupabaseBrowser();
+        if (!sb) {
+          setAuthReady(true);
+          return;
+        }
+
+        const { data: { session } } = await sb.auth.getSession();
+        authTokenRef.current = session?.access_token ?? null;
+        setUser(session?.user ?? null);
+
+        const { data: { subscription: sub } } = sb.auth.onAuthStateChange((_event, nextSession) => {
+          authTokenRef.current = nextSession?.access_token ?? null;
+          setUser(nextSession?.user ?? null);
+        });
+        subscription = sub;
+      } catch (e) {
+        console.error("Erro ao iniciar auth:", e);
+      } finally {
+        setAuthReady(true);
+      }
     };
-    loadInitialData();
+
+    initAuth();
+    return () => subscription?.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!authReady) return;
+    if (!user) {
+      setIdx([]);
+      return;
+    }
+    reloadCampaigns(user.id);
+  }, [authReady, user, reloadCampaigns]);
+
+  useEffect(() => {
+    if (authReady && !user && view !== "home") {
+      setView("home");
+    }
+  }, [authReady, user, view]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
 
-  // ─── Storage (100% LocalStorage sem Supabase) ─────────────────────
-  const saveIdx = async (l) => {
+  // ─── Storage (cache local + nuvem Supabase por conta) ─────────────
+  const saveIdx = async (l, userId) => {
     try {
-      localStorage.setItem(IDX_KEY, JSON.stringify(l));
+      localStorage.setItem(idxKeyForUser(userId || user?.id), JSON.stringify(l));
     } catch (error) {
       console.error('Erro ao salvar índice:', error);
     }
   };
 
   const saveCamp = useCallback(async (id, d) => {
+    if (!user) return;
     try {
       localStorage.setItem(campKey(id), JSON.stringify(d));
     } catch (error) {
       console.error('Erro ao salvar no localStorage:', error);
     }
-  }, []);
+    try {
+      const res = await apiFetch("/api/campaign", {
+        method: "POST",
+        body: JSON.stringify(d),
+      });
+      if (res.ok) setLastSaved(Date.now());
+    } catch {
+      // localStorage já salvou como cache
+    }
+  }, [user, apiFetch]);
 
   const readCamp = async (id) => {
+    if (!user) return null;
+    try {
+      const res = await apiFetch(`/api/campaign?id=${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.id) {
+          localStorage.setItem(campKey(id), JSON.stringify(data));
+          return data;
+        }
+      }
+    } catch {}
     try {
       return JSON.parse(localStorage.getItem(campKey(id)));
     } catch (error) {
-      console.error('Erro ao ler localStorage:', error);
+      console.error('Erro ao ler campanha:', error);
       return null;
     }
   };
 
   const loadIdx = async () => {
+    if (!user) return [];
     try {
-      return JSON.parse(localStorage.getItem(IDX_KEY) || "[]");
+      const res = await apiFetch("/api/campaign");
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          localStorage.setItem(idxKeyForUser(user.id), JSON.stringify(data));
+          return data;
+        }
+      }
+    } catch {}
+    try {
+      return JSON.parse(localStorage.getItem(idxKeyForUser(user.id)) || "[]");
     } catch (error) {
       console.error('Erro ao carregar índice:', error);
       return [];
@@ -316,6 +485,67 @@ export default function RPG() {
       setToasts(prev => prev.filter(t => t.id !== toast.id));
     }, 3000);
   }, [notificationsEnabled]);
+
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    if (!authEmail.trim() || authPassword.length < 6) {
+      showNotification("E-mail válido e senha com 6+ caracteres.", "warning");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+      const sb = getSupabaseBrowser();
+      if (!sb) throw new Error("Supabase não configurado.");
+      const { error } = await sb.auth.signUp({ email: authEmail.trim(), password: authPassword });
+      if (error) throw error;
+      showNotification("Conta criada! Entre com seu e-mail e senha.", "success");
+      setAuthTab("login");
+    } catch (err) {
+      showNotification(err.message || "Erro ao criar conta.", "error");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignIn = async (e) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword) {
+      showNotification("Preencha e-mail e senha.", "warning");
+      return;
+    }
+    setAuthBusy(true);
+    try {
+      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+      const sb = getSupabaseBrowser();
+      if (!sb) throw new Error("Supabase não configurado.");
+      const { error } = await sb.auth.signInWithPassword({
+        email: authEmail.trim(),
+        password: authPassword,
+      });
+      if (error) throw error;
+      showNotification("Bem-vindo de volta!", "success");
+      setAuthPassword("");
+    } catch (err) {
+      showNotification(err.message || "E-mail ou senha incorretos.", "error");
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+      await getSupabaseBrowser()?.auth.signOut();
+    } catch {}
+    authTokenRef.current = null;
+    setUser(null);
+    setIdx([]);
+    setActive(null);
+    setView("home");
+    setAuthPassword("");
+    showNotification("Sessão encerrada.", "info");
+  };
 
   const playSound = useCallback((type) => {
     if (!soundEnabled) return;
@@ -553,15 +783,28 @@ export default function RPG() {
     setIdx(next);
     saveIdx(next);
     try { localStorage.removeItem(campKey(id)); } catch {}
+    try {
+      await apiFetch(`/api/campaign?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    } catch {}
   };
 
   // ─── Create ───────────────────────────────────────────────────────
   const startCreate = () => {
-    setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true });
+    if (!user) {
+      showNotification("Crie uma conta ou entre para jogar.", "warning");
+      setView("home");
+      return;
+    }
+    setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true, gameStyle: "aventura" });
     setStep(0); setView("create");
   };
 
   const finishCreate = async () => {
+    if (!user) {
+      showNotification("Faça login para salvar sua aventura.", "warning");
+      setView("home");
+      return;
+    }
     if (!form.world.trim() || !form.charName.trim()) return;
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
@@ -959,29 +1202,89 @@ export default function RPG() {
       <div className="hh">
         <div className="hh-icon">⚔</div>
         <div className="hh-title">FORJA DE MUNDOS</div>
-        <div className="hh-sub">RPG · CRIAÇÃO DE AVENTURAS</div>
+        <div className="hh-sub">RPG · SUAS AVENTURAS NA NUVEM</div>
       </div>
-      <div className="list">
-        {!idx.length ? (
-          <div className="empty">
-            <div className="e-icon">🌍</div>
-            <div className="e-txt">Nenhum mundo criado ainda.<br />Comece a sua primeira aventura.</div>
+
+      {!authReady ? (
+        <div className="auth-loading">Carregando conta...</div>
+      ) : !user ? (
+        <div className="auth-box">
+          <div className="auth-tabs">
+            <button type="button" className={`auth-tab ${authTab === "login" ? "on" : ""}`} onClick={() => setAuthTab("login")}>Entrar</button>
+            <button type="button" className={`auth-tab ${authTab === "signup" ? "on" : ""}`} onClick={() => setAuthTab("signup")}>Criar conta</button>
           </div>
-        ) : idx.map((s) => (
-          <div key={s.id} className="card" onClick={() => openCamp(s)}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div className="c-world">{s.world}</div>
-              <div className="c-char">⚔ {s.charName}</div>
-              {s.updatedAt && <div className="c-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
-            </div>
-            <button className="c-del" onClick={(e) => delCamp(s.id, e)}>✕</button>
+          <form className="auth-form" onSubmit={authTab === "login" ? handleSignIn : handleSignUp}>
+            <label className="auth-label">E-mail</label>
+            <input
+              type="email"
+              className="auth-input"
+              value={authEmail}
+              onChange={(e) => setAuthEmail(e.target.value)}
+              placeholder="seu@email.com"
+              autoComplete="email"
+              required
+            />
+            <label className="auth-label">Senha</label>
+            <input
+              type="password"
+              className="auth-input"
+              value={authPassword}
+              onChange={(e) => setAuthPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              autoComplete={authTab === "login" ? "current-password" : "new-password"}
+              minLength={6}
+              required
+            />
+            <button type="submit" className="auth-submit" disabled={authBusy}>
+              {authBusy ? "Aguarde..." : authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
+            </button>
+          </form>
+          <p className="auth-hint">Suas histórias ficam salvas na nuvem. Acesse de qualquer celular ou computador.</p>
+        </div>
+      ) : (
+        <>
+          <div className="user-bar">
+            <span className="user-email" title={user.email}>👤 {user.email}</span>
+            <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
+          </div>
+          <div className="list">
+            {!idx.length ? (
+              <div className="empty">
+                <div className="e-icon">🌍</div>
+                <div className="e-txt">Nenhuma aventura ainda.<br />Crie seu primeiro mundo — continua de onde parou em qualquer aparelho.</div>
+              </div>
+            ) : idx.map((s) => (
+              <div key={s.id} className="card" onClick={() => openCamp(s)}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="c-world">{s.world}</div>
+                  <div className="c-char">⚔ {s.charName}</div>
+                  {s.updatedAt && <div className="c-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
+                </div>
+                <button className="c-del" onClick={(e) => delCamp(s.id, e)}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div className="hfoot">
+            <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
+          </div>
+        </>
+      )}
+
+      <div className="toast-container">
+        {toasts.map(toast => (
+          <div key={toast.id} className={`toast toast-${toast.type}`}>
+            <span className="toast-icon">
+              {toast.type === 'success' && '✅'}
+              {toast.type === 'error' && '❌'}
+              {toast.type === 'warning' && '⚠️'}
+              {toast.type === 'info' && 'ℹ️'}
+            </span>
+            <span className="toast-message">{toast.text}</span>
           </div>
         ))}
       </div>
-      <div className="hfoot">
-        <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
-      </div>
-      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST }} />
+
+      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST + TOAST_ST }} />
     </div>
   );
 
@@ -1018,6 +1321,22 @@ export default function RPG() {
           <Toggle title="Gerar imagens de cena?"
             desc={form.useImages ? "🖼️ Uma imagem por cena — mais imersivo, mais lento" : "⚡ Sem imagens — mais rápido e barato"}
             value={form.useImages} onChange={() => setForm(f => ({ ...f, useImages: !f.useImages }))} />
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 8 }}>Estilo de jogo</div>
+            <div className="style-pick">
+              {Object.entries(GAME_STYLES).map(([key, s]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`style-opt ${form.gameStyle === key ? "on" : ""}`}
+                  onClick={() => setForm(f => ({ ...f, gameStyle: key }))}
+                >
+                  <span className="style-opt-title">{s.icon} {s.label}</span>
+                  <span className="style-opt-desc">{s.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <button className="btn-next" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>PRÓXIMO →</button>
         </>}
 
@@ -1071,7 +1390,6 @@ export default function RPG() {
 
   // ═══ PLAY ══════════════════════════════════════════════════════════
   const c = active || {};
-  const hpColor = hp > 60 ? "#2a6a2a" : hp > 30 ? "#8b7a00" : "#8b1a00";
 
   return (
     <div className="root">
@@ -1090,13 +1408,43 @@ export default function RPG() {
           <div className="tc">
             <div className="t-world">{c.world}</div>
             <div className="t-name">⚔ {c.charName}</div>
-            {c.charTitle && <div className="t-world">{c.charTitle}</div>}
           </div>
-          <div className="hp-mini" title="Vida">
-            <div className="hp-mini-bar" style={{ width: `${hp}%`, background: hpColor }} />
-            <span className="hp-mini-val">{hp}</span>
+          <div className="stats-bar">
+            <span className="stat-chip hp" title="Vida">❤ {hp}</span>
+            <span className="stat-chip" title="Nível">Lv{level}</span>
+            {c.gameStyle && GAME_STYLES[c.gameStyle] && (
+              <span className="stat-chip mode" title="Estilo">{GAME_STYLES[c.gameStyle].icon}</span>
+            )}
           </div>
+          <button className="btn-sm" onClick={() => setShowToolsMenu(v => !v)} title="Ferramentas">⋯</button>
         </div>
+        {showToolsMenu && (
+          <div className="tools-menu">
+            <button className="tool-item" onClick={() => { rollD20(); setShowToolsMenu(false); }}>🎲 Rolar D20</button>
+            <button className="tool-item" onClick={() => { setShowTestDropdown(v => !v); }}>💪 Teste de atributo</button>
+            <button className="tool-item" onClick={() => { setShowInventory(true); setShowToolsMenu(false); }}>🎒 Inventário</button>
+            <button className="tool-item" onClick={() => { setShowTimeSkipModal(true); setShowToolsMenu(false); }}>⏰ Avançar tempo</button>
+            <button className="tool-item" onClick={() => setAutoDetectionEnabled(v => !v)}>
+              🤖 Auto-detecção: {autoDetectionEnabled ? "ON" : "OFF"}
+            </button>
+            <button className="tool-item" onClick={toggleTheme}>🎨 Tema claro/escuro</button>
+            <button className="tool-item" onClick={() => setShowStatusDashboard(v => !v)}>
+              📊 Stats {showStatusDashboard ? "(ocultar)" : ""}
+            </button>
+          </div>
+        )}
+        {showTestDropdown && (
+          <div className="test-dropdown-menu tools-test-menu">
+            {[
+              ["💪","Força"],["🏃","Destreza"],["🛡️","Constituição"],
+              ["🧠","Inteligência"],["📿","Sabedoria"],["✨","Carisma"],
+            ].map(([icon, attr]) => (
+              <button key={attr} className="test-option" onClick={() => { insertCmd(`[TESTE:${attr}] `); setShowTestDropdown(false); setShowToolsMenu(false); }}>
+                {icon} {attr}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Mensagens */}
@@ -1142,7 +1490,7 @@ export default function RPG() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Status Dashboard */}
+      {/* Stats expandidos (opcional) */}
       {showStatusDashboard && (
         <div className="status-dashboard">
           <div className="status-section">
@@ -1181,46 +1529,7 @@ export default function RPG() {
         </div>
       )}
 
-      {/* Quick Actions */}
-      <div className="q-actions">
-        <button className="q-btn q-dice" onClick={rollD20}>🎲 ROLAR D20</button>
-        <div className="test-dropdown">
-          <button className="q-btn test-btn" onClick={() => setShowTestDropdown(!showTestDropdown)}>
-            💪 TESTE ▼
-          </button>
-          {showTestDropdown && (
-            <div className="test-dropdown-menu">
-              {[
-                ["💪","Força"],["🏃","Destreza"],["🛡️","Constituição"],
-                ["🧠","Inteligência"],["📿","Sabedoria"],["✨","Carisma"],
-                ["👁️","Percepção"],["🥷","Furtividade"],["😠","Intimidação"],
-                ["🗣️","Persuasão"],["🔍","Investigação"],["🔮","Arcana"],
-              ].map(([icon, attr]) => (
-                <button key={attr} className="test-option" onClick={() => { insertCmd(`[TESTE:${attr}] `); setShowTestDropdown(false); }}>
-                  {icon} {attr}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <button className="q-btn" onClick={() => setShowInventory(!showInventory)}>🎒 INVENTÁRIO</button>
-        <button className="q-btn" onClick={toggleTheme}>🎨 TEMA</button>
-        <button className="q-btn" onClick={() => setShowStatusDashboard(!showStatusDashboard)}>
-          📊 {showStatusDashboard ? 'OCULTAR' : 'STATUS'}
-        </button>
-        <button className="q-btn q-time" onClick={() => setShowTimeSkipModal(!showTimeSkipModal)}>
-          ⏰ TIME-SKIP
-        </button>
-        <button
-          className={`q-btn ${autoDetectionEnabled ? 'q-auto-on' : 'q-auto-off'}`}
-          onClick={() => setAutoDetectionEnabled(!autoDetectionEnabled)}
-          title={autoDetectionEnabled ? "Desativar auto-detecção" : "Ativar auto-detecção"}
-        >
-          🤖 {autoDetectionEnabled ? 'AUTO-ON' : 'AUTO-OFF'}
-        </button>
-      </div>
-
-      {/* Modal Inventory */}
+      {/* Input area */}
       {showInventory && (
         <div className="modal-overlay" onClick={() => setShowInventory(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -1472,6 +1781,20 @@ const HOME_ST = BASE + `
 .c-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:10px;flex-shrink:0}
 .hfoot{flex-shrink:0;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom));border-top:1px solid #180e00}
 .btn-new{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit}
+.auth-loading{text-align:center;padding:40px 20px;color:#6b4a1a;font-size:12px;letter-spacing:2px}
+.auth-box{margin:0 20px 20px;padding:20px;background:#0c0700;border:1px solid #180e00;border-radius:10px}
+.auth-tabs{display:flex;gap:8px;margin-bottom:16px}
+.auth-tab{flex:1;background:#0a0600;border:1px solid #180e00;border-radius:6px;color:#6b4a1a;font-size:11px;padding:10px;cursor:pointer;font-family:inherit;letter-spacing:1px}
+.auth-tab.on{background:#1a0d00;border-color:#8b5a14;color:#d4a843}
+.auth-form{display:flex;flex-direction:column;gap:8px}
+.auth-label{font-size:9px;letter-spacing:2px;color:#4a2c00;text-transform:uppercase;margin-top:4px}
+.auth-input{width:100%;background:#060407;border:1px solid #180e00;border-radius:6px;padding:12px;color:#c4a060;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
+.auth-submit{margin-top:12px;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;font-size:12px;font-weight:bold;letter-spacing:2px;padding:14px;border-radius:6px;cursor:pointer;font-family:inherit}
+.auth-submit:disabled{opacity:.5;cursor:not-allowed}
+.auth-hint{font-size:11px;color:#4a2c00;text-align:center;margin-top:14px;line-height:1.6}
+.user-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 20px 12px;border-bottom:1px solid #180e00}
+.user-email{font-size:11px;color:#8b6a2a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.btn-logout{background:transparent;border:1px solid #3a1a1a;border-radius:4px;color:#a06060;font-size:10px;padding:6px 10px;cursor:pointer;font-family:inherit;flex-shrink:0}
 `;
 
 const CREATE_ST = BASE + `
@@ -1503,6 +1826,11 @@ const CREATE_ST = BASE + `
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{background:#0a0600;border:1px solid #180e00;border-radius:16px;color:#3a2410;font-size:11px;padding:5px 12px;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:all .15s}
 .chip.on{background:#2a0d00;border-color:#8b5a14;color:#d4a843}
+.style-pick{display:flex;flex-direction:column;gap:8px}
+.style-opt{display:flex;flex-direction:column;align-items:flex-start;gap:4px;background:#0c0700;border:1px solid #180e00;border-radius:8px;padding:12px;cursor:pointer;text-align:left;font-family:inherit;width:100%}
+.style-opt.on{background:#1a0d00;border-color:#8b5a14}
+.style-opt-title{color:#d4a843;font-size:13px;font-weight:bold}
+.style-opt-desc{color:#6b4a1a;font-size:11px;line-height:1.5}
 `;
 
 const PLAY_ST = BASE + `
@@ -1513,7 +1841,15 @@ const PLAY_ST = BASE + `
 .si.ok{opacity:.72}
 .si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
 .si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px}
+.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px;position:relative}
+.stats-bar{display:flex;gap:4px;flex-shrink:0}
+.stat-chip{font-size:9px;color:#8b6a2a;background:#0a0600;border:1px solid #1e1400;border-radius:4px;padding:3px 6px;white-space:nowrap}
+.stat-chip.hp{color:#c46a6a;border-color:#4a2020}
+.stat-chip.mode{font-size:11px;padding:3px 5px}
+.tools-menu{position:absolute;top:100%;right:12px;z-index:200;background:#0c0700;border:1px solid #2a1e6a;border-radius:8px;padding:6px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tool-item{display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4a060;font-size:12px;padding:10px 12px;cursor:pointer;border-radius:4px;font-family:inherit}
+.tool-item:hover{background:rgba(58,46,106,.25)}
+.tools-test-menu{position:absolute;top:100%;right:12px;z-index:201;margin-top:4px}
 .tc{flex:1;text-align:center;min-width:0}
 .t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
@@ -1570,7 +1906,7 @@ const PLAY_ST = BASE + `
 .inventory-input{flex:1;background:rgba(20,15,40,.8);border:1px solid #3a2e6a;border-radius:6px;padding:12px;color:#c4a060;font-size:14px;outline:none;min-height:44px;-webkit-appearance:none}
 .inventory-input::placeholder{color:#8b7a6a}
 .inventory-add-btn{background:rgba(74,46,106,.8);border:1px solid #4a3e8a;border-radius:6px;padding:12px 16px;color:#d4a843;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap;min-width:44px;min-height:44px}
-.status-dashboard{position:fixed;top:10px;right:10px;background:rgba(20,15,40,.95);border:1px solid #3a2e6a;border-radius:12px;padding:12px;z-index:1000;min-width:220px;max-width:280px;backdrop-filter:blur(10px)}
+.status-dashboard{position:relative;margin:0 12px 8px;background:rgba(20,15,40,.6);border:1px solid #3a2e6a;border-radius:8px;padding:10px}
 .status-section{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
 .status-item{display:flex;flex-direction:column;gap:4px}
 .status-label{color:#9a7afa;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px}

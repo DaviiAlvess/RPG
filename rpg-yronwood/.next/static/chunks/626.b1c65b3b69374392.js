@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[626],{1626:function(e,n,s){s.d(n,{getSupabaseBrowser:function(){return o}});var t=s(1226),u=s(3454);let r=u.env.NEXT_PUBLIC_SUPABASE_URL,_=u.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,l=null;function o(){return r&&_?(l||(l=(0,t.eI)(r,_,{auth:{persistSession:!0,autoRefreshToken:!0,detectSessionInUrl:!0}})),l):null}}}]);

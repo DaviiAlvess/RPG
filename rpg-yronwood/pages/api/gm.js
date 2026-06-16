@@ -1,146 +1,144 @@
 // pages/api/gm.js
 
-// ── Configurações ──────────────────────────────────────────────────────
-const TIMEOUT_MS  = 30_000; // Aumentado para 30 segundos para evitar cortes
-
-// Vamos usar o modelo Flash, que é muito mais rápido e estável para RPG
-const MODELO_GM   = "gemini-2.0-flash";
-const MODELO_LORE = "gemini-2.0-flash";
+const MODELO_GM   = "gemini-2.5-flash-lite";
+const MODELO_LORE = "gemini-2.5-flash-lite";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
 
   const { messages, systemPrompt, useLoreSearch, world } = req.body ?? {};
 
-  // ── Validação básica ───────────────────────────────────────────────
-  if (!useLoreSearch && (!Array.isArray(messages) || !systemPrompt)) {
-    return res.status(400).json({ error: "Campos obrigatórios ausentes: messages, systemPrompt." });
-  }
-
-  // ── Carrega e valida chaves ────────────────────────────────────────
-  const chaves = [
-    process.env.GEMINI_KEY_1, process.env.GEMINI_API_KEY_1,
-    process.env.GEMINI_KEY_2, process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_KEY_3, process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_KEY_4, process.env.GEMINI_API_KEY_4,
-    process.env.GEMINI_KEY_5, process.env.GEMINI_API_KEY_5,
-    process.env.GEMINI_KEY_6, process.env.GEMINI_API_KEY_6,
-    process.env.GEMINI_KEY_7, process.env.GEMINI_API_KEY_7,
-    process.env.GEMINI_KEY,   process.env.GEMINI_API_KEY,
+  const API_KEYS = [
+    process.env.GEMINI_API_KEY_1,
+    process.env.GEMINI_API_KEY_2,
+    process.env.GEMINI_API_KEY_3,
+    process.env.GEMINI_API_KEY_4,
+    process.env.GEMINI_API_KEY_5,
+    process.env.GEMINI_API_KEY_6,
+    process.env.GEMINI_API_KEY_7,
+    process.env.GEMINI_API_KEY,
+    process.env.GEMINI_KEY_1,
+    process.env.GEMINI_KEY_2,
+    process.env.GEMINI_KEY_3,
+    process.env.GEMINI_KEY_4,
+    process.env.GEMINI_KEY_5,
+    process.env.GEMINI_KEY_6,
+    process.env.GEMINI_KEY_7,
+    process.env.GEMINI_KEY,
   ].filter(Boolean);
 
-  const chavesUnicas = [...new Set(chaves)];
+  const chavesUnicas = [...new Set(API_KEYS)];
 
   if (chavesUnicas.length === 0) {
-    console.error('❌ Nenhuma API key Gemini configurada no servidor.');
-    return res.status(500).json({ error: "Nenhuma chave de API configurada." });
+    return res.status(500).json({ error: "Nenhuma GEMINI_API_KEY configurada no servidor." });
   }
 
-  // ── Rotação round-robin igual ao RPG_TOP ────────────────────────────
-  const comRotacao = async (body, modelo) => {
-    // Embaralha as chaves para distribuir a carga (evita usar sempre a mesma)
+  const chamarGemini = async (body, modelo) => {
     const shuffled = [...chavesUnicas].sort(() => Math.random() - 0.5);
-    let lastErr = null;
+    let lastError = null;
 
-    for (const key of shuffled) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
+    for (const apiKey of shuffled) {
       try {
-        console.log(`🔍 A chamar modelo ${modelo} com chave terminada em ...${key.slice(-4)}`);
-
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
+        const geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
-            signal: controller.signal,
           }
         );
 
-        clearTimeout(timer);
+        const data = await geminiRes.json();
 
-        const data = await response.json();
-
-        // Se for limite de uso (429) ou erro interno do Google (503), pula para a próxima chave
-        if (response.status === 429 || response.status === 503) {
-          console.warn(`⚠️ Rate limit ou erro 503 na chave. A tentar a próxima...`);
-          lastErr = new Error(`HTTP ${response.status}`);
-          continue; 
+        if (geminiRes.status === 429 || geminiRes.status === 503) {
+          lastError = data?.error?.message || `HTTP ${geminiRes.status}`;
+          continue;
         }
 
-        if (!response.ok) {
-          console.error(`❌ Erro HTTP ${response.status}:`, data);
-          // Em caso de chave inválida ou erro no prompt, regista o erro mas tenta a próxima
-          lastErr = new Error(`HTTP ${response.status}: ${data?.error?.message || "Erro desconhecido"}`);
-          continue;
+        if (!geminiRes.ok) {
+          console.error("Gemini API error:", data);
+          const err = new Error(data?.error?.message || "Erro na API Gemini");
+          err.fatal = true;
+          throw err;
         }
 
         const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) {
-          throw new Error("Resposta vazia da API Gemini");
+          const err = new Error("Resposta vazia da API Gemini.");
+          err.fatal = true;
+          throw err;
         }
 
-        console.log("✅ Resposta recebida com sucesso!");
         return text;
-
-      } catch (error) {
-        clearTimeout(timer);
-        lastErr = error;
-        console.warn(`⚠️ Falha na requisição: ${error.message}. A tentar próxima chave...`);
+      } catch (err) {
+        if (err.fatal) throw err;
+        lastError = err.message;
+        console.error("Erro ao chamar Gemini com chave:", err);
       }
     }
 
-    throw lastErr ?? new Error("Todas as chaves falharam.");
+    throw new Error(lastError || "Todas as chaves API estão com rate limit. Tente em instantes.");
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // MODO: Busca de lore com Google Search
-  // ══════════════════════════════════════════════════════════════════
+  // ── Modo: busca de lore ────────────────────────────────────────────
   if (useLoreSearch) {
+    if (!world) {
+      return res.status(400).json({ error: 'Campo "world" ausente.' });
+    }
+
     try {
       const loreBody = {
         system_instruction: {
           parts: [{
-            text: `Você é um pesquisador especialista em lore. Resuma as informações essenciais do universo solicitado para RPG. Responda APENAS com o resumo em português brasileiro.`,
+            text: "Você é um pesquisador especialista em lore. Resuma as informações essenciais do universo solicitado para RPG. Responda APENAS com o resumo em português brasileiro.",
           }],
         },
         contents: [{
           role: "user",
           parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}".` }],
         }],
-        tools: [{ google_search: {} }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
       };
 
-      const lore = await comRotacao(loreBody, MODELO_LORE);
-      return res.status(200).json({ lore: lore ?? "" });
+      const lore = await chamarGemini(loreBody, MODELO_LORE);
+      return res.status(200).json({ lore });
     } catch (e) {
-      console.error("❌ Erro no lore search:", e.message);
-      return res.status(200).json({ lore: "" }); // Retorna vazio para não bloquear a criação
+      console.error("Erro no lore search:", e.message);
+      return res.status(200).json({ lore: "" });
     }
   }
 
-  // ══════════════════════════════════════════════════════════════════
-  // MODO: Narração normal do Mestre
-  // ══════════════════════════════════════════════════════════════════
+  // ── Modo: narração do Mestre ───────────────────────────────────────
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'Campo "messages" ausente ou inválido.' });
+  }
+
+  if (!systemPrompt) {
+    return res.status(400).json({ error: 'Campo "systemPrompt" ausente.' });
+  }
+
   try {
     const contents = messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
 
-    const gmBody = {
-      system_instruction: { parts: [{ text: systemPrompt }] },
+    const body = {
       contents,
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.9 }, // 2048 é mais seguro para respostas rápidas
+      generationConfig: { maxOutputTokens: 2048, temperature: 0.9 },
+      system_instruction: { parts: [{ text: systemPrompt }] },
     };
 
-    const text = await comRotacao(gmBody, MODELO_GM);
+    const text = await chamarGemini(body, MODELO_GM);
     return res.status(200).json({ text });
   } catch (e) {
-    console.error("❌ Erro final:", e.message);
-    return res.status(500).json({ error: e.message });
+    console.error("Todas as chaves Gemini falharam. Último erro:", e.message);
+    const isRateLimit = e.message?.includes("rate limit") || e.message?.startsWith("HTTP 429");
+    return res.status(isRateLimit ? 429 : 500).json({ error: e.message });
   }
 }

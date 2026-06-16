@@ -259,6 +259,7 @@ export default function RPG() {
   const autoRef   = useRef(false);
   const timerRef  = useRef(null);
   const cdRef     = useRef(null);
+  const sendMsgRef = useRef(null);
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -508,9 +509,9 @@ export default function RPG() {
         chosen = options[Math.floor(Math.random() * options.length)];
       }
 
-      sendMsg(chosen, currentMsgs, currentDisp, camp, lore, true);
+      sendMsgRef.current?.(chosen, currentMsgs, currentDisp, camp, lore, true);
     }, autoDelay * 1000);
-  }, [autoDelay, sendMsg, autoRef, cdRef, timerRef, setAutoWaiting, setCountdown]);
+  }, [autoDelay]);
 
   const toggleAuto = () => {
     const next = !autoMode;
@@ -684,6 +685,8 @@ export default function RPG() {
 
     sending.current = false; setLoading(false); setStatus("");
   };
+
+  sendMsgRef.current = sendMsg;
 
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;

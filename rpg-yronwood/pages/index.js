@@ -252,6 +252,19 @@ const IDX_KEY = "rpg-idx-v3";
 const campKey = (id) => `rpg-camp-${id}`;
 const idxKeyForUser = (userId) => (userId ? `rpg-idx-${userId}` : IDX_KEY);
 
+const authErrorPt = (msg) => {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
+  if (m.includes("email not confirmed")) return "Confirme seu e-mail antes de entrar (verifique a caixa de entrada e spam).";
+  if (m.includes("user already registered")) return "Este e-mail já está cadastrado. Use a aba Entrar.";
+  if (m.includes("signup is disabled")) return "Cadastro desativado no Supabase. Ative Email em Authentication → Providers.";
+  if (m.includes("supabase não configurado") || m.includes("not configured")) {
+    return "Supabase não configurado no servidor. Adicione NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY na Vercel.";
+  }
+  if (m.includes("password") && m.includes("least")) return "Senha muito curta. Use pelo menos 6 caracteres.";
+  return msg || "Erro desconhecido. Tente novamente.";
+};
+
 // ═════════════════════════════════════════════════════════════════════
 export default function RPG() {
   const [view, setView]     = useState("home");
@@ -332,6 +345,8 @@ export default function RPG() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
+  const [supabaseOk, setSupabaseOk] = useState(true);
+  const [authMessage, setAuthMessage] = useState(null);
 
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
@@ -352,33 +367,73 @@ export default function RPG() {
 
   const reloadCampaigns = useCallback(async (userId) => {
     try {
-      const res = await apiFetch("/api/campaign");
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          localStorage.setItem(idxKeyForUser(userId), JSON.stringify(data));
-          setIdx(data);
-          return;
-        }
+      const { cloudListCampaigns } = await import("../lib/rpg-cloud");
+      const { ok, data, error } = await cloudListCampaigns();
+      if (ok && Array.isArray(data)) {
+        localStorage.setItem(idxKeyForUser(userId), JSON.stringify(data));
+        setIdx(data);
+        return;
       }
-    } catch {}
+      if (error) console.warn("Nuvem:", error);
+    } catch (e) {
+      console.warn("reloadCampaigns:", e);
+    }
     try {
       const local = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
       setIdx(local);
     } catch {
       setIdx([]);
     }
-  }, [apiFetch]);
+  }, []);
+
+  const migrateLocalCampaigns = useCallback(async (userId) => {
+    const keys = [idxKeyForUser(userId), IDX_KEY];
+    let summaries = [];
+    for (const key of keys) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+        if (Array.isArray(parsed) && parsed.length) summaries = parsed;
+      } catch {}
+    }
+    if (!summaries.length) return;
+
+    const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
+    let migrated = 0;
+    for (const s of summaries) {
+      try {
+        const raw = localStorage.getItem(campKey(s.id));
+        if (!raw) continue;
+        const camp = JSON.parse(raw);
+        const res = await cloudSaveCampaign(camp);
+        if (res.ok) migrated++;
+      } catch {}
+    }
+    if (migrated > 0) {
+      await reloadCampaigns(userId);
+    }
+  }, [reloadCampaigns]);
 
   useEffect(() => {
     let subscription = null;
 
     const initAuth = async () => {
       try {
-        const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+        const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
+        const configured = isSupabaseConfigured();
+        setSupabaseOk(configured);
+
+        if (!configured) {
+          try {
+            const res = await fetch("/api/auth/config");
+            const data = await res.json();
+            setSupabaseOk(!!data.configured);
+          } catch {}
+          return;
+        }
+
         const sb = getSupabaseBrowser();
         if (!sb) {
-          setAuthReady(true);
+          setSupabaseOk(false);
           return;
         }
 
@@ -386,7 +441,7 @@ export default function RPG() {
         authTokenRef.current = session?.access_token ?? null;
         setUser(session?.user ?? null);
 
-        const { data: { subscription: sub } } = sb.auth.onAuthStateChange((_event, nextSession) => {
+        const { data: { subscription: sub } } = sb.auth.onAuthStateChange(async (event, nextSession) => {
           authTokenRef.current = nextSession?.access_token ?? null;
           setUser(nextSession?.user ?? null);
         });
@@ -403,13 +458,20 @@ export default function RPG() {
   }, []);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (!user) {
-      setIdx([]);
+    if (!authReady || !user) {
+      if (authReady && !user) setIdx([]);
       return;
     }
-    reloadCampaigns(user.id);
-  }, [authReady, user, reloadCampaigns]);
+    (async () => {
+      await migrateLocalCampaigns(user.id);
+      await reloadCampaigns(user.id);
+      const { cloudHealthCheck } = await import("../lib/rpg-cloud");
+      const h = await cloudHealthCheck();
+      if (!h.ok && h.error?.includes("Tabelas")) {
+        setAuthMessage({ type: "error", text: h.error });
+      }
+    })();
+  }, [authReady, user, reloadCampaigns, migrateLocalCampaigns]);
 
   useEffect(() => {
     if (authReady && !user && view !== "home") {
@@ -421,6 +483,14 @@ export default function RPG() {
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
 
   // ─── Storage (cache local + nuvem Supabase por conta) ─────────────
+  const showNotification = useCallback((text, type = "info") => {
+    const toast = { id: Date.now(), text, type, timestamp: new Date() };
+    setToasts((prev) => [...prev, toast]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+    }, 4000);
+  }, []);
+
   const saveIdx = async (l, userId) => {
     try {
       localStorage.setItem(idxKeyForUser(userId || user?.id), JSON.stringify(l));
@@ -434,86 +504,86 @@ export default function RPG() {
     try {
       localStorage.setItem(campKey(id), JSON.stringify(d));
     } catch (error) {
-      console.error('Erro ao salvar no localStorage:', error);
+      console.error("Erro ao salvar no localStorage:", error);
     }
-    try {
-      const res = await apiFetch("/api/campaign", {
-        method: "POST",
-        body: JSON.stringify(d),
-      });
-      if (res.ok) setLastSaved(Date.now());
-    } catch {
-      // localStorage já salvou como cache
+    const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
+    const result = await cloudSaveCampaign(d);
+    if (result.ok) {
+      setLastSaved(Date.now());
+    } else if (result.error) {
+      showNotification(`Erro ao salvar na nuvem: ${result.error}`, "error");
     }
-  }, [user, apiFetch]);
+  }, [user, showNotification]);
 
   const readCamp = async (id) => {
     if (!user) return null;
-    try {
-      const res = await apiFetch(`/api/campaign?id=${encodeURIComponent(id)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.id) {
-          localStorage.setItem(campKey(id), JSON.stringify(data));
-          return data;
-        }
-      }
-    } catch {}
+    const { cloudLoadCampaign } = await import("../lib/rpg-cloud");
+    const { ok, data } = await cloudLoadCampaign(id);
+    if (ok && data?.id) {
+      localStorage.setItem(campKey(id), JSON.stringify(data));
+      return data;
+    }
     try {
       return JSON.parse(localStorage.getItem(campKey(id)));
-    } catch (error) {
-      console.error('Erro ao ler campanha:', error);
+    } catch {
       return null;
     }
   };
 
   const loadIdx = async () => {
     if (!user) return [];
-    try {
-      const res = await apiFetch("/api/campaign");
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          localStorage.setItem(idxKeyForUser(user.id), JSON.stringify(data));
-          return data;
-        }
-      }
-    } catch {}
+    const { cloudListCampaigns } = await import("../lib/rpg-cloud");
+    const { ok, data } = await cloudListCampaigns();
+    if (ok && Array.isArray(data)) {
+      localStorage.setItem(idxKeyForUser(user.id), JSON.stringify(data));
+      return data;
+    }
     try {
       return JSON.parse(localStorage.getItem(idxKeyForUser(user.id)) || "[]");
-    } catch (error) {
-      console.error('Erro ao carregar índice:', error);
+    } catch {
       return [];
     }
   };
 
-  // ─── Utilitários ──────────────────────────────────────────────────
-  const showNotification = useCallback((text, type = 'info') => {
-    if (!notificationsEnabled) return;
-    const toast = { id: Date.now(), text, type, timestamp: new Date() };
-    setToasts(prev => [...prev, toast]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== toast.id));
-    }, 3000);
-  }, [notificationsEnabled]);
-
   const handleSignUp = async (e) => {
     e.preventDefault();
+    setAuthMessage(null);
     if (!authEmail.trim() || authPassword.length < 6) {
-      showNotification("E-mail válido e senha com 6+ caracteres.", "warning");
+      setAuthMessage({ type: "warning", text: "E-mail válido e senha com 6+ caracteres." });
       return;
     }
     setAuthBusy(true);
     try {
-      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+      const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
+      if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
       const sb = getSupabaseBrowser();
       if (!sb) throw new Error("Supabase não configurado.");
-      const { error } = await sb.auth.signUp({ email: authEmail.trim(), password: authPassword });
+
+      const { data, error } = await sb.auth.signUp({
+        email: authEmail.trim(),
+        password: authPassword,
+        options: {
+          emailRedirectTo: typeof window !== "undefined" ? window.location.origin + "/" : undefined,
+        },
+      });
       if (error) throw error;
-      showNotification("Conta criada! Entre com seu e-mail e senha.", "success");
-      setAuthTab("login");
+
+      if (data.session) {
+        setAuthMessage({ type: "success", text: "Conta criada! Bem-vindo!" });
+        setAuthPassword("");
+      } else if (data.user?.identities?.length === 0) {
+        setAuthMessage({ type: "error", text: "Este e-mail já está cadastrado. Use a aba Entrar." });
+        setAuthTab("login");
+      } else {
+        setAuthMessage({
+          type: "info",
+          text: "Conta criada! Se o Supabase pedir confirmação, abra o link no e-mail e depois entre aqui.",
+        });
+        setAuthTab("login");
+        setAuthPassword("");
+      }
     } catch (err) {
-      showNotification(err.message || "Erro ao criar conta.", "error");
+      setAuthMessage({ type: "error", text: authErrorPt(err.message) });
     } finally {
       setAuthBusy(false);
     }
@@ -521,24 +591,27 @@ export default function RPG() {
 
   const handleSignIn = async (e) => {
     e.preventDefault();
+    setAuthMessage(null);
     if (!authEmail.trim() || !authPassword) {
-      showNotification("Preencha e-mail e senha.", "warning");
+      setAuthMessage({ type: "warning", text: "Preencha e-mail e senha." });
       return;
     }
     setAuthBusy(true);
     try {
-      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
+      const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
+      if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
       const sb = getSupabaseBrowser();
       if (!sb) throw new Error("Supabase não configurado.");
+
       const { error } = await sb.auth.signInWithPassword({
         email: authEmail.trim(),
         password: authPassword,
       });
       if (error) throw error;
-      showNotification("Bem-vindo de volta!", "success");
+      setAuthMessage({ type: "success", text: "Bem-vindo de volta!" });
       setAuthPassword("");
     } catch (err) {
-      showNotification(err.message || "E-mail ou senha incorretos.", "error");
+      setAuthMessage({ type: "error", text: authErrorPt(err.message) });
     } finally {
       setAuthBusy(false);
     }
@@ -795,7 +868,8 @@ export default function RPG() {
     saveIdx(next);
     try { localStorage.removeItem(campKey(id)); } catch {}
     try {
-      await apiFetch(`/api/campaign?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      const { cloudDeleteCampaign } = await import("../lib/rpg-cloud");
+      await cloudDeleteCampaign(id);
     } catch {}
   };
 
@@ -1220,10 +1294,18 @@ export default function RPG() {
         <div className="auth-loading">Carregando conta...</div>
       ) : !user ? (
         <div className="auth-box">
+          {!supabaseOk && (
+            <div className="auth-alert auth-alert-error">
+              ⚠️ Supabase não configurado. No Vercel, adicione <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong>, depois rode o SQL em <code>supabase/schema.sql</code>.
+            </div>
+          )}
           <div className="auth-tabs">
-            <button type="button" className={`auth-tab ${authTab === "login" ? "on" : ""}`} onClick={() => setAuthTab("login")}>Entrar</button>
-            <button type="button" className={`auth-tab ${authTab === "signup" ? "on" : ""}`} onClick={() => setAuthTab("signup")}>Criar conta</button>
+            <button type="button" className={`auth-tab ${authTab === "login" ? "on" : ""}`} onClick={() => { setAuthTab("login"); setAuthMessage(null); }}>Entrar</button>
+            <button type="button" className={`auth-tab ${authTab === "signup" ? "on" : ""}`} onClick={() => { setAuthTab("signup"); setAuthMessage(null); }}>Criar conta</button>
           </div>
+          {authMessage && (
+            <div className={`auth-alert auth-alert-${authMessage.type}`}>{authMessage.text}</div>
+          )}
           <form className="auth-form" onSubmit={authTab === "login" ? handleSignIn : handleSignUp}>
             <label className="auth-label">E-mail</label>
             <input
@@ -1246,7 +1328,7 @@ export default function RPG() {
               minLength={6}
               required
             />
-            <button type="submit" className="auth-submit" disabled={authBusy}>
+            <button type="submit" className="auth-submit" disabled={authBusy || !supabaseOk}>
               {authBusy ? "Aguarde..." : authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
             </button>
           </form>
@@ -1254,6 +1336,11 @@ export default function RPG() {
         </div>
       ) : (
         <>
+          {user && (
+            <div className="auth-alert auth-alert-success" style={{ margin: "0 20px 12px" }}>
+              ☁️ Conectado — suas aventuras salvam automaticamente no Supabase.
+            </div>
+          )}
           <div className="user-bar">
             <span className="user-email" title={user.email}>👤 {user.email}</span>
             <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
@@ -1295,7 +1382,7 @@ export default function RPG() {
         ))}
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST + TOAST_ST }} />
+      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST + TOAST_ST + RESPONSIVE_ST }} />
     </div>
   );
 
@@ -1395,7 +1482,7 @@ export default function RPG() {
           <button className="btn-next" onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
         </>}
       </div>
-      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST }} />
+      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST + RESPONSIVE_ST }} />
     </div>
   );
 
@@ -1725,7 +1812,7 @@ export default function RPG() {
         ))}
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST + TOAST_ST + TIME_SKIP_ST }} />
+      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST + TOAST_ST + TIME_SKIP_ST + RESPONSIVE_ST }} />
     </div>
   );
 }
@@ -1759,21 +1846,24 @@ function Toggle({ title, desc, value, onChange }) {
 // ─── Styles ───────────────────────────────────────────────────────────
 const GST = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#060407;overflow:hidden;-webkit-font-smoothing:antialiased}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body,#__next{width:100%;height:100%;background:#060407;overflow:hidden;-webkit-font-smoothing:antialiased;touch-action:manipulation}
+body{overscroll-behavior:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
 textarea::placeholder,input::placeholder{color:#2a1800}
-::-webkit-scrollbar{width:2px}
+input,textarea,select,button{font:inherit}
+::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-thumb{background:#2a1800;border-radius:2px}
 @keyframes pulse{0%,100%{opacity:.15}50%{opacity:.85}}
 @keyframes autopulse{0%,100%{opacity:.4}50%{opacity:1}}
 @keyframes flashgreen{0%{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}100%{background:transparent;border-color:#2a1800;color:#4a2c00}}
-@keyframes damageFlash{ 0% { filter: brightness(1.2) hue-rotate(10deg); } 50% { filter: brightness(0.8) hue-rotate(-10deg); } 100% { filter: brightness(1); } }
-@keyframes rain { 0% { transform: translateY(-100px); } 100% { transform: translateY(100px); } }
-@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes slideOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(100%); opacity: 0; } }
+@keyframes damageFlash{0%{filter:brightness(1.2) hue-rotate(10deg)}50%{filter:brightness(.8) hue-rotate(-10deg)}100%{filter:brightness(1)}}
+@keyframes rain{0%{transform:translateY(-100px)}100%{transform:translateY(100px)}}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
 `;
 
 const BASE = `
-.root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;height:100dvh;max-width:500px;margin:0 auto}
+.root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;width:100%;max-width:100%;min-height:100dvh;height:100dvh;margin:0 auto;overflow:hidden;position:relative}
 `;
 
 const HOME_ST = BASE + `
@@ -1803,6 +1893,12 @@ const HOME_ST = BASE + `
 .auth-submit{margin-top:12px;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;font-size:12px;font-weight:bold;letter-spacing:2px;padding:14px;border-radius:6px;cursor:pointer;font-family:inherit}
 .auth-submit:disabled{opacity:.5;cursor:not-allowed}
 .auth-hint{font-size:11px;color:#4a2c00;text-align:center;margin-top:14px;line-height:1.6}
+.auth-alert{padding:12px 14px;border-radius:8px;font-size:12px;line-height:1.6;margin-bottom:14px}
+.auth-alert-error{background:rgba(58,10,10,.5);border:1px solid #8a1414;color:#e08080}
+.auth-alert-warning{background:rgba(58,58,10,.5);border:1px solid #8a8a14;color:#d0d060}
+.auth-alert-success{background:rgba(26,58,10,.5);border:1px solid #4a8a14;color:#a0d060}
+.auth-alert-info{background:rgba(42,13,0,.5);border:1px solid #8b5a14;color:#d4a843}
+.auth-alert code{font-size:10px;word-break:break-all}
 .user-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 20px 12px;border-bottom:1px solid #180e00}
 .user-email{font-size:11px;color:#8b6a2a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
 .btn-logout{background:transparent;border:1px solid #3a1a1a;border-radius:4px;color:#a06060;font-size:10px;padding:6px 10px;cursor:pointer;font-family:inherit;flex-shrink:0}
@@ -1847,17 +1943,17 @@ const CREATE_ST = BASE + `
 const PLAY_ST = BASE + `
 .root{overflow:hidden}
 .header{flex-shrink:0;background:linear-gradient(180deg,#0e0700 0%,#060407 100%);border-bottom:1px solid #180e00}
-.si-wrap{position:relative;height:175px;overflow:hidden}
+.si-wrap{position:relative;height:clamp(140px,42vw,280px);overflow:hidden}
 .si{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s}
 .si.ok{opacity:.72}
 .si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
 .si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px;position:relative}
-.stats-bar{display:flex;gap:4px;flex-shrink:0}
+.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px;position:relative;flex-wrap:wrap}
+.stats-bar{display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap}
 .stat-chip{font-size:9px;color:#8b6a2a;background:#0a0600;border:1px solid #1e1400;border-radius:4px;padding:3px 6px;white-space:nowrap}
 .stat-chip.hp{color:#c46a6a;border-color:#4a2020}
 .stat-chip.mode{font-size:11px;padding:3px 5px}
-.tools-menu{position:absolute;top:100%;right:12px;z-index:200;background:#0c0700;border:1px solid #2a1e6a;border-radius:8px;padding:6px;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tools-menu{position:absolute;top:calc(100% + 4px);right:8px;left:auto;z-index:200;background:#0c0700;border:1px solid #2a1e6a;border-radius:8px;padding:6px;min-width:min(220px,calc(100vw - 24px));max-width:calc(100vw - 24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .tool-item{display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4a060;font-size:12px;padding:10px 12px;cursor:pointer;border-radius:4px;font-family:inherit}
 .tool-item:hover{background:rgba(58,46,106,.25)}
 .tools-test-menu{position:absolute;top:100%;right:12px;z-index:201;margin-top:4px}
@@ -1936,7 +2032,103 @@ const PLAY_ST = BASE + `
 .test-option{display:block;width:100%;padding:8px 12px;background:transparent;border:none;color:#c4a060;font-size:11px;text-align:left;cursor:pointer;border-bottom:1px solid rgba(58,46,106,.2)}
 .test-option:hover{background:rgba(58,46,106,.3);color:#d4a843}
 .test-option:last-child{border-bottom:none}
-@media(max-width:480px){.status-dashboard{position:relative;top:auto;right:auto;margin:8px;min-width:auto;max-width:none}}
+`;
+
+const RESPONSIVE_ST = `
+/* ── Tipografia fluida ── */
+.hh-title{font-size:clamp(17px,4.5vw,24px)!important;letter-spacing:clamp(3px,1.2vw,6px)!important}
+.hh-sub{font-size:clamp(8px,2.2vw,10px)!important}
+.t-name{font-size:clamp(14px,3.8vw,18px)!important}
+.b-gm{font-size:clamp(13px,3.4vw,15px)!important}
+.b-u,.b-auto{font-size:clamp(12px,3.2vw,14px)!important;max-width:min(84%,520px)}
+.ibox,.auth-input,.inventory-input{font-size:16px!important}
+
+/* ── Alvos de toque (mín. 44px) ── */
+.btn-sm,.btn-back,.btn-pres,.c-del,.btn-logout{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.tool-item,.test-option,.auth-tab,.auth-submit,.btn-new,.btn-next{min-height:44px}
+.i-send,.i-roll,.btn-auto{min-width:48px;min-height:48px}
+
+/* ── Celular pequeno (≤380px) ── */
+@media(max-width:380px){
+  .hh{padding:28px 14px 16px!important}
+  .auth-box{margin:0 12px 16px;padding:16px}
+  .list{padding:10px 8px}
+  .tbar{padding:8px!important;gap:4px}
+  .stats-bar{gap:2px}
+  .stat-chip{font-size:8px;padding:2px 4px}
+  .tc .t-world{display:none}
+  .si-wrap{height:clamp(120px,32vw,160px)!important}
+  .msgs{padding:10px 8px}
+  .iarea{padding:8px;gap:4px}
+  .btn-auto{width:40px;height:44px;font-size:7px}
+  .i-send,.i-roll{width:44px;height:44px}
+  .tools-menu{left:8px;right:8px;min-width:auto}
+  .tools-test-menu{left:8px;right:8px}
+  .modal-overlay{padding:0;align-items:flex-end}
+  .modal-content,.time-skip-modal{width:100%!important;max-width:100%!important;border-radius:12px 12px 0 0;max-height:92dvh}
+}
+
+/* ── Celular (≤480px) ── */
+@media(max-width:480px){
+  .user-bar{padding:0 12px 10px}
+  .user-email{font-size:10px}
+  .card{padding:12px 10px 12px 14px}
+  .app-preview{flex-direction:column;align-items:center;text-align:center}
+  .app-summary{width:100%}
+  .inventory-add{flex-direction:column}
+  .inventory-add-btn{width:100%}
+  .status-dashboard{margin:0 8px 8px}
+  .toast-container{top:max(10px,env(safe-area-inset-top));left:10px;right:10px;transform:none}
+  .toast{max-width:none;min-width:auto;width:100%}
+}
+
+/* ── Tablet (481px–768px) ── */
+@media(min-width:481px){
+  .root{max-width:min(560px,100%);box-shadow:0 0 0 1px rgba(24,14,0,.6)}
+  .si-wrap{height:clamp(180px,28vw,240px)!important}
+  .hh{padding:48px 24px 24px}
+  .auth-box{margin:0 24px 24px}
+  .list,.msgs{padding:16px 16px}
+  .cr-body{padding:24px 20px}
+}
+
+/* ── Desktop (≥769px) ── */
+@media(min-width:769px){
+  .root{max-width:min(720px,94vw);border-left:1px solid #180e00;border-right:1px solid #180e00}
+  .si-wrap{height:clamp(220px,24vw,320px)!important}
+  .hh-title{letter-spacing:8px!important}
+  .b-gm{padding:18px 20px;line-height:2}
+  .msgs{padding:20px 24px;gap:16px}
+  .iarea{padding:14px 20px;padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  .ibox{font-size:15px!important;padding:12px 14px}
+  .modal-content{width:min(480px,90vw)}
+  .tools-menu{min-width:220px}
+  .style-pick{flex-direction:row}
+  .style-opt{flex:1}
+  .chips{gap:8px}
+  .chip{padding:7px 14px;font-size:12px}
+}
+
+/* ── Desktop largo (≥1024px) ── */
+@media(min-width:1024px){
+  .root{max-width:min(840px,88vw)}
+  .si-wrap{height:300px!important}
+}
+
+/* ── Paisagem em celular ── */
+@media(max-height:500px) and (orientation:landscape){
+  .hh{padding:16px 20px 12px!important}
+  .hh-icon{font-size:22px;margin-bottom:4px}
+  .si-wrap{height:120px!important}
+  .splash-load{margin-top:40px!important}
+  .empty{padding-top:24px!important}
+  .iarea .ibox{rows:1;max-height:48px}
+}
+
+/* ── Modo claro (tema) ── */
+body.light .root{background:#f5f0e8;color:#3a2a10}
+body.light .b-gm{background:linear-gradient(135deg,#fff9f0,#f5ebe0);color:#3a2a10;border-color:#d4c4a8}
+body.light .ibox,body.light .auth-input{background:#fff;border-color:#d4c4a8;color:#3a2a10}
 `;
 
 const TOAST_ST = `

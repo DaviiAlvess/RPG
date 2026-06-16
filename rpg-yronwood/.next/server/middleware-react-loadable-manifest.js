@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST='{"pages\\\\index.js -> ../lib/supabase-browser":{"id":1626,"files":["static/chunks/6e8d85aa.6734aeb814970c39.js","static/chunks/307.7ae79ce62b25f2d9.js","static/chunks/626.b1c65b3b69374392.js"]}}';

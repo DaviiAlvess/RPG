@@ -92,7 +92,7 @@ export function createRpgPersistence(db, userId) {
           updated_at: new Date().toISOString(),
         };
 
-        const { error } = await db.from('rpg_campaigns').upsert(row);
+        const { error } = await db.from('rpg_campaigns').upsert(row, { onConflict: 'id' });
         if (error) {
           console.error('Erro ao salvar campanha:', error);
           return false;
@@ -137,7 +137,7 @@ export function createRpgPersistence(db, userId) {
           world:      campaign.world,
           char_name:  campaign.charName,
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'id' });
 
         if (error) console.error('Erro ao atualizar índice:', error);
       } catch (err) {

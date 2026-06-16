@@ -18,3 +18,7 @@ export function getSupabaseBrowser() {
   }
   return browserClient;
 }
+
+export function isSupabaseConfigured() {
+  return !!(supabaseUrl && supabaseAnonKey);
+}

@@ -138,7 +138,6 @@ const buildPrompt = (c, loreExtra) => {
     c.charAge         ? `- Idade: ${c.charAge} anos`             : "",
     c.charBg          ? `- História: ${c.charBg}`                 : "",
     c.charPersonality ? `- Personalidade: ${c.charPersonality}`   : "",
-    c.charSkills      ? `- Habilidades: ${c.charSkills}`          : "",
     c.appearance      ? `- ${buildAppearance(c.appearance)}`      : "",
     ``,
     `══════════════════════════════════════════`,
@@ -156,12 +155,24 @@ const buildPrompt = (c, loreExtra) => {
       `Este é um universo com lore oficial. Você DEVE:`,
       `- Respeitar personagens, poderes, facções e eventos já estabelecidos no lore acima.`,
       `- NÃO inventar personagens famosos mortos/vivos fora da época, nem mudar o destino de figuras canônicas sem o jogador causar isso.`,
-      `- NÃO criar poderes, tecnologias ou regras que não existem no universo original.`,
+      `- NINGUÉM no mundo — NPCs, vilões, aliados — pode usar poderes, magias ou habilidades que não existem no canon original.`,
       `- Se não souber algo do canon, improvise NPCs genéricos locais — nunca canon inventado.`,
       `- Manter o tom e a lógica do universo "${c.world}".`,
       ``,
     );
   }
+
+  lines.push(
+    `REGRA 0C — O PERSONAGEM DO JOGADOR É A ÚNICA EXCEÇÃO.`,
+    `Se ${c.charName} possui habilidades descritas no perfil que NÃO existem no universo canônico, isso é permitido SOMENTE para o personagem do jogador — nunca para mais ninguém.`,
+    `Porém, na MAIORIA das vezes esse poder deve ser SECRETO: desconhecido de NPCs, autoridades, inimigos e até de aliados próximos.`,
+    `- Não revele nem confirme o poder do jogador a menos que ele use abertamente na cena ou que alguém testemunhe diretamente.`,
+    `- NPCs não devem "adivinhar" ou suspeitar do poder sem evidência concreta na cena.`,
+    `- Quando o poder for usado em segredo, narre apenas o efeito observável — sem explicar a origem. Deixe dúvida no ar.`,
+    `- Se o jogador esconder o poder, o mundo trata ${c.charName} como alguém comum dentro das regras do universo.`,
+    c.charSkills ? `- Habilidades do jogador (podem incluir exceções ao canon): ${c.charSkills}` : "",
+    ``,
+  );
 
   if (style === "acao") {
     lines.push(
@@ -212,7 +223,7 @@ const buildPrompt = (c, loreExtra) => {
     `Se o jogador explorar algo não planejado, crie na hora. Um detalhe de cenário pode virar pista, perigo ou aliado. O improviso deve parecer inevitável, não aleatório.`,
     ``,
     `REGRA 10 — RESPEITE O LORE.`,
-    `As regras, a magia, a política e a física de ${c.world} existem e têm peso. Não quebre o lore por conveniência narrativa.`,
+    `As regras, a magia, a política e a física de ${c.world} valem para todos — exceto as habilidades exclusivas do jogador (REGRA 0C). NPCs nunca quebram o lore. Não crie poderes fora do universo para ninguém além do personagem do jogador.`,
     ``,
     `REGRA 11 — MISSÕES E OBJETIVOS.`,
     `Quando surgir um objetivo claro — tarefa, pedido, promessa — inclua na última linha: [MISSÃO: descrição em 1 linha]. Ao cumprir: [CONCLUÍDA: descrição]. Use com parcimônia.`,
@@ -1347,7 +1358,7 @@ export default function RPG() {
           <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
           <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
           <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
-          <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: Rasengan, velocidade, magia de fogo..." />
+          <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: espada, liderança... ou um poder único (geralmente secreto no mundo)" />
           <button className="btn-next" disabled={!form.charName.trim()} onClick={() => setStep(2)}>PRÓXIMO →</button>
         </>}
 

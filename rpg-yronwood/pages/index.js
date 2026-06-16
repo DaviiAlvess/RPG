@@ -1629,4 +1629,3 @@ const TIME_SKIP_ST = `
 @media(max-width:768px){.time-skip-modal{width:95%;max-width:none}.time-input-group{flex-direction:column;align-items:stretch}.time-input{flex:1}.time-skip-footer{flex-direction:column}.btn-cancel,.btn-confirm{width:100%}}
 `;
 
-```

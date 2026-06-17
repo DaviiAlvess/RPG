@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
+import PlayView from "../components/PlayView";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -340,7 +341,7 @@ export default function RPG() {
   const [skills, setSkills] = useState({ combat: 1, stealth: 1, magic: 1, persuasion: 1, survival: 1, perception: 1 });
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState("light");
   const [lastRoll, setLastRoll] = useState(null);
   const [showRollButton, setShowRollButton] = useState(false);
   const [pendingTest, setPendingTest] = useState(null);
@@ -362,6 +363,11 @@ export default function RPG() {
   const [characterAge, setCharacterAge] = useState(0);
   const [campaignStartTime, setCampaignStartTime] = useState(Date.now());
   const [showTestDropdown, setShowTestDropdown] = useState(false);
+  const [playPanel, setPlayPanel] = useState("narrator");
+  const [diceHistory, setDiceHistory] = useState([]);
+  const [diceNum, setDiceNum] = useState(null);
+  const [diceLabel, setDiceLabel] = useState("Escolha um dado abaixo");
+  const [invInput, setInvInput] = useState("");
 
   // Conta / login
   const [user, setUser] = useState(null);
@@ -518,6 +524,11 @@ export default function RPG() {
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.setAttribute("data-theme", theme);
+    }
+  }, [theme]);
 
   // ─── Storage (cache local + nuvem Supabase por conta) ─────────────
   const showNotification = useCallback((text, type = "info") => {
@@ -902,6 +913,7 @@ export default function RPG() {
     setCampLore(data.lore || "");
     setHp(data.hp ?? 100);
     setMissions(data.missions || []);
+    setCharacterAge(parseInt(data.charAge) || 0);
     setShowChar(false);
     setAutoMode(false); setAutoWaiting(false); setPending([]);
     setView("play");
@@ -1014,9 +1026,13 @@ export default function RPG() {
   const rollD20 = () => {
     const roll = Math.floor(Math.random() * 20) + 1;
     setLastRoll(roll);
+    setDiceNum(roll);
+    setDiceLabel(roll === 20 ? "d20 — Crítico!" : roll === 1 ? "d20 — Falha crítica!" : "d20 — rolagem normal");
+    setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
     if (pendingTest) {
       const { attribute, description } = pendingTest;
       setPendingTest(null);
+      setShowRollButton(false);
       sendMsg(
         `Resultado do teste de ${attribute}: ${description}. (Resultado: ${roll}/20)`,
         msgs, disp, active, campLore, false
@@ -1027,6 +1043,29 @@ export default function RPG() {
         msgs, disp, active, campLore, false
       );
     }
+  };
+
+  const rollDiceSides = (sides) => {
+    const result = Math.floor(Math.random() * sides) + 1;
+    setDiceNum(result);
+    setDiceLabel(
+      `d${sides} — ${result === sides ? "Crítico!" : result === 1 ? "Falha crítica!" : "rolagem normal"}`
+    );
+    setDiceHistory((prev) => [{ die: `d${sides}`, val: result }, ...prev].slice(0, 12));
+    if (sides === 20) setLastRoll(result);
+  };
+
+  const rollDiceMultiple = (count, sides) => {
+    const rolls = [];
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+      const r = Math.floor(Math.random() * sides) + 1;
+      rolls.push(r);
+      total += r;
+    }
+    setDiceNum(total);
+    setDiceLabel(`${count}d${sides} → [${rolls.join(", ")}] = ${total}`);
+    setDiceHistory((prev) => [{ die: `${count}d${sides}`, val: total }, ...prev].slice(0, 12));
   };
 
   const sendMsg = async (text, baseMsgs, baseDisp, camp, lore, isAuto = false) => {
@@ -1357,11 +1396,7 @@ export default function RPG() {
     }
   };
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    document.body.className = newTheme;
-  };
+  const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   const insertCmd = (cmd) => {
     setInput(prev => {
@@ -1376,12 +1411,12 @@ export default function RPG() {
 
   // ═══ HOME ══════════════════════════════════════════════════════════
   if (view === "home") return (
-    <div className="root">
-      <Head><title>Forja de Mundos</title></Head>
-      <div className="hh">
-        <div className="hh-icon">⚔</div>
-        <div className="hh-title">FORJA DE MUNDOS</div>
-        <div className="hh-sub">RPG · SUAS AVENTURAS NA NUVEM</div>
+    <div className="rpg-shell">
+      <Head><title>Forja de Mundos — RPG</title></Head>
+      <div className="shell-header">
+        <div className="shell-icon">⚔️</div>
+        <div className="shell-title">Forja de Mundos</div>
+        <div className="shell-sub">RPG · Suas aventuras na nuvem</div>
       </div>
 
       {!authReady ? (
@@ -1447,25 +1482,25 @@ export default function RPG() {
             <span className="user-email" title={user.email}>👤 {user.email}</span>
             <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
           </div>
-          <div className="list">
+          <div className="camp-list">
             {!idx.length ? (
-              <div className="empty">
-                <div className="e-icon">🌍</div>
-                <div className="e-txt">Nenhuma aventura ainda.<br />Crie seu primeiro mundo — continua de onde parou em qualquer aparelho.</div>
+              <div className="camp-empty">
+                <div className="camp-empty-icon">🌍</div>
+                <div className="camp-empty-txt">Nenhuma aventura ainda.<br />Crie seu primeiro mundo — continua de onde parou em qualquer aparelho.</div>
               </div>
             ) : idx.map((s) => (
-              <div key={s.id} className="card" onClick={() => openCamp(s)}>
+              <div key={s.id} className="camp-card" onClick={() => openCamp(s)}>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="c-world">{s.world}</div>
-                  <div className="c-char">⚔ {s.charName}</div>
-                  {s.updatedAt && <div className="c-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
+                  <div className="camp-world">{s.world}</div>
+                  <div className="camp-char"><i className="ti ti-sword" /> {s.charName}</div>
+                  {s.updatedAt && <div className="camp-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
                 </div>
-                <button className="c-del" onClick={(e) => delCamp(s.id, e)}>✕</button>
+                <button className="camp-del" onClick={(e) => delCamp(s.id, e)} aria-label="Apagar">✕</button>
               </div>
             ))}
           </div>
-          <div className="hfoot">
-            <button className="btn-new" onClick={startCreate}>+ NOVO MUNDO</button>
+          <div className="shell-foot">
+            <button className="btn-primary" onClick={startCreate}>+ Novo mundo</button>
           </div>
         </>
       )}
@@ -1473,27 +1508,19 @@ export default function RPG() {
       <div className="toast-container">
         {toasts.map(toast => (
           <div key={toast.id} className={`toast toast-${toast.type}`}>
-            <span className="toast-icon">
-              {toast.type === 'success' && '✅'}
-              {toast.type === 'error' && '❌'}
-              {toast.type === 'warning' && '⚠️'}
-              {toast.type === 'info' && 'ℹ️'}
-            </span>
             <span className="toast-message">{toast.text}</span>
           </div>
         ))}
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: GST + HOME_ST + TOAST_ST + RESPONSIVE_ST }} />
     </div>
   );
 
   // ═══ CREATE ════════════════════════════════════════════════════════
   if (view === "create") return (
-    <div className="root">
+    <div className="rpg-shell">
       <Head><title>Novo Personagem</title></Head>
       <div className="cr-head">
-        <button className="btn-back" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← VOLTAR</button>
+        <button className="btn-ghost" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← Voltar</button>
         <div className="cr-steps">
           {[0, 1, 2].map(i => (
             <span key={i} style={{ display: "flex", alignItems: "center" }}>
@@ -1503,7 +1530,7 @@ export default function RPG() {
           ))}
         </div>
         {step === 0
-          ? <button className="btn-pres" onClick={() => setForm({ ...PRESET })}>🐉 EDRIC</button>
+          ? <button className="btn-ghost" onClick={() => setForm({ ...PRESET })}>🐉 Edric</button>
           : <div style={{ width: 56 }} />}
       </div>
 
@@ -1537,7 +1564,7 @@ export default function RPG() {
               ))}
             </div>
           </div>
-          <button className="btn-next" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>PRÓXIMO →</button>
+          <button className="btn-primary" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>Próximo →</button>
         </>}
 
         {step === 1 && <>
@@ -1590,12 +1617,8 @@ export default function RPG() {
                 ta rows={2} />
             )}
           </>}
-          <button className="btn-next" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
-            {charSearchLoading
-              ? "🔍 BUSCANDO FICHA..."
-              : form.isExistingChar && form.isKnownIP
-                ? "🔍 BUSCAR FICHA →"
-                : "PRÓXIMO →"}
+          <button className="btn-primary" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
+            {charSearchLoading ? "Buscando ficha..." : form.isExistingChar && form.isKnownIP ? "Buscar ficha →" : "Próximo →"}
           </button>
         </>}
 
@@ -1624,7 +1647,7 @@ export default function RPG() {
             placeholder="ex: Início do anime / Arco do Exame Chunin / Após a Batalha de Winterfell / Depois que vira Hokage..."
             ta rows={3} />
           <div className="ip-hint">Descreva o momento exato da obra em que a aventura começa. O Mestre posicionará seu personagem nesse ponto do canon.</div>
-          <button className="btn-next" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
+          <button className="btn-primary" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>⚔ Começar aventura</button>
         </>}
 
         {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
@@ -1657,701 +1680,110 @@ export default function RPG() {
               </div>
             </div>
           ))}
-          <button className="btn-next" onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
+          <button className="btn-primary" onClick={finishCreate}>⚔ Começar aventura</button>
         </>}
       </div>
-      <style dangerouslySetInnerHTML={{ __html: GST + CREATE_ST + RESPONSIVE_ST }} />
     </div>
   );
 
   // ═══ PLAY ══════════════════════════════════════════════════════════
-  const c = active || {};
-
   return (
-    <div className="root">
-      <Head><title>{c.charName} — {c.world}</title></Head>
-
-      <div className="header">
-        {c.useImages && sceneImg && (
-          <div className="si-wrap">
-            <img src={sceneImg} alt="" className={`si ${imgOk ? "ok" : ""}`} onLoad={() => setImgOk(true)} />
-            <div className="si-ov" />
-            {!imgOk && <div className="si-spin">✦ GERANDO CENA ✦</div>}
-          </div>
-        )}
-        <div className="tbar">
-          <button className="btn-sm" onClick={() => { clearAuto(); setView("home"); }}>⌂</button>
-          <div className="tc">
-            <div className="t-world">{c.world}</div>
-            <div className="t-name">⚔ {c.charName}</div>
-          </div>
-          <div className="stats-bar">
-            <span className="stat-chip hp" title="Vida">❤ {hp}</span>
-            <span className="stat-chip" title="Nível">Lv{level}</span>
-            {c.gameStyle && GAME_STYLES[c.gameStyle] && (
-              <span className="stat-chip mode" title="Estilo">{GAME_STYLES[c.gameStyle].icon}</span>
-            )}
-          </div>
-          <button className="btn-sm" onClick={() => setShowToolsMenu(v => !v)} title="Ferramentas">⋯</button>
-        </div>
-        {showToolsMenu && (
-          <div className="tools-menu">
-            <button className="tool-item" onClick={() => { rollD20(); setShowToolsMenu(false); }}>🎲 Rolar D20</button>
-            <button className="tool-item" onClick={() => { setShowTestDropdown(v => !v); }}>💪 Teste de atributo</button>
-            <button className="tool-item" onClick={() => { setShowInventory(true); setShowToolsMenu(false); }}>🎒 Inventário</button>
-            <button className="tool-item" onClick={() => { setShowTimeSkipModal(true); setShowToolsMenu(false); }}>⏰ Avançar tempo</button>
-            <button className="tool-item" onClick={() => setAutoDetectionEnabled(v => !v)}>
-              🤖 Auto-detecção: {autoDetectionEnabled ? "ON" : "OFF"}
-            </button>
-            <button className="tool-item" onClick={toggleTheme}>🎨 Tema claro/escuro</button>
-            <button className="tool-item" onClick={() => setShowStatusDashboard(v => !v)}>
-              📊 Stats {showStatusDashboard ? "(ocultar)" : ""}
-            </button>
-          </div>
-        )}
-        {showTestDropdown && (
-          <div className="test-dropdown-menu tools-test-menu">
-            {[
-              ["💪","Força"],["🏃","Destreza"],["🛡️","Constituição"],
-              ["🧠","Inteligência"],["📿","Sabedoria"],["✨","Carisma"],
-            ].map(([icon, attr]) => (
-              <button key={attr} className="test-option" onClick={() => { insertCmd(`[TESTE:${attr}] `); setShowTestDropdown(false); setShowToolsMenu(false); }}>
-                {icon} {attr}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Mensagens */}
-      <div className="msgs">
-        {!disp.length && loading && <div className="splash-load">{statusText || "✦ INICIANDO ✦"}</div>}
-
-        {disp.map((m, i) => (
-          <div key={i}>
-            {m.type === "gm" && (
-              <div className="b-gm">
-                <div className="b-lbl">✦ MESTRE ✦</div>
-                {m.text}
-              </div>
-            )}
-            {m.type === "user" && (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div className="b-u">{m.text}</div>
-              </div>
-            )}
-            {m.type === "auto" && (
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <div className="b-auto">⚡ {m.text}</div>
-              </div>
-            )}
-            {m.type === "error" && <div className="b-err">{m.text}</div>}
-          </div>
-        ))}
-
-        {loading && disp.length > 0 && (
-          <div className={`b-load ${autoMode ? "auto-pulse" : ""}`}>{statusText}</div>
-        )}
-
-        {autoWaiting && !loading && (
-          <div className="auto-banner">
-            <div className="auto-banner-top">
-              <span className="auto-dot" />
-              <span>MODO AUTOMÁTICO — próximo turno em <strong>{countdown}s</strong></span>
-            </div>
-            <button className="btn-intervir" onClick={intervene}>✋ INTERVIR AGORA</button>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
-      </div>
-
-      {/* Stats expandidos (opcional) */}
-      {showStatusDashboard && (
-        <div className="status-dashboard">
-          <div className="status-section">
-            <div className="status-item">
-              <span className="status-label">HP</span>
-              <div className="hp-bar">
-                <div className="hp-fill" style={{ width: `${hp}%` }}></div>
-                <span className="hp-text">{hp}/100</span>
-              </div>
-            </div>
-            <div className="status-item">
-              <span className="status-label">Nível {level}</span>
-              <div className="xp-bar">
-                <div className="xp-fill" style={{ width: `${(experience % 100)}%` }}></div>
-                <span className="xp-text">{experience % 100}/100 XP</span>
-              </div>
-            </div>
-            <div className="status-item">
-              <span className="status-label">Idade</span>
-              <div className="age-display">
-                <span className="age-text">{Math.floor(characterAge)} anos</span>
-                <span className="age-icon">👤</span>
-              </div>
-            </div>
-          </div>
-          <div className="status-info">
-            <span className={`connection-indicator ${connectionStatus}`}>
-              {connectionStatus === 'online' ? '🟢' : '🔴'}
-            </span>
-            {lastSaved && (
-              <span className="last-saved">
-                💾 {new Date(lastSaved).toLocaleTimeString()}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Input area */}
-      {showInventory && (
-        <div className="modal-overlay" onClick={() => setShowInventory(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3>🎒 Inventário</h3>
-              <button className="modal-close" onClick={() => setShowInventory(false)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <div className="inventory-section">
-                <div className="inventory-label">Itens ({(c.items || []).length})</div>
-                {!(c.items || []).length ? (
-                  <div className="inventory-empty">Nenhum item no inventário</div>
-                ) : (
-                  <div className="inventory-list">
-                    {(c.items || []).map((item, i) => (
-                      <div key={i} className="inventory-item">
-                        <span className="item-name">{item}</span>
-                        <button
-                          className="item-remove"
-                          onClick={() => removeItem(i)}
-                          title="Remover item"
-                        >✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="inventory-add">
-                <input
-                  type="text"
-                  placeholder="Adicionar novo item..."
-                  className="inventory-input"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter' && e.target.value.trim()) {
-                      addItem(e.target.value.trim());
-                      e.target.value = '';
-                    }
-                  }}
-                />
-                <button
-                  className="inventory-add-btn"
-                  onClick={() => {
-                    const inp = document.querySelector('.inventory-input');
-                    if (inp && inp.value.trim()) {
-                      addItem(inp.value.trim());
-                      inp.value = '';
-                    }
-                  }}
-                >
-                  + Adicionar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Time-Skip */}
-      {showTimeSkipModal && (
-        <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
-          <div className="modal-content time-skip-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="time-skip-header">
-              <h3>⏰ Avançar no Tempo</h3>
-              <button className="modal-close" onClick={() => setShowTimeSkipModal(false)}>✕</button>
-            </div>
-            <div className="time-skip-body">
-              <div className="time-config-section">
-                <label>Quanto tempo deseja avançar?</label>
-                <div className="time-input-group">
-                  <input
-                    type="number" min="1" max="100"
-                    value={timeSkipConfig.amount}
-                    onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, amount: parseInt(e.target.value) || 1 }))}
-                    className="time-input"
-                  />
-                  <select
-                    value={timeSkipConfig.unit}
-                    onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, unit: e.target.value }))}
-                    className="time-select"
-                  >
-                    <option value="dias">Dias</option>
-                    <option value="semanas">Semanas</option>
-                    <option value="meses">Meses</option>
-                    <option value="anos">Anos</option>
-                  </select>
-                </div>
-              </div>
-              <div className="time-config-section">
-                <label>O que seu personagem vai fazer durante este tempo?</label>
-                <textarea
-                  value={timeSkipConfig.focus}
-                  onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, focus: e.target.value }))}
-                  placeholder="Ex: Treinar combate, estudar magia, viajar para outra cidade..."
-                  className="time-textarea"
-                  rows={3}
-                />
-              </div>
-              <div className="time-config-section">
-                <div className="time-options">
-                  <label className="time-checkbox">
-                    <input type="checkbox" checked={timeSkipConfig.includeEvents}
-                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeEvents: e.target.checked }))} />
-                    <span>Incluir eventos importantes</span>
-                  </label>
-                  <label className="time-checkbox">
-                    <input type="checkbox" checked={timeSkipConfig.includeProgression}
-                      onChange={(e) => setTimeSkipConfig(prev => ({ ...prev, includeProgression: e.target.checked }))} />
-                    <span>Incluir progressão (XP e habilidades)</span>
-                  </label>
-                </div>
-              </div>
-              <div className="time-preview">
-                <h4>Preview:</h4>
-                <p>
-                  {c.charName} vai passar <strong>{timeSkipConfig.amount} {timeSkipConfig.unit}</strong>
-                  {timeSkipConfig.focus && ` focado em: ${timeSkipConfig.focus}`}
-                </p>
-                {timeSkipConfig.includeProgression && (
-                  <p className="xp-preview">
-                    Ganho estimado: {timeSkipConfig.amount * ({ 'dias': 5, 'semanas': 25, 'meses': 100, 'anos': 500 }[timeSkipConfig.unit] || 5)} XP
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="time-skip-footer">
-              <button className="btn-cancel" onClick={() => setShowTimeSkipModal(false)}>Cancelar</button>
-              <button
-                className="btn-confirm"
-                onClick={executeTimeSkip}
-                disabled={!timeSkipConfig.focus.trim() || loading}
-              >
-                {loading ? 'Avançando...' : 'Avançar no Tempo ⏰'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Input area */}
-      <div className="iarea">
-        <button
-          className={`btn-auto ${autoMode ? "on" : ""}`}
-          onClick={toggleAuto}
-          title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
-        >
-          {autoMode ? "AUTO\nLIGADO" : "AUTO\nDESL."}
-        </button>
-        <textarea
-          ref={taRef}
-          className="ibox"
-          value={input}
-          rows={2}
-          disabled={loading || autoWaiting}
-          placeholder={autoMode ? "Auto ligado — aperte AUTO pra intervir" : `O que ${c.charName || "o personagem"} faz?`}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-        />
-        {showRollButton && (
-          <button className="i-roll" onClick={rollD20}>
-            🎲 {lastRoll ? lastRoll : "D20"}
-          </button>
-        )}
-        <button
-          className={`i-send ${loading || !input.trim() || autoWaiting ? "off" : ""}`}
-          onClick={handleSend}
-          disabled={loading || !input.trim() || autoWaiting}
-        >⚔</button>
-      </div>
-
-      {/* Toast Notifications */}
-      <div className="toast-container">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast toast-${toast.type}`}>
-            <span className="toast-icon">
-              {toast.type === 'success' && '✅'}
-              {toast.type === 'error' && '❌'}
-              {toast.type === 'warning' && '⚠️'}
-              {toast.type === 'info' && 'ℹ️'}
-            </span>
-            <span className="toast-message">{toast.text}</span>
-          </div>
-        ))}
-      </div>
-
-      <style dangerouslySetInnerHTML={{ __html: GST + PLAY_ST + TOAST_ST + TIME_SKIP_ST + RESPONSIVE_ST }} />
-    </div>
+    <PlayView
+      active={active}
+      disp={disp}
+      loading={loading}
+      statusText={statusText}
+      sceneImg={sceneImg}
+      imgOk={imgOk}
+      setImgOk={setImgOk}
+      hp={hp}
+      level={level}
+      experience={experience}
+      attributes={attributes}
+      skills={skills}
+      missions={missions}
+      characterAge={characterAge}
+      input={input}
+      setInput={setInput}
+      autoMode={autoMode}
+      autoWaiting={autoWaiting}
+      countdown={countdown}
+      showRollButton={showRollButton}
+      lastRoll={lastRoll}
+      playPanel={playPanel}
+      setPlayPanel={setPlayPanel}
+      diceHistory={diceHistory}
+      diceNum={diceNum}
+      diceLabel={diceLabel}
+      invInput={invInput}
+      setInvInput={setInvInput}
+      theme={theme}
+      soundEnabled={soundEnabled}
+      setSoundEnabled={setSoundEnabled}
+      autoDetectionEnabled={autoDetectionEnabled}
+      setAutoDetectionEnabled={setAutoDetectionEnabled}
+      autoSaveEnabled={autoSaveEnabled}
+      setAutoSaveEnabled={setAutoSaveEnabled}
+      connectionStatus={connectionStatus}
+      lastSaved={lastSaved}
+      showTimeSkipModal={showTimeSkipModal}
+      setShowTimeSkipModal={setShowTimeSkipModal}
+      timeSkipConfig={timeSkipConfig}
+      setTimeSkipConfig={setTimeSkipConfig}
+      toasts={toasts}
+      bottomRef={bottomRef}
+      taRef={taRef}
+      GAME_STYLES={GAME_STYLES}
+      activeMissions={activeMissions}
+      doneMissions={doneMissions}
+      clearAuto={clearAuto}
+      setView={setView}
+      toggleAuto={toggleAuto}
+      quickSave={quickSave}
+      handleSend={handleSend}
+      rollD20={rollD20}
+      rollDiceSides={rollDiceSides}
+      rollDiceMultiple={rollDiceMultiple}
+      changeHp={changeHp}
+      handleLevelUp={handleLevelUp}
+      addItem={addItem}
+      removeItem={removeItem}
+      useItem={useItem}
+      toggleTheme={toggleTheme}
+      executeTimeSkip={executeTimeSkip}
+      exportToBook={exportToBook}
+      saveSlot={saveSlot}
+      loadSlot={loadSlot}
+      resetChat={resetChat}
+      insertCmd={insertCmd}
+      intervene={intervene}
+    />
   );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────
 function F({ label, value, set, placeholder, ta, rows }) {
-  const st = { width: "100%", background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: "10px 12px", color: "#c4a060", fontSize: 13, fontFamily: "'Palatino Linotype',Palatino,serif", outline: "none", resize: "none", lineHeight: 1.6, WebkitAppearance: "none", boxSizing: "border-box", display: "block" };
   return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 5 }}>{label}</div>
-      {ta ? <textarea style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
-          : <input    style={st} value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
+    <div className="field">
+      <div className="field-label">{label}</div>
+      {ta
+        ? <textarea className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
+        : <input className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
     </div>
   );
 }
 
 function Toggle({ title, desc, value, onChange }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#0c0700", border: "1px solid #180e00", borderRadius: 6, padding: 12, marginBottom: 12 }}>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 11, color: "#c4a060", marginBottom: 3 }}>{title}</div>
-        <div style={{ fontSize: 9, color: "#4a2c00", lineHeight: 1.6 }}>{desc}</div>
+    <div className="toggle-row">
+      <div className="toggle-info">
+        <div className="toggle-title">{title}</div>
+        <div className="toggle-desc">{desc}</div>
       </div>
-      <button onClick={onChange} style={{ background: value ? "#2a0d00" : "#0a0600", border: `1px solid ${value ? "#8b5a14" : "#180e00"}`, borderRadius: 4, color: value ? "#d4a843" : "#2c1900", fontSize: 9, padding: "6px 12px", cursor: "pointer", fontFamily: "inherit", letterSpacing: 2, flexShrink: 0 }}>
+      <button type="button" className={`toggle-btn ${value ? "on" : ""}`} onClick={onChange}>
         {value ? "SIM" : "NÃO"}
       </button>
     </div>
   );
 }
-
-// ─── Styles ───────────────────────────────────────────────────────────
-const GST = `
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-html,body,#__next{width:100%;height:100%;background:#060407;overflow:hidden;-webkit-font-smoothing:antialiased;touch-action:manipulation}
-body{overscroll-behavior:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
-textarea::placeholder,input::placeholder{color:#2a1800}
-input,textarea,select,button{font:inherit}
-::-webkit-scrollbar{width:3px;height:3px}
-::-webkit-scrollbar-thumb{background:#2a1800;border-radius:2px}
-@keyframes pulse{0%,100%{opacity:.15}50%{opacity:.85}}
-@keyframes autopulse{0%,100%{opacity:.4}50%{opacity:1}}
-@keyframes flashgreen{0%{background:#1a3a0a;border-color:#4a8a14;color:#a0d060}100%{background:transparent;border-color:#2a1800;color:#4a2c00}}
-@keyframes damageFlash{0%{filter:brightness(1.2) hue-rotate(10deg)}50%{filter:brightness(.8) hue-rotate(-10deg)}100%{filter:brightness(1)}}
-@keyframes rain{0%{transform:translateY(-100px)}100%{transform:translateY(100px)}}
-@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
-`;
-
-const BASE = `
-.root{font-family:'Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;color:#c9a96e;background:#060407;display:flex;flex-direction:column;width:100%;max-width:100%;min-height:100dvh;height:100dvh;margin:0 auto;overflow:hidden;position:relative}
-`;
-
-const HOME_ST = BASE + `
-.hh{text-align:center;padding:40px 20px 20px;border-bottom:1px solid #180e00;flex-shrink:0}
-.hh-icon{font-size:28px;margin-bottom:10px}
-.hh-title{font-size:19px;font-weight:bold;color:#d4a843;letter-spacing:6px}
-.hh-sub{font-size:8px;letter-spacing:5px;color:#2c1900;margin-top:6px}
-.list{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:8px;-webkit-overflow-scrolling:touch}
-.empty{text-align:center;padding-top:60px}
-.e-icon{font-size:44px;margin-bottom:14px;opacity:.25}
-.e-txt{color:#2c1900;font-size:13px;line-height:2.4}
-.card{display:flex;align-items:center;background:linear-gradient(135deg,#0c0700,#100900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px 12px 14px 16px;cursor:pointer;gap:10px;-webkit-tap-highlight-color:transparent}
-.c-world{font-size:14px;color:#c4a060;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px}
-.c-char{font-size:11px;color:#6b4a1a}
-.c-date{font-size:9px;color:#2c1900;margin-top:3px;letter-spacing:1px}
-.c-del{background:transparent;border:1px solid #180e00;color:#2c1900;border-radius:4px;width:28px;height:28px;cursor:pointer;font-size:10px;flex-shrink:0}
-.hfoot{flex-shrink:0;padding:12px;padding-bottom:max(14px,env(safe-area-inset-bottom));border-top:1px solid #180e00}
-.btn-new{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit}
-.auth-loading{text-align:center;padding:40px 20px;color:#6b4a1a;font-size:12px;letter-spacing:2px}
-.auth-box{margin:0 20px 20px;padding:20px;background:#0c0700;border:1px solid #180e00;border-radius:10px}
-.auth-tabs{display:flex;gap:8px;margin-bottom:16px}
-.auth-tab{flex:1;background:#0a0600;border:1px solid #180e00;border-radius:6px;color:#6b4a1a;font-size:11px;padding:10px;cursor:pointer;font-family:inherit;letter-spacing:1px}
-.auth-tab.on{background:#1a0d00;border-color:#8b5a14;color:#d4a843}
-.auth-form{display:flex;flex-direction:column;gap:8px}
-.auth-label{font-size:9px;letter-spacing:2px;color:#4a2c00;text-transform:uppercase;margin-top:4px}
-.auth-input{width:100%;background:#060407;border:1px solid #180e00;border-radius:6px;padding:12px;color:#c4a060;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
-.auth-submit{margin-top:12px;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;font-size:12px;font-weight:bold;letter-spacing:2px;padding:14px;border-radius:6px;cursor:pointer;font-family:inherit}
-.auth-submit:disabled{opacity:.5;cursor:not-allowed}
-.auth-hint{font-size:11px;color:#4a2c00;text-align:center;margin-top:14px;line-height:1.6}
-.auth-alert{padding:12px 14px;border-radius:8px;font-size:12px;line-height:1.6;margin-bottom:14px}
-.auth-alert-error{background:rgba(58,10,10,.5);border:1px solid #8a1414;color:#e08080}
-.auth-alert-warning{background:rgba(58,58,10,.5);border:1px solid #8a8a14;color:#d0d060}
-.auth-alert-success{background:rgba(26,58,10,.5);border:1px solid #4a8a14;color:#a0d060}
-.auth-alert-info{background:rgba(42,13,0,.5);border:1px solid #8b5a14;color:#d4a843}
-.auth-alert code{font-size:10px;word-break:break-all}
-.user-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 20px 12px;border-bottom:1px solid #180e00}
-.user-email{font-size:11px;color:#8b6a2a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.btn-logout{background:transparent;border:1px solid #3a1a1a;border-radius:4px;color:#a06060;font-size:10px;padding:6px 10px;cursor:pointer;font-family:inherit;flex-shrink:0}
-`;
-
-const CREATE_ST = BASE + `
-.cr-head{display:flex;align-items:center;justify-content:space-between;padding:14px 12px;border-bottom:1px solid #180e00;flex-shrink:0}
-.btn-back{background:transparent;border:1px solid #180e00;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;letter-spacing:1px;font-family:inherit}
-.cr-steps{display:flex;align-items:center}
-.cr-dot{width:8px;height:8px;border-radius:50%;background:#180e00;border:1px solid #2a1800;transition:all .3s;display:inline-block}
-.cr-dot.on{background:#8b5a14;border-color:#d4a843}
-.cr-ln{width:22px;height:1px;background:#180e00;display:inline-block}
-.btn-pres{background:transparent;border:1px solid #2a1800;border-radius:4px;color:#8b5a14;font-size:9px;padding:6px 10px;cursor:pointer;font-family:inherit}
-.cr-body{flex:1;overflow-y:auto;padding:20px 14px 20px;display:flex;flex-direction:column;-webkit-overflow-scrolling:touch}
-.cr-lbl{font-size:9px;letter-spacing:5px;color:#4a2c00;margin-bottom:18px;text-align:center}
-.ip-hint{background:#0c0700;border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:12px;font-size:11px;color:#6b4a1a;line-height:1.8;margin-bottom:12px}
-.ip-hint strong{color:#c4a060}
-.char-preview{font-size:10px;line-height:1.7}
-.ficha-card{background:#0c0700;border:1px solid #2a1800;border-radius:8px;padding:16px;margin-bottom:16px}
-.ficha-name{font-size:16px;color:#c4a060;font-weight:bold;margin-bottom:12px;letter-spacing:1px}
-.ficha-row{display:flex;gap:10px;margin-bottom:8px;font-size:11px;line-height:1.6}
-.ficha-row>span:first-child{color:#6b4a1a;min-width:90px;flex-shrink:0;text-transform:uppercase;font-size:9px;letter-spacing:1px;padding-top:2px}
-.ficha-row>span:last-child{color:#a08050;flex:1}
-.btn-next{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit;margin-top:10px;flex-shrink:0}
-.btn-next:disabled{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
-.app-preview{display:flex;gap:12px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;margin-bottom:16px;align-items:flex-start}
-.app-avatar{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:3px}
-.av-hair{width:40px;height:10px;border-radius:4px 4px 0 0}
-.av-body{width:40px;height:48px;background:#1a0e00;border:1px solid #2a1800;border-radius:0 0 4px 4px;display:flex;align-items:center;justify-content:center;font-size:11px;color:#4a2c00;font-weight:bold}
-.av-eyes{display:flex;gap:6px;margin-top:6px}
-.av-eye{width:10px;height:7px;border-radius:50%;border:1px solid #0a0600}
-.app-summary{flex:1;display:flex;flex-direction:column;gap:1px}
-.app-sum-row{display:flex;justify-content:space-between;font-size:10px;line-height:1.8}
-.app-sum-key{color:#2c1900}
-.app-sum-val{color:#8b5a14}
-.app-section{margin-bottom:14px}
-.app-section-label{font-size:9px;letter-spacing:2px;color:#4a2c00;text-transform:uppercase;margin-bottom:7px}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-.chip{background:#0a0600;border:1px solid #180e00;border-radius:16px;color:#3a2410;font-size:11px;padding:5px 12px;cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;transition:all .15s}
-.chip.on{background:#2a0d00;border-color:#8b5a14;color:#d4a843}
-.style-pick{display:flex;flex-direction:column;gap:8px}
-.style-opt{display:flex;flex-direction:column;align-items:flex-start;gap:4px;background:#0c0700;border:1px solid #180e00;border-radius:8px;padding:12px;cursor:pointer;text-align:left;font-family:inherit;width:100%}
-.style-opt.on{background:#1a0d00;border-color:#8b5a14}
-.style-opt-title{color:#d4a843;font-size:13px;font-weight:bold}
-.style-opt-desc{color:#6b4a1a;font-size:11px;line-height:1.5}
-`;
-
-const PLAY_ST = BASE + `
-.root{overflow:hidden}
-.header{flex-shrink:0;background:linear-gradient(180deg,#0e0700 0%,#060407 100%);border-bottom:1px solid #180e00}
-.si-wrap{position:relative;height:clamp(140px,42vw,280px);overflow:hidden}
-.si{width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.2s}
-.si.ok{opacity:.72}
-.si-ov{position:absolute;inset:0;background:linear-gradient(0deg,#060407 0%,transparent 50%,rgba(6,4,7,.5) 100%)}
-.si-spin{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-.tbar{display:flex;align-items:center;gap:6px;padding:10px 12px;position:relative;flex-wrap:wrap}
-.stats-bar{display:flex;gap:4px;flex-shrink:0;flex-wrap:wrap}
-.stat-chip{font-size:9px;color:#8b6a2a;background:#0a0600;border:1px solid #1e1400;border-radius:4px;padding:3px 6px;white-space:nowrap}
-.stat-chip.hp{color:#c46a6a;border-color:#4a2020}
-.stat-chip.mode{font-size:11px;padding:3px 5px}
-.tools-menu{position:absolute;top:calc(100% + 4px);right:8px;left:auto;z-index:200;background:#0c0700;border:1px solid #2a1e6a;border-radius:8px;padding:6px;min-width:min(220px,calc(100vw - 24px));max-width:calc(100vw - 24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
-.tool-item{display:block;width:100%;text-align:left;background:transparent;border:none;color:#c4a060;font-size:12px;padding:10px 12px;cursor:pointer;border-radius:4px;font-family:inherit}
-.tool-item:hover{background:rgba(58,46,106,.25)}
-.tools-test-menu{position:absolute;top:100%;right:12px;z-index:201;margin-top:4px}
-.tc{flex:1;text-align:center;min-width:0}
-.t-world{font-size:7px;letter-spacing:3px;color:#2c1900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.t-name{font-size:15px;font-weight:bold;color:#d4a843;letter-spacing:1px;margin:2px 0}
-.btn-sm{background:transparent;border:1px solid #180e00;border-radius:4px;color:#4a2c00;font-size:14px;padding:5px 7px;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent;flex-shrink:0}
-.hp-mini{position:relative;width:32px;height:32px;flex-shrink:0;border:1px solid #180e00;border-radius:4px;overflow:hidden;cursor:default;display:flex;align-items:center;justify-content:center}
-.hp-mini-bar{position:absolute;bottom:0;left:0;height:100%;transition:width .4s,background .4s;opacity:.35}
-.hp-mini-val{position:relative;font-size:9px;color:#c4a060;letter-spacing:0;z-index:1}
-.msgs{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch}
-.splash-load{text-align:center;margin-top:100px;color:#2c1900;font-size:9px;letter-spacing:4px;animation:pulse 2s infinite}
-.b-gm{background:linear-gradient(135deg,#0c0700,#0f0900);border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:14px;font-size:13px;line-height:1.95;color:#c4a060;white-space:pre-wrap}
-.b-lbl{font-size:7px;letter-spacing:4px;color:#2c1900;margin-bottom:10px}
-.b-u{background:#0a0600;border:1px solid #180e00;border-right:3px solid #7a4a10;border-radius:6px;padding:10px 12px;font-size:12px;color:#7a5520;max-width:84%;font-style:italic}
-.b-auto{background:#0a0600;border:1px solid #1e1400;border-right:3px solid #4a3a00;border-radius:6px;padding:10px 12px;font-size:11px;color:#4a3a10;max-width:84%;font-style:italic}
-.b-err{text-align:center;color:#6a1a1a;font-size:11px;padding:8px}
-.b-load{text-align:center;color:#2c1900;font-size:9px;letter-spacing:4px;padding:12px 0;animation:pulse 2s infinite}
-.b-load.auto-pulse{animation:autopulse 1s infinite;color:#5a4a00}
-.auto-banner{background:#0c0900;border:1px solid #2a1e00;border-left:3px solid #6a5000;border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
-.auto-banner-top{display:flex;align-items:center;gap:8px;font-size:11px;color:#7a6020}
-.auto-dot{width:7px;height:7px;border-radius:50%;background:#8b6a00;flex-shrink:0;animation:autopulse 1s infinite}
-.auto-banner-top strong{color:#d4a843}
-.btn-intervir{background:#1a1000;border:1px solid #5a4000;border-radius:4px;color:#d4a843;font-size:10px;padding:8px 14px;cursor:pointer;letter-spacing:2px;font-family:inherit;-webkit-tap-highlight-color:transparent}
-.q-actions{display:flex;gap:6px;padding:0 12px 8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
-.q-actions::-webkit-scrollbar{display:none}
-.q-btn{background:#0a0600;border:1px solid #1e1400;border-radius:4px;color:#6b4a1a;font-size:9px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit;letter-spacing:1px;-webkit-tap-highlight-color:transparent;transition:all .2s;flex-shrink:0}
-.q-btn:active{background:#1a0e00;border-color:#4a2c00;transform:scale(.95)}
-.q-btn.q-dice{background:linear-gradient(135deg,#1a0d3a,#0a031a);border-color:#2a1e6a;color:#9a7afa;font-weight:bold}
-.q-btn.q-time{background:linear-gradient(135deg,#1a3a2a,#0a1a1a);border-color:#2a4a2a;color:#7afa7a;font-weight:bold}
-.q-btn.q-auto-on{background:linear-gradient(135deg,#1a3a3a,#0a1a1a);border-color:#2a4a4a;color:#7afafa;font-weight:bold}
-.q-btn.q-auto-off{background:linear-gradient(135deg,#3a1a1a,#1a0a0a);border-color:#4a2a2a;color:#fa7a7a;font-weight:bold}
-.iarea{flex-shrink:0;padding:10px 12px;padding-bottom:max(10px,env(safe-area-inset-bottom));border-top:1px solid #180e00;background:#060407;display:flex;gap:6px;align-items:flex-end}
-.btn-auto{background:#0c0700;border:1px solid #180e00;border-radius:6px;color:#2c1900;font-size:8px;letter-spacing:1px;padding:0;width:44px;height:48px;cursor:pointer;font-family:inherit;flex-shrink:0;line-height:1.4;white-space:pre;-webkit-tap-highlight-color:transparent;transition:all .2s}
-.btn-auto.on{background:#1a1000;border-color:#6a5000;color:#d4a843;animation:autopulse 1.5s infinite}
-.ibox{flex:1;background:#0c0700;border:1px solid #180e00;border-radius:8px;padding:10px 12px;color:#c4a060;font-size:14px;font-family:inherit;outline:none;resize:none;line-height:1.5;-webkit-appearance:none}
-.ibox:disabled{opacity:.35}
-.i-send{background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;width:48px;height:48px;border-radius:8px;cursor:pointer;font-size:18px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
-.i-send.off{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
-.i-roll{background:linear-gradient(135deg,#1a0d3a,#0a031a);border:1px solid #2a1e6a;color:#6a4afa;width:48px;height:48px;border-radius:8px;cursor:pointer;font-size:16px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
-.damage-flash{animation:damageFlash .3s ease-in-out}
-.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;box-sizing:border-box}
-.modal-content{background:#0c0700;border:1px solid #180e00;border-radius:8px;max-width:90vw;max-height:90vh;width:400px;overflow:auto;box-shadow:0 8px 32px rgba(0,0,0,.5)}
-.modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #2a1e6a;background:rgba(26,15,40,.8)}
-.modal-header h3{margin:0;color:#d4a843;font-size:16px}
-.modal-close{background:none;border:none;color:#8b7a6a;font-size:18px;cursor:pointer;padding:8px;border-radius:4px;min-width:44px;min-height:44px}
-.modal-body{padding:20px}
-.inventory-section{margin-bottom:20px}
-.inventory-label{display:block;font-size:12px;color:#d4a843;font-weight:bold;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
-.inventory-empty{text-align:center;padding:20px;color:#8b7a6a;font-style:italic;background:rgba(26,15,40,.3);border-radius:8px;border:1px dashed #3a2e6a}
-.inventory-list{max-height:200px;overflow-y:auto;border:1px solid #3a2e6a;border-radius:8px;background:rgba(20,15,40,.5);-webkit-overflow-scrolling:touch}
-.inventory-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid rgba(58,46,106,.2);min-height:44px}
-.inventory-item:last-child{border-bottom:none}
-.item-name{color:#c4a060;font-size:13px;flex:1}
-.item-remove{background:rgba(139,26,26,.2);border:1px solid rgba(139,26,26,.4);color:#d44a4a;font-size:10px;padding:6px 10px;border-radius:4px;cursor:pointer;min-width:44px;min-height:32px}
-.inventory-add{display:flex;gap:8px;margin-top:12px}
-.inventory-input{flex:1;background:rgba(20,15,40,.8);border:1px solid #3a2e6a;border-radius:6px;padding:12px;color:#c4a060;font-size:14px;outline:none;min-height:44px;-webkit-appearance:none}
-.inventory-input::placeholder{color:#8b7a6a}
-.inventory-add-btn{background:rgba(74,46,106,.8);border:1px solid #4a3e8a;border-radius:6px;padding:12px 16px;color:#d4a843;font-size:12px;font-weight:bold;cursor:pointer;white-space:nowrap;min-width:44px;min-height:44px}
-.status-dashboard{position:relative;margin:0 12px 8px;background:rgba(20,15,40,.6);border:1px solid #3a2e6a;border-radius:8px;padding:10px}
-.status-section{display:flex;flex-direction:column;gap:10px;margin-bottom:10px}
-.status-item{display:flex;flex-direction:column;gap:4px}
-.status-label{color:#9a7afa;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px}
-.hp-bar,.xp-bar{position:relative;height:20px;background:rgba(10,5,20,.8);border:1px solid #2a1e6a;border-radius:10px;overflow:hidden}
-.hp-fill{height:100%;background:linear-gradient(90deg,#ff3838,#ff6b6b);transition:width .5s ease;border-radius:8px}
-.xp-fill{height:100%;background:linear-gradient(90deg,#4a9eff,#7ac5ff);transition:width .5s ease;border-radius:8px}
-.hp-text,.xp-text{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:white;font-size:10px;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.8)}
-.age-display{display:flex;align-items:center;justify-content:space-between;background:rgba(26,15,40,.8);border:1px solid #2a1e6a;border-radius:10px;padding:8px 12px;min-height:20px}
-.age-text{color:#d4a843;font-size:11px;font-weight:bold}
-.age-icon{font-size:12px;opacity:.8}
-.status-info{display:flex;justify-content:space-between;align-items:center;padding-top:8px;border-top:1px solid rgba(58,46,106,.3)}
-.connection-indicator{font-size:12px}
-.last-saved{color:#9a7afa;font-size:10px;opacity:.8}
-.test-dropdown{position:relative;display:inline-block}
-.test-dropdown-menu{position:absolute;bottom:100%;left:0;background:rgba(20,15,40,.98);border:1px solid #3a2e6a;border-radius:8px;min-width:140px;max-height:300px;overflow-y:auto;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.3);margin-bottom:5px}
-.test-option{display:block;width:100%;padding:8px 12px;background:transparent;border:none;color:#c4a060;font-size:11px;text-align:left;cursor:pointer;border-bottom:1px solid rgba(58,46,106,.2)}
-.test-option:hover{background:rgba(58,46,106,.3);color:#d4a843}
-.test-option:last-child{border-bottom:none}
-`;
-
-const RESPONSIVE_ST = `
-/* ── Tipografia fluida ── */
-.hh-title{font-size:clamp(17px,4.5vw,24px)!important;letter-spacing:clamp(3px,1.2vw,6px)!important}
-.hh-sub{font-size:clamp(8px,2.2vw,10px)!important}
-.t-name{font-size:clamp(14px,3.8vw,18px)!important}
-.b-gm{font-size:clamp(13px,3.4vw,15px)!important}
-.b-u,.b-auto{font-size:clamp(12px,3.2vw,14px)!important;max-width:min(84%,520px)}
-.ibox,.auth-input,.inventory-input{font-size:16px!important}
-
-/* ── Alvos de toque (mín. 44px) ── */
-.btn-sm,.btn-back,.btn-pres,.c-del,.btn-logout{min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
-.tool-item,.test-option,.auth-tab,.auth-submit,.btn-new,.btn-next{min-height:44px}
-.i-send,.i-roll,.btn-auto{min-width:48px;min-height:48px}
-
-/* ── Celular pequeno (≤380px) ── */
-@media(max-width:380px){
-  .hh{padding:28px 14px 16px!important}
-  .auth-box{margin:0 12px 16px;padding:16px}
-  .list{padding:10px 8px}
-  .tbar{padding:8px!important;gap:4px}
-  .stats-bar{gap:2px}
-  .stat-chip{font-size:8px;padding:2px 4px}
-  .tc .t-world{display:none}
-  .si-wrap{height:clamp(120px,32vw,160px)!important}
-  .msgs{padding:10px 8px}
-  .iarea{padding:8px;gap:4px}
-  .btn-auto{width:40px;height:44px;font-size:7px}
-  .i-send,.i-roll{width:44px;height:44px}
-  .tools-menu{left:8px;right:8px;min-width:auto}
-  .tools-test-menu{left:8px;right:8px}
-  .modal-overlay{padding:0;align-items:flex-end}
-  .modal-content,.time-skip-modal{width:100%!important;max-width:100%!important;border-radius:12px 12px 0 0;max-height:92dvh}
-}
-
-/* ── Celular (≤480px) ── */
-@media(max-width:480px){
-  .user-bar{padding:0 12px 10px}
-  .user-email{font-size:10px}
-  .card{padding:12px 10px 12px 14px}
-  .app-preview{flex-direction:column;align-items:center;text-align:center}
-  .app-summary{width:100%}
-  .inventory-add{flex-direction:column}
-  .inventory-add-btn{width:100%}
-  .status-dashboard{margin:0 8px 8px}
-  .toast-container{top:max(10px,env(safe-area-inset-top));left:10px;right:10px;transform:none}
-  .toast{max-width:none;min-width:auto;width:100%}
-}
-
-/* ── Tablet (481px–768px) ── */
-@media(min-width:481px){
-  .root{max-width:min(560px,100%);box-shadow:0 0 0 1px rgba(24,14,0,.6)}
-  .si-wrap{height:clamp(180px,28vw,240px)!important}
-  .hh{padding:48px 24px 24px}
-  .auth-box{margin:0 24px 24px}
-  .list,.msgs{padding:16px 16px}
-  .cr-body{padding:24px 20px}
-}
-
-/* ── Desktop (≥769px) ── */
-@media(min-width:769px){
-  .root{max-width:min(720px,94vw);border-left:1px solid #180e00;border-right:1px solid #180e00}
-  .si-wrap{height:clamp(220px,24vw,320px)!important}
-  .hh-title{letter-spacing:8px!important}
-  .b-gm{padding:18px 20px;line-height:2}
-  .msgs{padding:20px 24px;gap:16px}
-  .iarea{padding:14px 20px;padding-bottom:max(14px,env(safe-area-inset-bottom))}
-  .ibox{font-size:15px!important;padding:12px 14px}
-  .modal-content{width:min(480px,90vw)}
-  .tools-menu{min-width:220px}
-  .style-pick{flex-direction:row}
-  .style-opt{flex:1}
-  .chips{gap:8px}
-  .chip{padding:7px 14px;font-size:12px}
-}
-
-/* ── Desktop largo (≥1024px) ── */
-@media(min-width:1024px){
-  .root{max-width:min(840px,88vw)}
-  .si-wrap{height:300px!important}
-}
-
-/* ── Paisagem em celular ── */
-@media(max-height:500px) and (orientation:landscape){
-  .hh{padding:16px 20px 12px!important}
-  .hh-icon{font-size:22px;margin-bottom:4px}
-  .si-wrap{height:120px!important}
-  .splash-load{margin-top:40px!important}
-  .empty{padding-top:24px!important}
-  .iarea .ibox{rows:1;max-height:48px}
-}
-
-/* ── Modo claro (tema) ── */
-body.light .root{background:#f5f0e8;color:#3a2a10}
-body.light .b-gm{background:linear-gradient(135deg,#fff9f0,#f5ebe0);color:#3a2a10;border-color:#d4c4a8}
-body.light .ibox,body.light .auth-input{background:#fff;border-color:#d4c4a8;color:#3a2a10}
-`;
-
-const TOAST_ST = `
-.toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{display:flex;align-items:center;gap:8px;padding:12px 16px;border-radius:8px;backdrop-filter:blur(10px);box-shadow:0 4px 20px rgba(0,0,0,.3);animation:slideInDown .3s ease;pointer-events:auto;max-width:400px;min-width:250px}
-.toast-icon{font-size:16px;flex-shrink:0}
-.toast-message{font-size:13px;font-weight:500;line-height:1.4}
-.toast-success{background:rgba(26,58,10,.95);border:1px solid #4a8a14;color:#a0d060}
-.toast-error{background:rgba(58,10,10,.95);border:1px solid #8a1414;color:#d06060}
-.toast-warning{background:rgba(58,58,10,.95);border:1px solid #8a8a14;color:#d0d060}
-.toast-info{background:rgba(42,13,0,.95);border:1px solid #8b5a14;color:#d4a843}
-@keyframes slideInDown{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}
-@media(max-width:768px){.toast-container{top:10px;left:10px;right:10px;transform:none}.toast{max-width:none;min-width:auto}}
-`;
-
-const TIME_SKIP_ST = `
-.time-skip-modal{max-width:500px;width:90%}
-.time-skip-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:2px solid #3a2e6a}
-.time-skip-header h3{color:#9a7afa;font-size:18px;margin:0}
-.time-skip-body{display:flex;flex-direction:column;gap:20px;padding:20px}
-.time-config-section label{display:block;color:#9a7afa;font-size:12px;font-weight:bold;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.time-input-group{display:flex;gap:10px;align-items:center}
-.time-input{flex:0 0 80px;background:rgba(10,5,20,.8);border:1px solid #2a1e6a;border-radius:6px;padding:8px 12px;color:#c4a060;font-size:14px;outline:none}
-.time-select{flex:1;background:rgba(10,5,20,.8);border:1px solid #2a1e6a;border-radius:6px;padding:8px 12px;color:#c4a060;font-size:14px;outline:none;cursor:pointer}
-.time-textarea{width:100%;background:rgba(10,5,20,.8);border:1px solid #2a1e6a;border-radius:6px;padding:10px 12px;color:#c4a060;font-size:13px;font-family:inherit;resize:vertical;outline:none}
-.time-textarea::placeholder{color:rgba(196,160,96,.4)}
-.time-options{display:flex;flex-direction:column;gap:12px}
-.time-checkbox{display:flex;align-items:center;gap:10px;cursor:pointer;color:#c4a060;font-size:13px}
-.time-checkbox input[type="checkbox"]{width:18px;height:18px;accent-color:#9a7afa}
-.time-preview{background:rgba(26,15,40,.5);border:1px solid #3a2e6a;border-radius:8px;padding:15px;margin:0 20px}
-.time-preview h4{color:#9a7afa;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px 0}
-.time-preview p{color:#c4a060;font-size:13px;margin:5px 0;line-height:1.4}
-.time-preview strong{color:#d4b070}
-.xp-preview{color:#7afa7a !important;font-weight:bold}
-.time-skip-footer{display:flex;gap:10px;justify-content:flex-end;padding:15px 20px;border-top:1px solid #3a2e6a}
-.btn-cancel,.btn-confirm{padding:10px 20px;border:none;border-radius:6px;font-size:13px;font-weight:bold;cursor:pointer;text-transform:uppercase;letter-spacing:1px}
-.btn-cancel{background:rgba(58,10,10,.8);color:#d06060;border:1px solid #8a1414}
-.btn-confirm{background:linear-gradient(135deg,#1a3a0a,#0a1a0a);color:#a0d060;border:1px solid #4a8a14}
-.btn-confirm:disabled{opacity:.5;cursor:not-allowed}
-@media(max-width:768px){.time-skip-modal{width:95%;max-width:none}.time-input-group{flex-direction:column;align-items:stretch}.time-input{flex:1}.time-skip-footer{flex-direction:column}.btn-cancel,.btn-confirm{width:100%}}
-`;
 

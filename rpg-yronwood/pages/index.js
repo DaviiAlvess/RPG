@@ -92,6 +92,7 @@ const PRESET = {
   world: "Westeros — Crônicas de Gelo e Fogo",
   worldBg: "Logo após a guerra de Maegor Targaryen em 8 d.C. Dorne foi devastada. O povo dornês entregou a cabeça de Seth para encerrar o cerco. As feridas ainda são recentes.",
   isKnownIP: true,
+  isExistingChar: false,
   charName: "Edric Yronwood",
   charTitle: "Lorde de Pedra Sangrenta, Guardião das Marches Dornesas",
   charAge: "26",
@@ -141,7 +142,10 @@ const buildPrompt = (c, loreExtra) => {
     c.charAge         ? `- Idade: ${c.charAge} anos`             : "",
     c.charBg          ? `- História: ${c.charBg}`                 : "",
     c.charPersonality ? `- Personalidade: ${c.charPersonality}`   : "",
-    c.appearance      ? `- ${buildAppearance(c.appearance)}`      : "",
+    c.charAppearanceNote
+      ? `- Aparência canônica: ${c.charAppearanceNote}`
+      : c.appearance ? `- ${buildAppearance(c.appearance)}`      : "",
+    c.storyStartPoint ? `- PONTO DE INÍCIO NA HISTÓRIA CANÔNICA: ${c.storyStartPoint}` : "",
     ``,
     `══════════════════════════════════════════`,
     `FILOSOFIA DE NARRAÇÃO — LEIA COM ATENÇÃO:`,
@@ -163,6 +167,18 @@ const buildPrompt = (c, loreExtra) => {
       `- Manter o tom e a lógica do universo "${c.world}".`,
       ``,
     );
+    if (!c.isExistingChar) {
+      lines.push(
+        `REGRA 0D — PERSONAGEM ORIGINAL NESTE UNIVERSO.`,
+        `${c.charName} NÃO é um personagem da obra — é uma inserção original no universo de "${c.world}".`,
+        `- NPCs canônicos podem aparecer e reagir ao jogador, mas ele não substitui ninguém da história oficial.`,
+        `- Trate-o como alguém que vive naquele mundo fora do roteiro principal — até que suas ações mudem isso.`,
+        c.storyStartPoint
+          ? `- Posicione a aventura neste momento do canon: "${c.storyStartPoint}".`
+          : `- Comece em um momento coerente com o lore atual do universo.`,
+        ``,
+      );
+    }
   }
 
   lines.push(
@@ -282,6 +298,7 @@ export default function RPG() {
     isExistingChar: false, charLore: "", charAppearanceNote: "",
     charName: "", charTitle: "", charAge: "",
     charBg: "", charPersonality: "", charSkills: "",
+    storyStartPoint: "",
     appearance: { ...DEFAULT_APP }, useImages: true,
     gameStyle: "aventura", relationships: {},
   });
@@ -911,9 +928,27 @@ export default function RPG() {
       setView("home");
       return;
     }
-    setForm({ world: "", worldBg: "", isKnownIP: false, isExistingChar: false, charLore: "", charAppearanceNote: "", charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true, gameStyle: "aventura", relationships: {} });
+    setForm({ world: "", worldBg: "", isKnownIP: false, isExistingChar: false, charLore: "", charAppearanceNote: "", charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", storyStartPoint: "", appearance: { ...DEFAULT_APP }, useImages: true, gameStyle: "aventura", relationships: {} });
     setCharSearchLoading(false);
     setStep(0); setView("create");
+  };
+
+  const applyCharacterData = (data) => {
+    if (!data) return null;
+    const hasFields = data.charTitle || data.charBg || data.charPersonality || data.charSkills || data.charLore;
+    if (!hasFields) return null;
+    return {
+      charTitle: data.charTitle || "",
+      charAge: data.charAge || "",
+      charBg: data.charBg || "",
+      charPersonality: data.charPersonality || "",
+      charSkills: data.charSkills || "",
+      charLore: data.charLore || "",
+      charAppearanceNote: data.appearance || "",
+      relationships: data.relationships && typeof data.relationships === "object"
+        ? data.relationships
+        : {},
+    };
   };
 
   const handleStep1Next = async () => {
@@ -922,24 +957,15 @@ export default function RPG() {
       setCharSearchLoading(true);
       const data = await fetchCharacterLore(form.world, form.charName.trim());
       setCharSearchLoading(false);
-      if (data) {
-        setForm((f) => ({
-          ...f,
-          charTitle: data.charTitle || f.charTitle,
-          charAge: data.charAge || f.charAge,
-          charBg: data.charBg || f.charBg,
-          charPersonality: data.charPersonality || f.charPersonality,
-          charSkills: data.charSkills || f.charSkills,
-          charLore: data.charLore || f.charLore,
-          charAppearanceNote: data.appearance || f.charAppearanceNote,
-          relationships: data.relationships && Object.keys(data.relationships).length
-            ? data.relationships
-            : f.relationships,
-        }));
-        showNotification(`Personagem "${form.charName.trim()}" encontrado na obra!`, "success");
+      const filled = applyCharacterData(data);
+      if (filled) {
+        setForm((f) => ({ ...f, ...filled }));
+        showNotification(`Ficha de "${form.charName.trim()}" carregada!`, "success");
+        setStep(2);
       } else {
-        showNotification("Não foi possível buscar o personagem. Preencha manualmente.", "warning");
+        showNotification("Não encontrei a ficha deste personagem. Verifique o nome e o universo.", "warning");
       }
+      return;
     }
     setStep(2);
   };
@@ -951,6 +977,10 @@ export default function RPG() {
       return;
     }
     if (!form.world.trim() || !form.charName.trim()) return;
+    if (form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim()) {
+      showNotification("Diga em que momento da história quer começar.", "warning");
+      return;
+    }
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
 
@@ -972,10 +1002,14 @@ export default function RPG() {
   };
 
   // ─── Game ─────────────────────────────────────────────────────────
-  const doStart = (camp, lore) => sendMsg(
-    `Iniciar aventura. Narre o cenário inicial onde ${camp.charName} está agora no universo de "${camp.world}". Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`,
-    [], [], camp, lore, false
-  );
+  const doStart = (camp, lore) => {
+    const startPrompt = camp.storyStartPoint?.trim()
+      ? camp.isExistingChar
+        ? `Iniciar aventura. O jogador escolheu começar neste ponto da história canônica: "${camp.storyStartPoint}". Posicione ${camp.charName} exatamente neste momento do universo "${camp.world}", respeitando o lore oficial. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`
+        : `Iniciar aventura. ${camp.charName} é um personagem original (não faz parte da obra) inserido no universo de "${camp.world}". Comece neste momento do canon: "${camp.storyStartPoint}". Posicione o personagem de forma coerente com o lore — sem substituir figuras canônicas. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`
+      : `Iniciar aventura. Narre o cenário inicial onde ${camp.charName} está agora no universo de "${camp.world}"${camp.isKnownIP && !camp.isExistingChar ? " — personagem original, fora do elenco da obra" : ""}. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`;
+    sendMsg(startPrompt, [], [], camp, lore, false);
+  };
 
   const rollD20 = () => {
     const roll = Math.floor(Math.random() * 20) + 1;
@@ -1479,7 +1513,7 @@ export default function RPG() {
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
             desc={form.isKnownIP ? "🔍 Vou procurar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
-            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, isExistingChar: f.isKnownIP ? false : f.isExistingChar }))} />
+            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, storyStartPoint: "" }))} />
           {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
           {form.isKnownIP && form.world.trim() && (
             <div className="ip-hint">O Mestre vai pesquisar na internet o lore de <strong>{form.world}</strong>: personagens, poderes, facções e eventos.</div>
@@ -1509,16 +1543,36 @@ export default function RPG() {
         {step === 1 && <>
           <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
           {form.isKnownIP && (
-            <Toggle title="Personagem da obra?"
-              desc={form.isExistingChar
-                ? `🔍 Vou procurar tudo sobre ${form.charName.trim() || "este personagem"} em ${form.world || "a obra"}`
-                : "✨ Personagem original — você define história e habilidades"}
-              value={form.isExistingChar}
-              onChange={() => setForm(f => ({ ...f, isExistingChar: !f.isExistingChar }))} />
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 8 }}>Quem você vai jogar?</div>
+              <div className="style-pick">
+                <button
+                  type="button"
+                  className={`style-opt ${form.isExistingChar ? "on" : ""}`}
+                  onClick={() => setForm(f => ({ ...f, isExistingChar: true, storyStartPoint: "" }))}
+                >
+                  <span className="style-opt-title">📖 Personagem da obra</span>
+                  <span className="style-opt-desc">Jogo como Naruto, Geralt, Jon Snow... — busco a ficha e você escolhe onde começar na história</span>
+                </button>
+                <button
+                  type="button"
+                  className={`style-opt ${!form.isExistingChar ? "on" : ""}`}
+                  onClick={() => setForm(f => ({ ...f, isExistingChar: false, charLore: "", charAppearanceNote: "", storyStartPoint: "" }))}
+                >
+                  <span className="style-opt-title">✨ Personagem original</span>
+                  <span className="style-opt-desc">Crio meu próprio personagem neste universo — não precisa existir na obra</span>
+                </button>
+              </div>
+            </div>
           )}
           {form.isExistingChar && form.isKnownIP && (
             <div className="ip-hint">
-              O Mestre vai pesquisar na internet tudo sobre <strong>{form.charName.trim() || "o personagem"}</strong> em <strong>{form.world}</strong>: história, poderes, personalidade, aparência e relações com outros personagens.
+              Digite o nome do personagem e clique em <strong>BUSCAR FICHA</strong>. A ficha será preenchida automaticamente — no próximo passo você só escolhe <strong>em que momento da história</strong> quer começar.
+            </div>
+          )}
+          {form.isKnownIP && !form.isExistingChar && (
+            <div className="ip-hint">
+              Seu personagem <strong>não precisa existir na obra</strong> — você define quem é e como entra no universo de <strong>{form.world || "esta história"}</strong>.
             </div>
           )}
           <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder={form.isExistingChar ? "ex: Naruto, Geralt, Jon Snow..." : "ex: seu personagem..."} />
@@ -1528,42 +1582,53 @@ export default function RPG() {
             <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
             <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
             <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: espada, liderança... ou um poder único (geralmente secreto no mundo)" />
+            {form.isKnownIP && (
+              <F label="Quando na história? (opcional)"
+                value={form.storyStartPoint}
+                set={(v) => setForm(f => ({ ...f, storyStartPoint: v }))}
+                placeholder="ex: Durante o Exame Chunin / Após a Batalha de Winterfell / Era dos Piratas..."
+                ta rows={2} />
+            )}
           </>}
-          {form.isExistingChar && form.charLore && (
-            <div className="ip-hint char-preview">
-              <strong>Ficha encontrada:</strong>
-              {form.charTitle && <div>{form.charTitle}{form.charAge ? ` · ${form.charAge} anos` : ""}</div>}
-              {form.charBg && <div style={{ marginTop: 6 }}>{form.charBg.slice(0, 200)}{form.charBg.length > 200 ? "…" : ""}</div>}
-            </div>
-          )}
           <button className="btn-next" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
-            {charSearchLoading ? "🔍 BUSCANDO PERSONAGEM..." : "PRÓXIMO →"}
+            {charSearchLoading
+              ? "🔍 BUSCANDO FICHA..."
+              : form.isExistingChar && form.isKnownIP
+                ? "🔍 BUSCAR FICHA →"
+                : "PRÓXIMO →"}
           </button>
         </>}
 
-        {step === 2 && <>
-          <div className="cr-lbl">PASSO 3 — {form.isExistingChar ? "REVISAR & APARÊNCIA" : "APARÊNCIA"}</div>
-          {form.isExistingChar && <>
-            <div className="ip-hint">Revise a ficha encontrada na obra. Você pode ajustar qualquer detalhe antes de começar.</div>
-            <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="Título canônico do personagem" />
-            <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="Idade" />
-            <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} ta rows={3} />
-            <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} />
-            <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} />
+        {step === 2 && form.isExistingChar && form.isKnownIP && <>
+          <div className="cr-lbl">PASSO 3 — ONDE COMEÇAR?</div>
+          <div className="ficha-card">
+            <div className="ficha-name">⚔ {form.charName}</div>
+            {form.charTitle && <div className="ficha-row"><span>Cargo</span><span>{form.charTitle}{form.charAge ? ` · ${form.charAge} anos` : ""}</span></div>}
+            {form.charBg && <div className="ficha-row"><span>História</span><span>{form.charBg}</span></div>}
+            {form.charPersonality && <div className="ficha-row"><span>Personalidade</span><span>{form.charPersonality}</span></div>}
+            {form.charSkills && <div className="ficha-row"><span>Habilidades</span><span>{form.charSkills}</span></div>}
+            {form.charAppearanceNote && <div className="ficha-row"><span>Aparência</span><span>{form.charAppearanceNote}</span></div>}
+            {!form.charBg && !form.charPersonality && form.charLore && (
+              <div className="ficha-row"><span>Lore</span><span>{form.charLore}</span></div>
+            )}
             {form.relationships && Object.keys(form.relationships).length > 0 && (
-              <div className="ip-hint">
-                <strong>Relações encontradas:</strong>
-                {Object.entries(form.relationships).slice(0, 8).map(([npc, att]) => (
-                  <div key={npc}>{npc}: {att}</div>
-                ))}
+              <div className="ficha-row">
+                <span>Relações</span>
+                <span>{Object.entries(form.relationships).slice(0, 6).map(([n, a]) => `${n} (${a})`).join(" · ")}</span>
               </div>
             )}
-          </>}
-          {form.charAppearanceNote && (
-            <div className="ip-hint">
-              <strong>Aparência canônica:</strong> {form.charAppearanceNote}
-            </div>
-          )}
+          </div>
+          <F label="Onde na história quer começar? *"
+            value={form.storyStartPoint}
+            set={(v) => setForm(f => ({ ...f, storyStartPoint: v }))}
+            placeholder="ex: Início do anime / Arco do Exame Chunin / Após a Batalha de Winterfell / Depois que vira Hokage..."
+            ta rows={3} />
+          <div className="ip-hint">Descreva o momento exato da obra em que a aventura começa. O Mestre posicionará seu personagem nesse ponto do canon.</div>
+          <button className="btn-next" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>⚔ COMEÇAR AVENTURA</button>
+        </>}
+
+        {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
+          <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
           <div className="app-preview">
             <div className="app-avatar">
               <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
@@ -2030,6 +2095,11 @@ const CREATE_ST = BASE + `
 .ip-hint{background:#0c0700;border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:12px;font-size:11px;color:#6b4a1a;line-height:1.8;margin-bottom:12px}
 .ip-hint strong{color:#c4a060}
 .char-preview{font-size:10px;line-height:1.7}
+.ficha-card{background:#0c0700;border:1px solid #2a1800;border-radius:8px;padding:16px;margin-bottom:16px}
+.ficha-name{font-size:16px;color:#c4a060;font-weight:bold;margin-bottom:12px;letter-spacing:1px}
+.ficha-row{display:flex;gap:10px;margin-bottom:8px;font-size:11px;line-height:1.6}
+.ficha-row>span:first-child{color:#6b4a1a;min-width:90px;flex-shrink:0;text-transform:uppercase;font-size:9px;letter-spacing:1px;padding-top:2px}
+.ficha-row>span:last-child{color:#a08050;flex:1}
 .btn-next{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit;margin-top:10px;flex-shrink:0}
 .btn-next:disabled{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
 .app-preview{display:flex;gap:12px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;margin-bottom:16px;align-items:flex-start}

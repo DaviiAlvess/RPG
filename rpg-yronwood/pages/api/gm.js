@@ -11,7 +11,20 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
 
-  const { messages, systemPrompt, useLoreSearch, world } = req.body ?? {};
+  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, world, charName } = req.body ?? {};
+
+  const parseJsonFromText = (text) => {
+    const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        try { return JSON.parse(match[0]); } catch {}
+      }
+      return null;
+    }
+  };
 
   const API_KEYS = [
     process.env.GEMINI_API_KEY_1,
@@ -84,6 +97,72 @@ export default async function handler(req, res) {
 
     throw new Error(lastError || "Todas as chaves API estão com rate limit. Tente em instantes.");
   };
+
+  // ── Modo: busca de personagem canônico ─────────────────────────────
+  if (useCharacterSearch) {
+    if (!world || !charName) {
+      return res.status(400).json({ error: 'Campos "world" e "charName" são obrigatórios.' });
+    }
+
+    try {
+      const charBody = {
+        system_instruction: {
+          parts: [{
+            text: [
+              "Você é um pesquisador especialista em lore de obras de ficção.",
+              "Pesquise APENAS fatos canônicos e estabelecidos sobre o personagem solicitado dentro do universo indicado.",
+              "Não invente eventos, poderes ou relações.",
+              "Responda APENAS com JSON válido (sem markdown) neste formato exato:",
+              '{"charTitle":"","charAge":"","charBg":"","charPersonality":"","charSkills":"","appearance":"","relationships":{"Nome de outro personagem":"Hostil|Neutral|Amigável|Suspeito"},"rawLore":"resumo completo em português para o Mestre de RPG"}',
+            ].join(" "),
+          }],
+        },
+        contents: [{
+          role: "user",
+          parts: [{
+            text: `Pesquise tudo sobre o personagem "${charName}" do universo "${world}". Inclua título/cargo, idade (se conhecida), história, personalidade, habilidades/poderes, aparência física canônica e relações importantes com outros personagens da obra.`,
+          }],
+        }],
+        generationConfig: { maxOutputTokens: 3072, temperature: 0.3 },
+      };
+
+      const raw = await chamarGemini(charBody, MODELO_LORE);
+      const parsed = parseJsonFromText(raw);
+      if (parsed && typeof parsed === "object") {
+        const relationships = parsed.relationships && typeof parsed.relationships === "object"
+          ? parsed.relationships
+          : {};
+        return res.status(200).json({
+          character: {
+            charTitle: String(parsed.charTitle || "").trim(),
+            charAge: String(parsed.charAge || "").trim(),
+            charBg: String(parsed.charBg || "").trim(),
+            charPersonality: String(parsed.charPersonality || "").trim(),
+            charSkills: String(parsed.charSkills || "").trim(),
+            appearance: String(parsed.appearance || "").trim(),
+            relationships,
+            charLore: String(parsed.rawLore || raw).trim(),
+          },
+        });
+      }
+
+      return res.status(200).json({
+        character: {
+          charTitle: "",
+          charAge: "",
+          charBg: "",
+          charPersonality: "",
+          charSkills: "",
+          appearance: "",
+          relationships: {},
+          charLore: String(raw || "").trim(),
+        },
+      });
+    } catch (e) {
+      console.error("Erro no character search:", e.message);
+      return res.status(200).json({ character: null, error: e.message });
+    }
+  }
 
   // ── Modo: busca de lore ────────────────────────────────────────────
   if (useLoreSearch) {

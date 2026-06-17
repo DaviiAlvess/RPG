@@ -132,6 +132,9 @@ const buildPrompt = (c, loreExtra) => {
     loreExtra
       ? `LORE OFICIAL DO UNIVERSO (FONTE CANÔNICA — NÃO CONTRADIGA):\n${loreExtra}`
       : `CONTEXTO DO MUNDO: ${c.worldBg}`,
+    c.charLore
+      ? `\nLORE OFICIAL DO PERSONAGEM (FONTE CANÔNICA — NÃO CONTRADIGA):\n${c.charLore}`
+      : "",
     ``,
     `PERSONAGEM DO JOGADOR (referência interna — não repita o nome em excesso na narração):`,
     `- Nome: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}`,
@@ -262,6 +265,9 @@ const authErrorPt = (msg) => {
     return "Supabase não configurado no servidor. Adicione NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY na Vercel.";
   }
   if (m.includes("password") && m.includes("least")) return "Senha muito curta. Use pelo menos 6 caracteres.";
+  if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("load failed")) {
+    return "Não foi possível conectar ao Supabase. Verifique se NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY estão corretas na Vercel, se o projeto Supabase está ativo e faça redeploy.";
+  }
   return msg || "Erro desconhecido. Tente novamente.";
 };
 
@@ -273,11 +279,13 @@ export default function RPG() {
   const [step, setStep]     = useState(0);
   const [form, setForm]     = useState({
     world: "", worldBg: "", isKnownIP: false,
+    isExistingChar: false, charLore: "", charAppearanceNote: "",
     charName: "", charTitle: "", charAge: "",
     charBg: "", charPersonality: "", charSkills: "",
     appearance: { ...DEFAULT_APP }, useImages: true,
-    gameStyle: "aventura",
+    gameStyle: "aventura", relationships: {},
   });
+  const [charSearchLoading, setCharSearchLoading] = useState(false);
 
   // Play
   const [msgs, setMsgs]         = useState([]);
@@ -346,6 +354,7 @@ export default function RPG() {
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
   const [supabaseOk, setSupabaseOk] = useState(true);
+  const [supabaseNeedRedeploy, setSupabaseNeedRedeploy] = useState(false);
   const [authMessage, setAuthMessage] = useState(null);
 
   const bottomRef = useRef(null);
@@ -418,17 +427,28 @@ export default function RPG() {
 
     const initAuth = async () => {
       try {
-        const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
+        const { getSupabaseBrowser, isSupabaseConfigured, getSupabasePublicUrl } = await import("../lib/supabase-browser");
         const configured = isSupabaseConfigured();
-        setSupabaseOk(configured);
 
         if (!configured) {
+          setSupabaseOk(false);
+          setSupabaseNeedRedeploy(false);
           try {
             const res = await fetch("/api/auth/config");
             const data = await res.json();
-            setSupabaseOk(!!data.configured);
+            if (data.configured) setSupabaseNeedRedeploy(true);
           } catch {}
           return;
+        }
+
+        const publicUrl = getSupabasePublicUrl();
+        if (publicUrl) {
+          try {
+            const health = await fetch(`${publicUrl.replace(/\/$/, "")}/auth/v1/health`);
+            if (!health.ok) setSupabaseOk(false);
+          } catch {
+            setSupabaseOk(false);
+          }
         }
 
         const sb = getSupabaseBrowser();
@@ -740,6 +760,17 @@ export default function RPG() {
     } catch { return ""; }
   };
 
+  const fetchCharacterLore = async (world, name) => {
+    try {
+      const res = await fetch("/api/gm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useCharacterSearch: true, world, charName: name }),
+      });
+      const data = await res.json();
+      return data.character || null;
+    } catch { return null; }
+  };
+
   // ─── Export to Book ───────────────────────────────────────────────
   const exportToBook = () => {
     const bookContent = disp.map(m => {
@@ -880,8 +911,37 @@ export default function RPG() {
       setView("home");
       return;
     }
-    setForm({ world: "", worldBg: "", isKnownIP: false, charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true, gameStyle: "aventura" });
+    setForm({ world: "", worldBg: "", isKnownIP: false, isExistingChar: false, charLore: "", charAppearanceNote: "", charName: "", charTitle: "", charAge: "", charBg: "", charPersonality: "", charSkills: "", appearance: { ...DEFAULT_APP }, useImages: true, gameStyle: "aventura", relationships: {} });
+    setCharSearchLoading(false);
     setStep(0); setView("create");
+  };
+
+  const handleStep1Next = async () => {
+    if (!form.charName.trim()) return;
+    if (form.isExistingChar && form.isKnownIP) {
+      setCharSearchLoading(true);
+      const data = await fetchCharacterLore(form.world, form.charName.trim());
+      setCharSearchLoading(false);
+      if (data) {
+        setForm((f) => ({
+          ...f,
+          charTitle: data.charTitle || f.charTitle,
+          charAge: data.charAge || f.charAge,
+          charBg: data.charBg || f.charBg,
+          charPersonality: data.charPersonality || f.charPersonality,
+          charSkills: data.charSkills || f.charSkills,
+          charLore: data.charLore || f.charLore,
+          charAppearanceNote: data.appearance || f.charAppearanceNote,
+          relationships: data.relationships && Object.keys(data.relationships).length
+            ? data.relationships
+            : f.relationships,
+        }));
+        showNotification(`Personagem "${form.charName.trim()}" encontrado na obra!`, "success");
+      } else {
+        showNotification("Não foi possível buscar o personagem. Preencha manualmente.", "warning");
+      }
+    }
+    setStep(2);
   };
 
   const finishCreate = async () => {
@@ -1296,7 +1356,15 @@ export default function RPG() {
         <div className="auth-box">
           {!supabaseOk && (
             <div className="auth-alert auth-alert-error">
-              ⚠️ Supabase não configurado. No Vercel, adicione <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong>, depois rode o SQL em <code>supabase/schema.sql</code>.
+              {supabaseNeedRedeploy ? (
+                <>
+                  ⚠️ Variáveis do Supabase existem no servidor, mas o site precisa de <strong>redeploy</strong>. Na Vercel, confirme <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> e clique em Redeploy.
+                </>
+              ) : (
+                <>
+                  ⚠️ Supabase não configurado ou inacessível. Na Vercel, adicione <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> (Settings → API no painel do Supabase), rode o SQL em <code>supabase/schema.sql</code> e faça redeploy.
+                </>
+              )}
             </div>
           )}
           <div className="auth-tabs">
@@ -1411,7 +1479,7 @@ export default function RPG() {
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
             desc={form.isKnownIP ? "🔍 Vou procurar o lore oficial na internet (anime, mangá, jogo, livro...)" : "✨ Mundo original — você define o contexto abaixo"}
-            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP }))} />
+            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, isExistingChar: f.isKnownIP ? false : f.isExistingChar }))} />
           {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
           {form.isKnownIP && form.world.trim() && (
             <div className="ip-hint">O Mestre vai pesquisar na internet o lore de <strong>{form.world}</strong>: personagens, poderes, facções e eventos.</div>
@@ -1440,17 +1508,62 @@ export default function RPG() {
 
         {step === 1 && <>
           <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
-          <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder="ex: Naruto, V, Geralt..." />
-          <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="ex: Hokage, Witcher, Lorde..." />
-          <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
-          <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
-          <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
-          <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: espada, liderança... ou um poder único (geralmente secreto no mundo)" />
-          <button className="btn-next" disabled={!form.charName.trim()} onClick={() => setStep(2)}>PRÓXIMO →</button>
+          {form.isKnownIP && (
+            <Toggle title="Personagem da obra?"
+              desc={form.isExistingChar
+                ? `🔍 Vou procurar tudo sobre ${form.charName.trim() || "este personagem"} em ${form.world || "a obra"}`
+                : "✨ Personagem original — você define história e habilidades"}
+              value={form.isExistingChar}
+              onChange={() => setForm(f => ({ ...f, isExistingChar: !f.isExistingChar }))} />
+          )}
+          {form.isExistingChar && form.isKnownIP && (
+            <div className="ip-hint">
+              O Mestre vai pesquisar na internet tudo sobre <strong>{form.charName.trim() || "o personagem"}</strong> em <strong>{form.world}</strong>: história, poderes, personalidade, aparência e relações com outros personagens.
+            </div>
+          )}
+          <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder={form.isExistingChar ? "ex: Naruto, Geralt, Jon Snow..." : "ex: seu personagem..."} />
+          {!form.isExistingChar && <>
+            <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="ex: Hokage, Witcher, Lorde..." />
+            <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
+            <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
+            <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
+            <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: espada, liderança... ou um poder único (geralmente secreto no mundo)" />
+          </>}
+          {form.isExistingChar && form.charLore && (
+            <div className="ip-hint char-preview">
+              <strong>Ficha encontrada:</strong>
+              {form.charTitle && <div>{form.charTitle}{form.charAge ? ` · ${form.charAge} anos` : ""}</div>}
+              {form.charBg && <div style={{ marginTop: 6 }}>{form.charBg.slice(0, 200)}{form.charBg.length > 200 ? "…" : ""}</div>}
+            </div>
+          )}
+          <button className="btn-next" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
+            {charSearchLoading ? "🔍 BUSCANDO PERSONAGEM..." : "PRÓXIMO →"}
+          </button>
         </>}
 
         {step === 2 && <>
-          <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
+          <div className="cr-lbl">PASSO 3 — {form.isExistingChar ? "REVISAR & APARÊNCIA" : "APARÊNCIA"}</div>
+          {form.isExistingChar && <>
+            <div className="ip-hint">Revise a ficha encontrada na obra. Você pode ajustar qualquer detalhe antes de começar.</div>
+            <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="Título canônico do personagem" />
+            <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="Idade" />
+            <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} ta rows={3} />
+            <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} />
+            <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} />
+            {form.relationships && Object.keys(form.relationships).length > 0 && (
+              <div className="ip-hint">
+                <strong>Relações encontradas:</strong>
+                {Object.entries(form.relationships).slice(0, 8).map(([npc, att]) => (
+                  <div key={npc}>{npc}: {att}</div>
+                ))}
+              </div>
+            )}
+          </>}
+          {form.charAppearanceNote && (
+            <div className="ip-hint">
+              <strong>Aparência canônica:</strong> {form.charAppearanceNote}
+            </div>
+          )}
           <div className="app-preview">
             <div className="app-avatar">
               <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
@@ -1916,6 +2029,7 @@ const CREATE_ST = BASE + `
 .cr-lbl{font-size:9px;letter-spacing:5px;color:#4a2c00;margin-bottom:18px;text-align:center}
 .ip-hint{background:#0c0700;border:1px solid #180e00;border-left:3px solid #4a2000;border-radius:6px;padding:12px;font-size:11px;color:#6b4a1a;line-height:1.8;margin-bottom:12px}
 .ip-hint strong{color:#c4a060}
+.char-preview{font-size:10px;line-height:1.7}
 .btn-next{width:100%;background:linear-gradient(135deg,#5a1a00,#2a0d00);border:1px solid #8b5a14;color:#d4a843;padding:14px;font-size:12px;letter-spacing:4px;border-radius:6px;cursor:pointer;font-family:inherit;margin-top:10px;flex-shrink:0}
 .btn-next:disabled{background:#0c0700;border-color:#180e00;color:#2a1800;cursor:not-allowed}
 .app-preview{display:flex;gap:12px;background:#0c0700;border:1px solid #180e00;border-radius:6px;padding:12px;margin-bottom:16px;align-items:flex-start}

@@ -22,3 +22,7 @@ export function getSupabaseBrowser() {
 export function isSupabaseConfigured() {
   return !!(supabaseUrl && supabaseAnonKey);
 }
+
+export function getSupabasePublicUrl() {
+  return supabaseUrl || null;
+}

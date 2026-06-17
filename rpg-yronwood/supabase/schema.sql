@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.rpg_campaigns (
   world_bg         TEXT,
   relationships    JSONB DEFAULT '{}',
   lore             TEXT,
+  char_lore        TEXT,
   msgs             JSONB DEFAULT '[]',
   disp             JSONB DEFAULT '[]',
   img              TEXT,
@@ -73,3 +74,6 @@ CREATE POLICY "rpg_index_update_own" ON public.rpg_campaign_index
   FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "rpg_index_delete_own" ON public.rpg_campaign_index
   FOR DELETE USING (auth.uid() = user_id);
+
+-- Migração: adiciona lore do personagem (execute se a tabela já existir)
+ALTER TABLE public.rpg_campaigns ADD COLUMN IF NOT EXISTS char_lore TEXT;

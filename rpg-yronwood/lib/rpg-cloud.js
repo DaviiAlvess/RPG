@@ -1,4 +1,4 @@
-import { getSupabaseBrowser } from "./supabase-browser";
+import { ensureSupabaseBrowser } from "./supabase-browser";
 
 const toSnake = (c) => ({
   id: c.id,
@@ -55,7 +55,7 @@ const toCamel = (r) => ({
 });
 
 async function getClient() {
-  const sb = getSupabaseBrowser();
+  const sb = await ensureSupabaseBrowser();
   if (!sb) return { sb: null, user: null, error: "Supabase não configurado." };
   const { data: { user }, error } = await sb.auth.getUser();
   if (error || !user) return { sb, user: null, error: "Faça login para continuar." };

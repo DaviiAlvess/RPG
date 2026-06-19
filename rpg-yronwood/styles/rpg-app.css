@@ -647,6 +647,64 @@ body.damage-flash { animation: damageFlash .3s ease-in-out; }
   padding: 0 2px;
 }
 
+.msg-speaker {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--purple);
+  margin-bottom: 4px;
+  padding: 0 2px;
+  letter-spacing: 0.02em;
+}
+
+.msg.user .msg-speaker {
+  text-align: right;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.narrative-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.narrative-prose {
+  line-height: 1.65;
+  margin: 0;
+}
+
+.dialogue-line {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border-left: 3px solid var(--purple-mid);
+}
+
+.dialogue-line-player {
+  border-left-color: var(--teal);
+}
+
+.dialogue-speaker {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--purple);
+  text-transform: none;
+  letter-spacing: 0.03em;
+}
+
+.dialogue-line-player .dialogue-speaker {
+  color: var(--teal-light);
+}
+
+.dialogue-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
 .msg.user .msg-time { text-align: right; color: rgba(255, 255, 255, 0.55); }
 
 .chat-input-row {

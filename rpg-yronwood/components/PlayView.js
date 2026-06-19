@@ -1,4 +1,5 @@
 import Head from "next/head";
+import NarrativeContent from "./NarrativeContent";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 import {
   TIME_SKIP_PRESETS,
@@ -346,7 +347,16 @@ export default function PlayView(props) {
                         <i className={isUser ? "ti ti-user" : "ti ti-sparkles"} />
                       </div>
                       <div>
-                        <div className="msg-bubble">{message?.text || ""}</div>
+                        {isUser && c?.charName ? (
+                          <div className="msg-speaker">{c.charName}</div>
+                        ) : null}
+                        <div className="msg-bubble">
+                          {isUser || isError ? (
+                            message?.text || ""
+                          ) : (
+                            <NarrativeContent text={message?.text} playerName={c?.charName} />
+                          )}
+                        </div>
                         {timeLabel ? <div className="msg-time">{timeLabel}</div> : null}
                       </div>
                     </div>

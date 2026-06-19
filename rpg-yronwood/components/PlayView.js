@@ -288,17 +288,26 @@ export default function PlayView(props) {
 
           <div className={`panel panel-chat ${playPanel === "narrator" ? "active" : ""}`}>
             <div className="chat-area">
-              {autoWaiting && !loading ? (
+              {autoMode && !loading && autoWaiting ? (
                 <div className="auto-banner">
                   <div className="auto-banner-top">
                     <span className="auto-dot" />
                     <span>
-                      Modo automático ativo. Próximo turno em <strong>{countdown}s</strong>.
+                      Modo automático — próxima ação do personagem em <strong>{countdown}s</strong>.
                     </span>
                   </div>
                   <button className="btn-intervir" onClick={intervene} type="button">
                     Intervir agora
                   </button>
+                </div>
+              ) : null}
+
+              {autoMode && loading ? (
+                <div className="auto-banner auto-banner-quiet">
+                  <div className="auto-banner-top">
+                    <span className="auto-dot" />
+                    <span>Modo automático ativo — aguardando o narrador...</span>
+                  </div>
                 </div>
               ) : null}
 
@@ -391,7 +400,13 @@ export default function PlayView(props) {
                     }
                   }}
                   disabled={loading || autoWaiting}
-                  placeholder={autoMode ? "Interrompa o auto para agir manualmente." : `O que ${c.charName || "o personagem"} faz agora?`}
+                  placeholder={
+                    autoMode
+                      ? autoWaiting
+                        ? "Clique em Intervir para agir manualmente."
+                        : `Modo auto ativo — ou digite para agir como ${c.charName || "o personagem"}.`
+                      : `O que ${c.charName || "o personagem"} faz agora?`
+                  }
                   rows={2}
                 />
 
@@ -759,6 +774,11 @@ export default function PlayView(props) {
                   {autoMode ? "Ligado" : "Desligado"}
                 </button>
               </div>
+              {autoMode ? (
+                <p className="settings-hint">
+                  A história continua sozinha conforme a personalidade do personagem. Use <strong>Intervir agora</strong> ou desligue o auto para assumir o controle.
+                </p>
+              ) : null}
 
               <div className="settings-item">
                 <div className="settings-item-label">

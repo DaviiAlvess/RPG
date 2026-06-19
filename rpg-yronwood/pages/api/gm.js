@@ -193,6 +193,55 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Modo: ação automática do personagem ────────────────────────────
+  if (req.body?.useAutoAction) {
+    const { camp, lastGmText } = req.body;
+    if (!camp?.charName) {
+      return res.status(400).json({ error: 'Campo "camp.charName" ausente.' });
+    }
+
+    try {
+      const autoBody = {
+        system_instruction: {
+          parts: [{
+            text: [
+              "Você decide a próxima ação de um personagem de RPG em primeira pessoa.",
+              "Responda APENAS com 1 ou 2 frases curtas em português descrevendo o que o personagem faz ou diz agora.",
+              "Não narre consequências, não use aspas, não explique raciocínio, não liste opções.",
+              "A ação deve ser coerente com personalidade, história e habilidades do personagem.",
+              "Se a cena termina com pergunta ou tensão, reaja como esse personagem reagiria de verdade.",
+            ].join(" "),
+          }],
+        },
+        contents: [{
+          role: "user",
+          parts: [{
+            text: [
+              `Personagem: ${camp.charName}${camp.charTitle ? ` (${camp.charTitle})` : ""}`,
+              camp.world ? `Universo: ${camp.world}` : "",
+              camp.charPersonality ? `Personalidade: ${camp.charPersonality}` : "",
+              camp.charBg ? `História: ${camp.charBg}` : "",
+              camp.charSkills ? `Habilidades: ${camp.charSkills}` : "",
+              camp.gameStyle ? `Estilo de jogo: ${camp.gameStyle}` : "",
+              "",
+              "Cena atual do narrador:",
+              lastGmText || "(início da aventura — posicione-se na situação inicial)",
+              "",
+              "Qual a próxima ação deste personagem?",
+            ].filter(Boolean).join("\n"),
+          }],
+        }],
+        generationConfig: { maxOutputTokens: 120, temperature: 0.85 },
+      };
+
+      const action = await chamarGemini(autoBody, MODELO_GM);
+      return res.status(200).json({ action: String(action || "").trim() });
+    } catch (e) {
+      console.error("Erro no auto action:", e.message);
+      return res.status(200).json({ action: "" });
+    }
+  }
+
   // ── Modo: narração do Mestre ───────────────────────────────────────
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Campo "messages" ausente ou inválido.' });

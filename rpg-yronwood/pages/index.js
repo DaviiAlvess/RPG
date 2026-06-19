@@ -16,6 +16,7 @@ import {
   shouldShowTimeSeparator,
   formatGameTimeLong,
 } from "../lib/timeSystem";
+import { resolveAutoAction, getLastGmText } from "../lib/autoMode";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -971,10 +972,8 @@ export default function RPG() {
   // ─── Auto mode ────────────────────────────────────────────────────
   const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
     if (!autoRef.current || sending.current) return;
+
     const safeOptions = (options || []).filter(Boolean);
-    const turnOptions = safeOptions.length
-      ? safeOptions
-      : ["Continuo a aventura e reajo à situação da forma mais natural para meu personagem."];
     setAutoWaiting(true);
     setCountdown(autoDelay);
     cdRef.current = setInterval(() => {
@@ -986,28 +985,16 @@ export default function RPG() {
         return prev - 1;
       });
     }, 1000);
-    timerRef.current = setTimeout(() => {
+
+    timerRef.current = setTimeout(async () => {
       setAutoWaiting(false);
       if (!autoRef.current || sending.current) return;
 
-      let chosen;
-      const personality = camp.charPersonality?.toLowerCase() || "";
-
-      if (personality.includes("orgulhoso") && safeOptions.length) {
-        const proudOptions = turnOptions.filter((opt) => {
-          const lower = opt.toLowerCase();
-          return lower.includes("desafiar") || lower.includes("exigir");
-        });
-        chosen = proudOptions.length
-          ? proudOptions[Math.floor(Math.random() * proudOptions.length)]
-          : turnOptions[Math.floor(Math.random() * turnOptions.length)];
-      } else {
-        chosen = turnOptions[Math.floor(Math.random() * turnOptions.length)];
-      }
-
+      const lastGmText = getLastGmText(currentDisp, currentMsgs);
+      const chosen = await resolveAutoAction(camp, lastGmText, safeOptions, apiFetch);
       sendMsgRef.current?.(chosen, currentMsgs, currentDisp, camp, lore, true);
     }, autoDelay * 1000);
-  }, [autoDelay]);
+  }, [autoDelay, apiFetch]);
 
   const toggleAuto = () => {
     const next = !autoMode;
@@ -1015,12 +1002,16 @@ export default function RPG() {
     autoRef.current = next;
     if (!next) {
       clearAuto();
+      showNotification("Modo automático desligado.", "info");
       return;
     }
-    if (!loading && !sending.current && pendingRef.current.length > 0 && active) {
-      scheduleNextTurn(pendingRef.current, msgs, disp, active, campLore);
-    } else if (!loading && !sending.current && active) {
-      showNotification("Modo automático ligado. Aguardando a próxima resposta do narrador.", "info");
+
+    showNotification("Modo automático ligado. A história segue pela personalidade do personagem.", "info");
+    if (!loading && !sending.current && !autoWaiting && active) {
+      const lastGm = getLastGmText(disp, msgs);
+      if (lastGm || pendingRef.current.length || msgs.length > 0) {
+        scheduleNextTurn(pendingRef.current, msgs, disp, active, campLore);
+      }
     }
   };
 
@@ -1348,11 +1339,11 @@ export default function RPG() {
 
       setPending(options);
       pendingRef.current = options;
-      if (autoRef.current) {
-        const autoOptions = options.length
-          ? options
-          : ["Observo o ambiente e avanço com cautela, buscando a melhor oportunidade."];
-        scheduleNextTurn(autoOptions, finalMsgs, finalDisp, updated, lore);
+      const needsRoll = raw.toLowerCase().includes("[teste:");
+      if (autoRef.current && !needsRoll) {
+        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
+      } else if (autoRef.current && needsRoll) {
+        showNotification("Modo automático pausado — role o dado para continuar.", "warning");
       }
 
       if (raw.toLowerCase().includes("[teste:")) {

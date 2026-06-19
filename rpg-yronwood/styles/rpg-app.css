@@ -850,6 +850,9 @@ body.damage-flash { animation: damageFlash .3s ease-in-out; }
 .settings-item + .settings-item { margin-top: 4px; }
 .settings-item-label { display: flex; align-items: center; gap: 8px; color: var(--text-primary); }
 .settings-item-label i { color: var(--text-secondary); font-size: 16px; }
+.settings-hint { font-size: 12px; color: var(--text-secondary); line-height: 1.55; margin: 4px 2px 8px; padding: 0 4px; }
+
+.auto-banner-quiet { margin-bottom: 8px; }
 .settings-toggle { border: 0.5px solid var(--border-md); border-radius: var(--radius-md); padding: 5px 12px; font-size: 11px; font-weight: 600; color: var(--text-secondary); transition: all .15s; min-height: 32px; }
 .settings-toggle.on { background: var(--purple-light); border-color: var(--purple-mid); color: var(--purple); }
 .settings-action { width: 100%; text-align: left; padding: 12px 14px; background: var(--bg-secondary); border-radius: var(--radius-md); font-size: 13px; color: var(--text-primary); display: flex; align-items: center; gap: 8px; transition: background .15s; min-height: 44px; }

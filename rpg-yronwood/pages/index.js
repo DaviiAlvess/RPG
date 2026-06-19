@@ -1,6 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import PlayView from "../components/PlayView";
+import ToastContainer from "../components/ToastContainer";
+import {
+  applyTimeSkip,
+  parseTimeSkip,
+  stripTimeSkipTags,
+  calculateAge,
+  resolveTemporalEffects,
+  normalizeGameTime,
+  createDefaultGameTime,
+  createAdventureStartEvent,
+  formatTimeSkipContext,
+  formatTimeSkipSeparator,
+  shouldShowTimeSeparator,
+  formatGameTimeLong,
+} from "../lib/timeSystem";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -18,9 +33,10 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
-   .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
-   .trim();
+  stripTimeSkipTags(
+    t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
+     .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
+  ).trim();
 const generateImage = (prompt, world) => {
   const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
@@ -128,7 +144,8 @@ const GAME_STYLES = {
 };
 
 // ─── System prompt ────────────────────────────────────────────────────
-const buildPrompt = (c, loreExtra) => {
+const buildPrompt = (c, loreExtra, gameTime) => {
+  const gt = normalizeGameTime(gameTime);
   const style = GAME_STYLES[c.gameStyle] ? c.gameStyle : "aventura";
   const lines = [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
@@ -142,7 +159,9 @@ const buildPrompt = (c, loreExtra) => {
     ``,
     `PERSONAGEM DO JOGADOR (referência interna — não repita o nome em excesso na narração):`,
     `- Nome: ${c.charName}${c.charTitle ? ` — ${c.charTitle}` : ""}`,
-    c.charAge         ? `- Idade: ${c.charAge} anos`             : "",
+    c.charInitialAge != null
+      ? `- Idade: ${calculateAge(c.charInitialAge, gt.totalDaysElapsed)} anos`
+      : c.charAge ? `- Idade: ${c.charAge} anos` : "",
     c.charBg          ? `- História: ${c.charBg}`                 : "",
     c.charPersonality ? `- Personalidade: ${c.charPersonality}`   : "",
     c.charAppearanceNote
@@ -264,6 +283,12 @@ const buildPrompt = (c, loreExtra) => {
     `Atitudes dos NPCs em relação ao jogador:`,
     `${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("\n") || "- (nenhum definido ainda)"}`,
     `Ações rudes mudam para Hostil/Suspeito. Gentileza muda para Amigável/Neutral. Nunca explique a mudança — apenas ajuste o tom.`,
+    ``,
+    `REGRA 14 — PASSAGEM DE TEMPO.`,
+    `TEMPO ATUAL NA AVENTURA: ${formatGameTimeLong(gt)}.`,
+    `Quando um intervalo real passar na narrativa (horas, dias, semanas, etc.), inclua na ÚLTIMA linha da resposta a tag invisível: [TIME_SKIP: unidade=dias, quantidade=1].`,
+    `Unidades válidas: minutos, horas, dias, semanas, meses, anos. Seja conservador — só use a tag quando o salto temporal for claro. Cenas contínuas sem salto NÃO devem ter tag.`,
+    `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
   return lines.filter(Boolean).join("\n");
@@ -370,15 +395,15 @@ export default function RPG() {
   const [toasts, setToasts] = useState([]);
   const [showTimeSkipModal, setShowTimeSkipModal] = useState(false);
   const [timeSkipConfig, setTimeSkipConfig] = useState({
-    amount: 1,
-    unit: 'dias',
-    focus: '',
-    includeEvents: true,
-    includeProgression: true
+    preset: "days",
+    amount: 3,
+    unit: "dias",
   });
   const [autoDetectionEnabled, setAutoDetectionEnabled] = useState(true);
-  const [characterAge, setCharacterAge] = useState(0);
-  const [campaignStartTime, setCampaignStartTime] = useState(Date.now());
+  const [charInitialAge, setCharInitialAge] = useState(18);
+  const [gameTime, setGameTime] = useState(() => createDefaultGameTime());
+  const [temporalEffects, setTemporalEffects] = useState([]);
+  const [timelineEvents, setTimelineEvents] = useState([]);
   const [showTestDropdown, setShowTestDropdown] = useState(false);
   const [playPanel, setPlayPanel] = useState("narrator");
   const [diceHistory, setDiceHistory] = useState([]);
@@ -392,10 +417,18 @@ export default function RPG() {
   const [authTab, setAuthTab] = useState("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [firebaseOk, setFirebaseOk] = useState(true);
   const [authMessage, setAuthMessage] = useState(null);
 
+  const gameTimeRef = useRef(gameTime);
+  const temporalEffectsRef = useRef(temporalEffects);
+
+  useEffect(() => { gameTimeRef.current = gameTime; }, [gameTime]);
+  useEffect(() => { temporalEffectsRef.current = temporalEffects; }, [temporalEffects]);
+
+  const displayAge = calculateAge(charInitialAge, gameTime?.totalDaysElapsed);
   const bottomRef = useRef(null);
   const taRef     = useRef(null);
   const sending   = useRef(false);
@@ -405,6 +438,7 @@ export default function RPG() {
   const sendMsgRef = useRef(null);
   const authTokenRef = useRef(null);
   const pendingRef = useRef([]);
+  const skipNextTimeParseRef = useRef(false);
 
   const apiFetch = useCallback((url, options = {}) => {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -532,13 +566,58 @@ export default function RPG() {
   }, [theme]);
 
   // ─── Storage (cache local + nuvem Firebase por conta) ─────────────
-  const showNotification = useCallback((text, type = "info") => {
-    const toast = { id: Date.now(), text, type, timestamp: new Date() };
+  const showNotification = useCallback((text, type = "info", meta = {}) => {
+    const enriched = { ...meta };
+    if (!enriched.undoItem && /item (adicionado|detectado)/i.test(text)) {
+      const match = text.match(/(?:adicionado|detectado):\s*(.+)$/i);
+      if (match?.[1]) enriched.undoItem = match[1].trim();
+    }
+    const toast = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text,
+      type,
+      timestamp: new Date(),
+      ...enriched,
+    };
     setToasts((prev) => [...prev, toast]);
+    const duration = enriched.duration ?? (enriched.undoItem ? 10000 : 6000);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-    }, 4000);
+    }, duration);
   }, []);
+
+  const dismissToast = useCallback(async (toast) => {
+    if (!toast) return;
+    setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+    if (toast.undoItem && active) {
+      const items = active.items || [];
+      const idx = items.lastIndexOf(toast.undoItem);
+      if (idx >= 0) {
+        const newItems = items.filter((_, i) => i !== idx);
+        const updated = { ...active, items: newItems };
+        setActive(updated);
+        try {
+          await saveCamp(active.id, updated);
+        } catch (error) {
+          console.error("Erro ao desfazer item:", error);
+        }
+      }
+    }
+  }, [active, saveCamp]);
+
+  const processTimeAdvance = useCallback((unit, quantity, options = {}) => {
+    const result = applyTimeSkip(gameTimeRef.current, unit, quantity, options);
+    const { active: activeEffects, expired } = resolveTemporalEffects(
+      temporalEffectsRef.current,
+      result.gameTime.totalDaysElapsed
+    );
+    setGameTime(result.gameTime);
+    setTemporalEffects(activeEffects);
+    if (expired.length > 0) {
+      showNotification(`${expired.length} efeito(s) temporal(is) expirou(aram).`, "info");
+    }
+    return { ...result, expired, temporalEffects: activeEffects };
+  }, [showNotification]);
 
   const saveIdx = async (l, userId) => {
     try {
@@ -559,7 +638,11 @@ export default function RPG() {
       missions: overrides.missions ?? camp.missions ?? missions,
       img: overrides.img ?? sceneImg ?? camp.img ?? null,
       lore: overrides.lore ?? campLore ?? camp.lore ?? "",
-      charAge: String(overrides.charAge ?? characterAge ?? camp.charAge ?? ""),
+      charAge: String(overrides.charInitialAge ?? charInitialAge ?? camp.charInitialAge ?? camp.charAge ?? ""),
+      charInitialAge: overrides.charInitialAge ?? charInitialAge ?? camp.charInitialAge ?? (parseInt(camp.charAge, 10) || 18),
+      gameTime: normalizeGameTime(overrides.gameTime ?? gameTime ?? camp.gameTime),
+      temporalEffects: overrides.temporalEffects ?? temporalEffects ?? camp.temporalEffects ?? [],
+      timelineEvents: overrides.timelineEvents ?? timelineEvents ?? camp.timelineEvents ?? [],
       items: overrides.items ?? camp.items ?? [],
       experience: overrides.experience ?? experience,
       level: overrides.level ?? level,
@@ -567,7 +650,7 @@ export default function RPG() {
       skills: overrides.skills ?? skills,
       updatedAt: new Date().toISOString(),
     };
-  }, [active, msgs, disp, hp, missions, sceneImg, campLore, characterAge, experience, level, attributes, skills]);
+  }, [active, msgs, disp, hp, missions, sceneImg, campLore, charInitialAge, gameTime, temporalEffects, timelineEvents, experience, level, attributes, skills]);
 
   const saveCamp = useCallback(async (id, d) => {
     if (!user) return;
@@ -960,7 +1043,10 @@ export default function RPG() {
     setCampLore(data.lore || "");
     setHp(data.hp ?? 100);
     setMissions(data.missions || []);
-    setCharacterAge(parseInt(data.charAge, 10) || 0);
+    setCharInitialAge(parseInt(data.charInitialAge ?? data.charAge, 10) || 18);
+    setGameTime(normalizeGameTime(data.gameTime));
+    setTemporalEffects(Array.isArray(data.temporalEffects) ? data.temporalEffects : []);
+    setTimelineEvents(Array.isArray(data.timelineEvents) ? data.timelineEvents : [createAdventureStartEvent()]);
     setExperience(data.experience ?? 0);
     setLevel(data.level ?? 1);
     setAttributes(data.attributes ?? { ...DEFAULT_ATTRIBUTES });
@@ -1054,8 +1140,10 @@ export default function RPG() {
     setPlayPanel("narrator");
 
     const initialAge = parseInt(form.charAge) || 18;
-    setCharacterAge(initialAge);
-    setCampaignStartTime(Date.now());
+    setCharInitialAge(initialAge);
+    setGameTime(createDefaultGameTime());
+    setTemporalEffects([]);
+    setTimelineEvents([createAdventureStartEvent()]);
 
     let lore = "";
     if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
@@ -1077,6 +1165,11 @@ export default function RPG() {
       experience: 0,
       attributes: { ...DEFAULT_ATTRIBUTES },
       skills: { ...DEFAULT_SKILLS },
+      charInitialAge: initialAge,
+      charAge: String(initialAge),
+      gameTime: createDefaultGameTime(),
+      temporalEffects: [],
+      timelineEvents: [createAdventureStartEvent()],
       createdAt: Date.now(),
     };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
@@ -1150,14 +1243,21 @@ export default function RPG() {
     setStatus(isAuto ? "⚡ MODO AUTO — MESTRE NARRANDO ✦" : "✦ O MESTRE TECE O DESTINO ✦");
     setInput(""); taRef.current?.blur();
 
+    const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
-    const newDisp = [...baseDisp, { type: isAuto ? "auto" : "user", text }];
+    const newDisp = [
+      ...baseDisp,
+      {
+        type: isTimeSkipContext ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
+        text: isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
+      },
+    ];
     setMsgs(newMsgs); setDisp(newDisp);
 
     try {
       const res = await fetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMsgs, systemPrompt: buildPrompt(camp, lore) }),
+        body: JSON.stringify({ messages: newMsgs, systemPrompt: buildPrompt(camp, lore, camp.gameTime || gameTimeRef.current) }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -1171,8 +1271,42 @@ export default function RPG() {
       const clean = cleanText(raw);
       const options = extractOptions(clean);
 
+      let nextGameTime = normalizeGameTime(camp.gameTime || gameTimeRef.current);
+      let nextTemporalEffects = camp.temporalEffects ?? temporalEffectsRef.current ?? [];
+      let timeSeparator = null;
+
+      const isManualSkipMsg = text.trim().startsWith("[O jogador avançou o tempo:");
+      if (!isManualSkipMsg && !skipNextTimeParseRef.current) {
+        const parsedSkip = parseTimeSkip(raw);
+        if (parsedSkip) {
+          const advance = applyTimeSkip(
+            nextGameTime,
+            parsedSkip.unidade,
+            parsedSkip.quantidade,
+            { timeOfDay: parsedSkip.timeOfDay }
+          );
+          nextGameTime = advance.gameTime;
+          const resolved = resolveTemporalEffects(nextTemporalEffects, nextGameTime.totalDaysElapsed);
+          nextTemporalEffects = resolved.active;
+          if (resolved.expired.length > 0) {
+            showNotification(`${resolved.expired.length} efeito(s) temporal(is) expirou(aram).`, "info");
+          }
+          setGameTime(nextGameTime);
+          setTemporalEffects(nextTemporalEffects);
+          if (shouldShowTimeSeparator(advance.daysAdvanced, parsedSkip.unidade, parsedSkip.quantidade)) {
+            timeSeparator = {
+              type: "time_sep",
+              text: formatTimeSkipSeparator(advance.daysAdvanced, parsedSkip.unidade, parsedSkip.quantidade),
+            };
+          }
+        }
+      }
+      skipNextTimeParseRef.current = false;
+
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
-      const finalDisp = [...newDisp, { type: "gm", text: clean }];
+      const finalDisp = [...newDisp];
+      if (timeSeparator) finalDisp.push(timeSeparator);
+      finalDisp.push({ type: "gm", text: clean });
       setMsgs(finalMsgs); setDisp(finalDisp);
 
       let newImg = camp.img || null;
@@ -1200,6 +1334,10 @@ export default function RPG() {
         experience,
         attributes,
         skills,
+        gameTime: nextGameTime,
+        temporalEffects: nextTemporalEffects,
+        charInitialAge: camp.charInitialAge ?? charInitialAge,
+        timelineEvents: camp.timelineEvents ?? timelineEvents,
         updatedAt: Date.now(),
       };
       setActive(updated);
@@ -1262,16 +1400,31 @@ export default function RPG() {
   const resetChat = async () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
     clearAuto(); setAutoMode(false); autoRef.current = false;
-    const updated = { ...active, msgs: [], disp: [], img: null, missions: [], items: [], hp: 100 };
+    const defaultTime = createDefaultGameTime();
+    const updated = {
+      ...active,
+      msgs: [],
+      disp: [],
+      img: null,
+      missions: [],
+      items: [],
+      hp: 100,
+      gameTime: defaultTime,
+      temporalEffects: [],
+      timelineEvents: [createAdventureStartEvent()],
+    };
     setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
     setMissions([]); setHp(100); setPending([]);
+    setGameTime(defaultTime);
+    setTemporalEffects([]);
+    setTimelineEvents([createAdventureStartEvent()]);
     await saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
   const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
 
   // ─── Inventário ───────────────────────────────────────────────────
-  const addItem = useCallback(async (itemName) => {
+  const addItem = useCallback(async (itemName, options = {}) => {
     if (!active || !itemName) return;
     try {
       const currentItems = active.items || [];
@@ -1279,7 +1432,9 @@ export default function RPG() {
       const updated = { ...active, items: newItems };
       setActive(updated);
       await saveCamp(active.id, updated);
-      showNotification(`Item adicionado: ${itemName}`);
+      if (!options.silent) {
+        showNotification(`Item adicionado: ${itemName}`, "success", { undoItem: itemName });
+      }
     } catch (error) {
       console.error('Erro ao adicionar item:', error);
       showNotification('Erro ao adicionar item', 'error');
@@ -1432,17 +1587,6 @@ export default function RPG() {
       }
     });
 
-    const agePatterns = [
-      /(?:tem|possui)\s+(\d+)\s*(?:anos|years)/gi,
-    ];
-    agePatterns.forEach(pattern => {
-      let match;
-      while ((match = pattern.exec(message)) !== null) {
-        const age = parseInt(match[1]);
-        if (age >= 0 && age <= 150) detected.age = age;
-      }
-    });
-
     return detected;
   }, [autoDetectionEnabled, active]);
 
@@ -1451,65 +1595,52 @@ export default function RPG() {
 
     if (detected.items.length > 0) {
       for (const item of detected.items) {
-        await addItem(item);
-        showNotification(`🎒 Item detectado: ${item}`, 'success');
-      }
-    }
-
-    if (detected.age !== undefined) {
-      setCharacterAge(detected.age);
-      showNotification(`👤 Idade atualizada: ${detected.age} anos`, 'info');
-      if (active) {
-        const updated = { ...active, charAge: detected.age.toString() };
-        setActive(updated);
-        await saveCamp(active.id, updated);
+        await addItem(item, { silent: true });
+        showNotification(`🎒 Item detectado: ${item}`, "success", { undoItem: item });
       }
     }
 
     return detected;
-  }, [parseMessageForAutoDetection, addItem, active, saveCamp, showNotification]);
+  }, [parseMessageForAutoDetection, addItem, showNotification]);
 
   // ─── Time-Skip ─────────────────────────────────────────────────────
   const executeTimeSkip = async () => {
-    if (!active || !timeSkipConfig.focus.trim()) {
-      showNotification("Preencha o foco do personagem", "warning");
-      return;
-    }
+    if (!active) return;
     if (sending.current || loading) {
       showNotification("Aguarde o narrador terminar a cena atual.", "warning");
       return;
     }
+
+    const amount = Math.max(1, Number(timeSkipConfig.amount) || 1);
+    const unit = timeSkipConfig.unit || "dias";
     setShowTimeSkipModal(false);
 
-    const timePrompt = `[TIMESKIP: ${timeSkipConfig.amount} ${timeSkipConfig.unit}]\nFOCO: ${timeSkipConfig.focus}\nPERSONAGEM: ${active.charName} — ${active.charTitle}\nPERSONALIDADE: ${active.charPersonality}\nHABILIDADES: ${active.charSkills}\n\nGere uma narrativa detalhada sobre o que ${active.charName} fez durante este período de ${timeSkipConfig.amount} ${timeSkipConfig.unit}, focando em: ${timeSkipConfig.focus}. ${timeSkipConfig.includeProgression ? "Inclua ganho de experiência." : ""} ${timeSkipConfig.includeEvents ? "Crie 1-2 eventos significativos." : ""} Termine com a situação atual do personagem.`;
+    const advance = processTimeAdvance(unit, amount);
+    const updatedCamp = {
+      ...active,
+      gameTime: advance.gameTime,
+      temporalEffects: advance.temporalEffects,
+    };
+    setActive(updatedCamp);
 
-    showNotification(`Avançando ${timeSkipConfig.amount} ${timeSkipConfig.unit} no tempo...`, "info");
+    let nextDisp = [...disp];
+    if (shouldShowTimeSeparator(advance.daysAdvanced, unit, amount)) {
+      nextDisp = [
+        ...nextDisp,
+        {
+          type: "time_sep",
+          text: formatTimeSkipSeparator(advance.daysAdvanced, unit, amount),
+        },
+      ];
+      setDisp(nextDisp);
+    }
+
+    const contextMsg = `[O jogador avançou o tempo: ${formatTimeSkipContext(unit, amount)}. O calendário do jogo já foi atualizado — narre o que aconteceu neste intervalo sem incluir tag TIME_SKIP.]`;
+    showNotification(formatTimeSkipContext(unit, amount), "info");
 
     try {
-      await sendMsg(timePrompt, msgs, disp, active, campLore, false);
-
-      if (timeSkipConfig.includeProgression) {
-        const xpMultiplier = { dias: 5, semanas: 25, meses: 100, anos: 500 };
-        const xpGained = timeSkipConfig.amount * (xpMultiplier[timeSkipConfig.unit] || 5);
-        setExperience((prev) => prev + xpGained);
-      }
-
-      const ageMultiplier = { dias: 1 / 365, semanas: 1 / 52, meses: 1 / 12, anos: 1 };
-      const ageIncrease = timeSkipConfig.amount * (ageMultiplier[timeSkipConfig.unit] || 0);
-      const newAge = Math.max(0, characterAge + ageIncrease);
-      setCharacterAge(newAge);
-
-      const updated = {
-        ...active,
-        charAge: Math.floor(newAge).toString(),
-        experience: (experience || 0) + (timeSkipConfig.includeProgression
-          ? timeSkipConfig.amount * ({ dias: 5, semanas: 25, meses: 100, anos: 500 }[timeSkipConfig.unit] || 5)
-          : 0),
-      };
-      setActive(updated);
-      await saveCamp(active.id, buildCampaignSnapshot(updated, { charAge: updated.charAge }));
-
-      showNotification(`Seu personagem agora tem ${Math.floor(newAge)} anos!`, "info");
+      skipNextTimeParseRef.current = true;
+      await sendMsg(contextMsg, msgs, nextDisp, updatedCamp, campLore, false);
     } catch (error) {
       console.error("Erro no time-skip:", error);
       showNotification("Erro ao avançar no tempo", "error");
@@ -1551,8 +1682,8 @@ export default function RPG() {
             </div>
           )}
           <div className="auth-tabs">
-            <button type="button" className={`auth-tab ${authTab === "login" ? "on" : ""}`} onClick={() => { setAuthTab("login"); setAuthMessage(null); }}>Entrar</button>
-            <button type="button" className={`auth-tab ${authTab === "signup" ? "on" : ""}`} onClick={() => { setAuthTab("signup"); setAuthMessage(null); }}>Criar conta</button>
+            <button type="button" className={`auth-tab ${authTab === "login" ? "on" : ""}`} onClick={() => { setAuthTab("login"); setAuthMessage(null); setShowAuthPassword(false); }}>Entrar</button>
+            <button type="button" className={`auth-tab ${authTab === "signup" ? "on" : ""}`} onClick={() => { setAuthTab("signup"); setAuthMessage(null); setShowAuthPassword(false); }}>Criar conta</button>
           </div>
           {authMessage && (
             <div className={`auth-alert auth-alert-${authMessage.type}`}>{authMessage.text}</div>
@@ -1569,16 +1700,27 @@ export default function RPG() {
               required
             />
             <label className="auth-label">Senha</label>
-            <input
-              type="password"
-              className="auth-input"
-              value={authPassword}
-              onChange={(e) => setAuthPassword(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              autoComplete={authTab === "login" ? "current-password" : "new-password"}
-              minLength={6}
-              required
-            />
+            <div className="auth-password-wrap">
+              <input
+                type={showAuthPassword ? "text" : "password"}
+                className="auth-input auth-input-password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                autoComplete={authTab === "login" ? "current-password" : "new-password"}
+                minLength={6}
+                required
+              />
+              <button
+                type="button"
+                className="auth-password-toggle"
+                onClick={() => setShowAuthPassword((v) => !v)}
+                aria-label={showAuthPassword ? "Ocultar senha" : "Mostrar senha"}
+                tabIndex={-1}
+              >
+                <i className={showAuthPassword ? "ti ti-eye-off" : "ti ti-eye"} />
+              </button>
+            </div>
             <button type="submit" className="auth-submit" disabled={authBusy || !firebaseOk}>
               {authBusy ? "Aguarde..." : authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
             </button>
@@ -1619,18 +1761,13 @@ export default function RPG() {
         </>
       )}
 
-      <div className="toast-container">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast toast-${toast.type}`}>
-            <span className="toast-message">{toast.text}</span>
-          </div>
-        ))}
-      </div>
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 
   // ═══ CREATE ════════════════════════════════════════════════════════
   if (view === "create") return (
+    <>
     <div className="rpg-shell">
       <Head><title>Novo Personagem</title></Head>
       <div className="cr-head">
@@ -1798,10 +1935,13 @@ export default function RPG() {
         </>}
       </div>
     </div>
+    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 
   // ═══ PLAY ══════════════════════════════════════════════════════════
   return (
+    <>
     <PlayView
       active={active}
       disp={disp}
@@ -1816,7 +1956,11 @@ export default function RPG() {
       attributes={attributes}
       skills={skills}
       missions={missions}
-      characterAge={characterAge}
+      characterAge={displayAge}
+      gameTime={gameTime}
+      temporalEffects={temporalEffects}
+      timelineEvents={timelineEvents}
+      charInitialAge={charInitialAge}
       input={input}
       setInput={setInput}
       autoMode={autoMode}
@@ -1844,7 +1988,6 @@ export default function RPG() {
       setShowTimeSkipModal={setShowTimeSkipModal}
       timeSkipConfig={timeSkipConfig}
       setTimeSkipConfig={setTimeSkipConfig}
-      toasts={toasts}
       bottomRef={bottomRef}
       taRef={taRef}
       GAME_STYLES={GAME_STYLES}
@@ -1874,6 +2017,8 @@ export default function RPG() {
       toggleMission={toggleMission}
       intervene={intervene}
     />
+    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }
 

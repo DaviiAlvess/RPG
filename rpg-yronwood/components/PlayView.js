@@ -1,5 +1,12 @@
 import Head from "next/head";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
+import {
+  TIME_SKIP_PRESETS,
+  formatGameTimeShort,
+  formatGameTimeLong,
+  getSeasonIcon,
+  getTimeOfDayIcon,
+} from "../lib/timeSystem";
 
 const PANEL_META = {
   narrator: { label: "Narrador", icon: "ti ti-message-2" },
@@ -28,15 +35,6 @@ const SKILL_LABELS = {
   survival: "Sobrevivência",
   perception: "Percepção",
 };
-
-const TOAST_ICONS = {
-  success: "ti ti-circle-check",
-  error: "ti ti-alert-circle",
-  warning: "ti ti-alert-triangle",
-  info: "ti ti-info-circle",
-};
-
-const TIME_XP_RATES = { dias: 5, semanas: 25, meses: 100, anos: 500 };
 
 function renderMessageTime(message) {
   return fmtTime(message?.ts || message?.time || message?.createdAt || message?.timestamp);
@@ -68,6 +66,10 @@ export default function PlayView(props) {
     skills,
     missions,
     characterAge,
+    gameTime,
+    temporalEffects,
+    timelineEvents,
+    charInitialAge,
     input,
     setInput,
     autoMode,
@@ -95,7 +97,6 @@ export default function PlayView(props) {
     setShowTimeSkipModal,
     timeSkipConfig,
     setTimeSkipConfig,
-    toasts,
     bottomRef,
     taRef,
     GAME_STYLES,
@@ -140,7 +141,12 @@ export default function PlayView(props) {
   const panelSubtitle = getPanelSubtitle(panel.label.toLowerCase() === "narrador" ? "narrator" : playPanel, loading, statusText, connectionStatus, c, lastSaved);
   const attributeEntries = Object.entries(attributes || {});
   const skillEntries = Object.entries(skills || {});
-  const estimatedXp = (timeSkipConfig?.amount || 0) * (TIME_XP_RATES[timeSkipConfig?.unit] || 5);
+  const timeLabel = formatGameTimeShort(gameTime);
+  const timeLongLabel = formatGameTimeLong(gameTime);
+  const seasonIcon = getSeasonIcon(gameTime?.season);
+  const todIcon = getTimeOfDayIcon(gameTime?.timeOfDay);
+  const activePreset = TIME_SKIP_PRESETS.find((p) => p.id === timeSkipConfig?.preset) || TIME_SKIP_PRESETS[2];
+  const showCustomDays = timeSkipConfig?.preset === "days";
 
   const navItems = [
     { id: "narrator", badge: null },
@@ -224,6 +230,13 @@ export default function PlayView(props) {
                 <h2>{panel.label}</h2>
               </div>
               <p>{panelSubtitle}</p>
+              {playPanel === "narrator" ? (
+                <div className="game-time-indicator" title={timeLongLabel}>
+                  <i className={`ti ${todIcon}`} />
+                  <span>{timeLabel}</span>
+                  <i className={`ti ${seasonIcon}`} />
+                </div>
+              ) : null}
             </div>
 
             <button
@@ -282,6 +295,23 @@ export default function PlayView(props) {
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
                 {(disp || []).map((message, index) => {
+                  if (message?.type === "time_sep") {
+                    return (
+                      <div key={message?.id || `time-${index}`} className="chat-time-separator">
+                        <span>{message?.text}</span>
+                      </div>
+                    );
+                  }
+
+                  if (message?.type === "time_skip_ctx") {
+                    return (
+                      <div key={message?.id || `tskip-${index}`} className="chat-time-context">
+                        <i className="ti ti-clock-hour-4" />
+                        <span>{message?.text}</span>
+                      </div>
+                    );
+                  }
+
                   const isUser = message?.type === "user" || message?.type === "auto";
                   const isAuto = message?.type === "auto";
                   const isError = message?.type === "error";
@@ -320,6 +350,16 @@ export default function PlayView(props) {
               </div>
 
               <div className="chat-input-row">
+                <button
+                  className="btn-time-skip"
+                  onClick={() => setShowTimeSkipModal(true)}
+                  type="button"
+                  title="Avançar no tempo"
+                  disabled={loading || autoWaiting}
+                >
+                  <i className="ti ti-clock-hour-4" />
+                </button>
+
                 <button
                   className={`btn-auto-toggle ${autoMode ? "on" : ""}`}
                   onClick={toggleAuto}
@@ -367,6 +407,48 @@ export default function PlayView(props) {
             <div>
               <div className="panel-title">Ficha do personagem</div>
               <div className="panel-sub">{c.charName || "Herói sem nome"}{c.charTitle ? ` · ${c.charTitle}` : ""}</div>
+            </div>
+
+            <div className="card-box game-time-card">
+              <div className="section-label">Linha do tempo</div>
+              <div className="game-time-display">
+                <i className={`ti ${todIcon}`} />
+                <div>
+                  <div className="game-time-date">{timeLongLabel}</div>
+                  <div className="game-time-meta">
+                    <span><i className={`ti ${seasonIcon}`} /> {gameTime?.season}</span>
+                    <span>{gameTime?.totalDaysElapsed || 0} dias desde o início</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="timeline">
+                <div className="timeline-item">
+                  <div className="timeline-dot" />
+                  <div className="timeline-content">
+                    <div className="timeline-label">Nascimento</div>
+                    <div className="timeline-sub">Idade inicial: {charInitialAge ?? characterAge} anos</div>
+                  </div>
+                </div>
+                {(timelineEvents || []).map((event, index) => (
+                  <div key={event?.id || `evt-${index}`} className="timeline-item">
+                    <div className="timeline-dot active" />
+                    <div className="timeline-content">
+                      <div className="timeline-label">{event?.label}</div>
+                      <div className="timeline-sub">
+                        Dia {event?.totalDaysElapsed ?? 0} da aventura
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="timeline-item current">
+                  <div className="timeline-dot current" />
+                  <div className="timeline-content">
+                    <div className="timeline-label">Agora</div>
+                    <div className="timeline-sub">{timeLongLabel}</div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="card-box">
@@ -426,10 +508,10 @@ export default function PlayView(props) {
               <div className="card-box">
                 <div className="section-label">Resumo</div>
                 <div className="skill-list">
-                  <div className="skill-row">
+                  <div className="skill-row highlight-age">
                     <span className="skill-dot prof" />
-                    <span className="skill-name">Idade</span>
-                    <span className="skill-val">{Math.floor(Number(characterAge) || 0)} anos</span>
+                    <span className="skill-name">Idade atual</span>
+                    <span className="skill-val age-val">{Math.floor(Number(characterAge) || 0)} anos</span>
                   </div>
                   <div className="skill-row">
                     <span className="skill-dot prof" />
@@ -473,6 +555,24 @@ export default function PlayView(props) {
                 </div>
               </div>
             </div>
+
+            {(temporalEffects || []).length > 0 ? (
+              <div className="card-box">
+                <div className="section-label">Efeitos temporais</div>
+                <div className="skill-list">
+                  {temporalEffects.map((effect, index) => (
+                    <div key={effect?.id || `fx-${index}`} className="skill-row">
+                      <span className="skill-dot" />
+                      <span className="skill-name">{effect?.tipo || "Efeito"}</span>
+                      <span className="skill-val">
+                        {effect?.valor != null ? String(effect.valor) : ""}
+                        {effect?.expiraEm != null ? ` · expira dia ${effect.expiraEm}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="card-box">
               <div className="section-label">Relações</div>
@@ -566,7 +666,7 @@ export default function PlayView(props) {
                         <i className="ti ti-play" />
                       </button>
                       <button className="equip-btn danger" onClick={() => removeItem(index)} type="button" title="Remover item">
-                        <i className="ti ti-trash" />
+                        <i className="ti ti-x" />
                       </button>
                     </div>
                   </div>
@@ -812,72 +912,57 @@ export default function PlayView(props) {
 
             <div className="modal-body">
               <div className="time-config-section">
-                <label>Quanto tempo deseja avançar?</label>
-                <div className="time-input-group">
-                  <input
-                    className="time-input"
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={timeSkipConfig?.amount || 1}
-                    onChange={(event) =>
-                      setTimeSkipConfig((prev) => ({ ...prev, amount: parseInt(event.target.value, 10) || 1 }))
-                    }
-                  />
-                  <select
-                    className="time-select"
-                    value={timeSkipConfig?.unit || "dias"}
-                    onChange={(event) => setTimeSkipConfig((prev) => ({ ...prev, unit: event.target.value }))}
-                  >
-                    <option value="dias">Dias</option>
-                    <option value="semanas">Semanas</option>
-                    <option value="meses">Meses</option>
-                    <option value="anos">Anos</option>
-                  </select>
+                <label>Escolha o intervalo</label>
+                <div className="time-preset-grid">
+                  {TIME_SKIP_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      className={`time-preset-btn ${timeSkipConfig?.preset === preset.id ? "on" : ""}`}
+                      onClick={() =>
+                        setTimeSkipConfig({
+                          preset: preset.id,
+                          amount: preset.quantity,
+                          unit: preset.unit,
+                        })
+                      }
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <div className="time-config-section">
-                <label>Foco do personagem</label>
-                <textarea
-                  className="time-textarea"
-                  rows={3}
-                  value={timeSkipConfig?.focus || ""}
-                  onChange={(event) => setTimeSkipConfig((prev) => ({ ...prev, focus: event.target.value }))}
-                  placeholder="Ex: treinar combate, estudar magia, negociar alianças..."
-                />
-              </div>
-
-              <div className="time-config-section">
-                <div className="time-options">
-                  <label className="time-checkbox">
+              {showCustomDays ? (
+                <div className="time-config-section">
+                  <label>Quantos dias?</label>
+                  <div className="time-input-group">
                     <input
-                      type="checkbox"
-                      checked={!!timeSkipConfig?.includeEvents}
-                      onChange={(event) => setTimeSkipConfig((prev) => ({ ...prev, includeEvents: event.target.checked }))}
+                      className="time-input"
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={timeSkipConfig?.amount || 3}
+                      onChange={(event) =>
+                        setTimeSkipConfig((prev) => ({
+                          ...prev,
+                          amount: parseInt(event.target.value, 10) || 1,
+                          unit: "dias",
+                        }))
+                      }
                     />
-                    <span>Incluir eventos importantes</span>
-                  </label>
-                  <label className="time-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={!!timeSkipConfig?.includeProgression}
-                      onChange={(event) => setTimeSkipConfig((prev) => ({ ...prev, includeProgression: event.target.checked }))}
-                    />
-                    <span>Incluir progressão e XP</span>
-                  </label>
+                    <span className="time-unit-label">dias</span>
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div className="time-preview">
-                <h4>Preview</h4>
+                <h4>Resumo</h4>
                 <p>
-                  {c.charName || "Seu personagem"} vai passar <strong>{timeSkipConfig?.amount || 1} {timeSkipConfig?.unit || "dias"}</strong>
-                  {timeSkipConfig?.focus ? ` focado em ${timeSkipConfig.focus}` : "."}
+                  O tempo avançará <strong>{timeSkipConfig?.amount || activePreset.quantity} {timeSkipConfig?.unit || activePreset.unit}</strong>.
+                  O narrador receberá o contexto automaticamente.
                 </p>
-                {timeSkipConfig?.includeProgression ? (
-                  <p className="xp-preview">Ganho estimado: {estimatedXp} XP</p>
-                ) : null}
+                <p className="time-preview-now">Agora: {timeLongLabel}</p>
               </div>
             </div>
 
@@ -888,24 +973,15 @@ export default function PlayView(props) {
               <button
                 className="btn-confirm"
                 onClick={executeTimeSkip}
-                disabled={loading || !timeSkipConfig?.focus?.trim()}
+                disabled={loading}
                 type="button"
               >
-                {loading ? "Avançando..." : "Avançar"}
+                {loading ? "Avançando..." : "Confirmar salto"}
               </button>
             </div>
           </div>
         </div>
       ) : null}
-
-      <div className="toast-container">
-        {(toasts || []).map((toast) => (
-          <div key={toast.id} className={`toast toast-${toast.type || "info"}`}>
-            <i className={TOAST_ICONS[toast.type] || TOAST_ICONS.info} />
-            <span>{toast.text}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

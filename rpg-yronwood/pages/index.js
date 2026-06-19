@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import dynamic from "next/dynamic";
 import Head from "next/head";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
@@ -332,7 +331,8 @@ const authErrorPt = (msg) => {
 const getUserId = (u) => u?.uid || u?.id || null;
 
 // ═════════════════════════════════════════════════════════════════════
-function RPG() {
+export default function RPG() {
+  const [clientReady, setClientReady] = useState(false);
   const [view, setView]     = useState("home");
   const [idx, setIdx]       = useState([]);
   const [active, setActive] = useState(null);
@@ -560,6 +560,7 @@ function RPG() {
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { pendingRef.current = pendingOptions; }, [pendingOptions]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
+  useEffect(() => { setClientReady(true); }, []);
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.setAttribute("data-theme", theme);
@@ -1663,6 +1664,14 @@ function RPG() {
   const activeMissions = missions.filter(m => !m.completed);
   const doneMissions   = missions.filter(m => m.completed);
 
+  if (!clientReady) {
+    return (
+      <div className="rpg-shell">
+        <div className="auth-loading">Carregando...</div>
+      </div>
+    );
+  }
+
   // ═══ HOME ══════════════════════════════════════════════════════════
   if (view === "home") return (
     <div className="rpg-shell">
@@ -2048,13 +2057,4 @@ function Toggle({ title, desc, value, onChange }) {
     </div>
   );
 }
-
-export default dynamic(() => Promise.resolve(RPG), {
-  ssr: false,
-  loading: () => (
-    <div className="rpg-shell">
-      <div className="auth-loading">Carregando...</div>
-    </div>
-  ),
-});
 

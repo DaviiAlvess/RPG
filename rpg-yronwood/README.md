@@ -1,6 +1,6 @@
 # ⚔ RPG Edric Yronwood — Crônicas de Gelo e Fogo
 
-RPG de texto imersivo com IA como Mestre e saves na nuvem via **Firebase**.
+RPG de texto imersivo com IA como Mestre e saves na nuvem via **Firebase Realtime Database**.
 
 ---
 
@@ -11,7 +11,7 @@ RPG de texto imersivo com IA como Mestre e saves na nuvem via **Firebase**.
 3. Adicione a variável `GEMINI_API_KEY` (Google AI Studio)
 4. Configure o Firebase (abaixo) e faça deploy
 
-> As credenciais do Firebase (`siterpg32`) já vêm no código. Só precisa ativar Auth + Firestore no console.
+> As credenciais do Firebase (`siterpg32`) já vêm no código.
 
 ---
 
@@ -20,10 +20,8 @@ RPG de texto imersivo com IA como Mestre e saves na nuvem via **Firebase**.
 Siga `firebase/SETUP.md`:
 
 1. [Firebase Console](https://console.firebase.google.com/project/siterpg32) → **Authentication** → E-mail/Senha → Enable
-2. **Firestore Database** → Create database
-3. **Rules** → cole `firebase/firestore.rules` → Publish
-
-Realtime Database (`https://siterpg32-default-rtdb.firebaseio.com/`) não é usado — saves ficam no Firestore.
+2. **Realtime Database** → Create database → `https://siterpg32-default-rtdb.firebaseio.com/`
+3. **Rules** → cole `firebase/database.rules.json` → Publish
 
 ---
 

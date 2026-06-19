@@ -119,8 +119,10 @@ export default function PlayView(props) {
     exportToBook,
     saveSlot,
     loadSlot,
+    deleteSlot,
     resetChat,
     insertCmd,
+    toggleMission,
     intervene,
   } = props;
 
@@ -178,6 +180,7 @@ export default function PlayView(props) {
               className={`nav-item ${playPanel === id ? "active" : ""}`}
               onClick={() => setPlayPanel(id)}
               type="button"
+              aria-current={playPanel === id ? "page" : undefined}
             >
               <i className={PANEL_META[id].icon} />
               <span>{PANEL_META[id].label}</span>
@@ -585,12 +588,18 @@ export default function PlayView(props) {
               <div className="mission-list">
                 {activeMissionList.length ? (
                   activeMissionList.map((mission, index) => (
-                    <div key={mission?.id || `active-${index}`} className="mission-item">
+                    <button
+                      key={mission?.id || `active-${index}`}
+                      className="mission-item mission-item-btn"
+                      onClick={() => toggleMission?.(mission.id)}
+                      type="button"
+                      title="Marcar como concluída"
+                    >
                       <div className="mission-check">
                         <i className="ti ti-point-filled" />
                       </div>
                       <div className="mission-text">{mission?.text}</div>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <div className="panel-sub">Nenhuma missão ativa no momento.</div>
@@ -603,12 +612,18 @@ export default function PlayView(props) {
               <div className="mission-list">
                 {doneMissionList.length ? (
                   doneMissionList.map((mission, index) => (
-                    <div key={mission?.id || `done-${index}`} className="mission-item done">
+                    <button
+                      key={mission?.id || `done-${index}`}
+                      className="mission-item done mission-item-btn"
+                      onClick={() => toggleMission?.(mission.id)}
+                      type="button"
+                      title="Marcar como ativa novamente"
+                    >
                       <div className="mission-check">
                         <i className="ti ti-check" />
                       </div>
                       <div className="mission-text">{mission?.text}</div>
-                    </div>
+                    </button>
                   ))
                 ) : (
                   <div className="panel-sub">Nenhuma missão concluída ainda.</div>
@@ -624,6 +639,16 @@ export default function PlayView(props) {
             </div>
 
             <div className="settings-list">
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <i className="ti ti-player-play" />
+                  <span>Modo automático</span>
+                </div>
+                <button className={`settings-toggle ${autoMode ? "on" : ""}`} onClick={toggleAuto} type="button">
+                  {autoMode ? "Ligado" : "Desligado"}
+                </button>
+              </div>
+
               <div className="settings-item">
                 <div className="settings-item-label">
                   <i className="ti ti-volume" />
@@ -689,17 +714,26 @@ export default function PlayView(props) {
               {saveList.length ? (
                 <div className="equip-list">
                   {saveList.map((save) => (
-                    <button
-                      key={save.id}
-                      className="settings-action"
-                      onClick={() => loadSlot(save)}
-                      type="button"
-                    >
-                      <i className="ti ti-bookmark" />
-                      <span>
-                        {save.name || "Save"}{save.timestamp ? ` · ${fmtTime(save.timestamp)}` : ""}
-                      </span>
-                    </button>
+                    <div key={save.id} className="save-slot-row">
+                      <button
+                        className="settings-action"
+                        onClick={() => loadSlot(save)}
+                        type="button"
+                      >
+                        <i className="ti ti-bookmark" />
+                        <span>
+                          {save.name || "Save"}{save.timestamp ? ` · ${fmtTime(save.timestamp)}` : ""}
+                        </span>
+                      </button>
+                      <button
+                        className="equip-btn danger"
+                        onClick={() => deleteSlot?.(save.id)}
+                        type="button"
+                        title="Apagar save"
+                      >
+                        <i className="ti ti-trash" />
+                      </button>
+                    </div>
                   ))}
                 </div>
               ) : (
@@ -714,7 +748,10 @@ export default function PlayView(props) {
                   <button
                     key={key}
                     className="dice-chip"
-                    onClick={() => insertCmd(`[TESTE:${ATTR_LABELS[key] || key}] `)}
+                    onClick={() => {
+                      insertCmd(`[TESTE:${ATTR_LABELS[key] || key}] `);
+                      setPlayPanel("narrator");
+                    }}
                     type="button"
                   >
                     {ATTR_LABELS[key] || key}

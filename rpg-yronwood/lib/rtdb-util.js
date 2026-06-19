@@ -1,5 +1,5 @@
-/** Remove undefined e normaliza valores para o Firestore */
-export function sanitizeForFirestore(value) {
+/** Remove undefined e normaliza valores para o Realtime Database */
+export function sanitizeForRtdb(value) {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -7,13 +7,13 @@ export function sanitizeForFirestore(value) {
   if (value instanceof Date) return value.toISOString();
   if (Array.isArray(value)) {
     return value
-      .map((item) => sanitizeForFirestore(item))
+      .map((item) => sanitizeForRtdb(item))
       .filter((item) => item !== undefined);
   }
   if (typeof value === "object") {
     const out = {};
     for (const [key, val] of Object.entries(value)) {
-      const clean = sanitizeForFirestore(val);
+      const clean = sanitizeForRtdb(val);
       if (clean !== undefined) out[key] = clean;
     }
     return out;
@@ -23,7 +23,7 @@ export function sanitizeForFirestore(value) {
 
 const MAX_CHAT_MESSAGES = 150;
 
-export function prepareCampaignForFirestore(campaign) {
+export function prepareCampaignForRtdb(campaign) {
   const copy = { ...campaign };
   if (Array.isArray(copy.msgs) && copy.msgs.length > MAX_CHAT_MESSAGES) {
     copy.msgs = copy.msgs.slice(-MAX_CHAT_MESSAGES);
@@ -38,5 +38,5 @@ export function prepareCampaignForFirestore(campaign) {
       disp: Array.isArray(slot.disp) ? slot.disp.slice(-40) : [],
     }));
   }
-  return sanitizeForFirestore(copy);
+  return sanitizeForRtdb(copy);
 }

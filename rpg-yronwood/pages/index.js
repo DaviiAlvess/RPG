@@ -274,6 +274,9 @@ const IDX_KEY = "rpg-idx-v3";
 const campKey = (id) => `rpg-camp-${id}`;
 const idxKeyForUser = (userId) => (userId ? `rpg-idx-${userId}` : IDX_KEY);
 
+const DEFAULT_ATTRIBUTES = { strength: 10, dexterity: 10, mind: 10, charisma: 10 };
+const DEFAULT_SKILLS = { combat: 1, stealth: 1, magic: 1, persuasion: 1, survival: 1, perception: 1 };
+
 const authErrorPt = (msg) => {
   const m = (msg || "").toLowerCase();
   if (m.includes("invalid login credentials") || m.includes("invalid-credential") || m.includes("wrong-password") || m.includes("user-not-found")) {
@@ -351,8 +354,8 @@ export default function RPG() {
   const [showCharacterSheet, setShowCharacterSheet] = useState(false);
   const [experience, setExperience] = useState(0);
   const [level, setLevel] = useState(1);
-  const [attributes, setAttributes] = useState({ strength: 10, dexterity: 10, mind: 10, charisma: 10 });
-  const [skills, setSkills] = useState({ combat: 1, stealth: 1, magic: 1, persuasion: 1, survival: 1, perception: 1 });
+  const [attributes, setAttributes] = useState({ ...DEFAULT_ATTRIBUTES });
+  const [skills, setSkills] = useState({ ...DEFAULT_SKILLS });
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [theme, setTheme] = useState("light");
@@ -707,9 +710,14 @@ export default function RPG() {
         setTimeout(() => document.body.classList.remove("damage-flash"), 300);
         playSound("damage");
       }
+      if (active?.id) {
+        const updated = { ...active, hp: next };
+        setActive(updated);
+        saveCamp(active.id, buildCampaignSnapshot(updated, { hp: next }));
+      }
       return next;
     });
-  }, [playSound]);
+  }, [playSound, active, saveCamp, buildCampaignSnapshot]);
 
   // ─── Quick Save ───────────────────────────────────────────────────
   const quickSave = useCallback(async () => {
@@ -752,30 +760,44 @@ export default function RPG() {
     const updatedSaves = [newSave, ...currentSaves].slice(0, 5);
     const updated = { ...active, saves: updatedSaves, missions, hp, items: newSave.items, relationships: newSave.relationships };
     setActive(updated);
-    saveCamp(active.id, updated);
-    setSaveFlash(true);
-    setTimeout(() => setSaveFlash(false), 1500);
+    saveCamp(active.id, buildCampaignSnapshot(updated));
+    showNotification("Save slot criado!", "success");
   };
 
-  const loadSlot = (save) => {
-    if (!confirm("Carregar este save? O progresso não salvo será perdido.")) return;
+  const loadSlot = async (save) => {
+    if (!active || !confirm("Carregar este save? O progresso não salvo será perdido.")) return;
     clearAuto();
-    setMsgs(save.msgs || []);
-    setDisp(save.disp || []);
-    setSceneImg(save.img || null);
-    setImgOk(!!save.img);
-    setHp(save.hp ?? 100);
-    setMissions(save.missions || []);
+    const updated = {
+      ...active,
+      msgs: save.msgs || [],
+      disp: save.disp || [],
+      img: save.img || null,
+      hp: save.hp ?? 100,
+      missions: save.missions || [],
+      items: save.items || active.items || [],
+      relationships: save.relationships || active.relationships || {},
+    };
+    setActive(updated);
+    setMsgs(updated.msgs);
+    setDisp(updated.disp);
+    setSceneImg(updated.img);
+    setImgOk(!!updated.img);
+    setHp(updated.hp);
+    setMissions(updated.missions);
     setShowChar(false);
     setInput("");
+    setPlayPanel("narrator");
+    await saveCamp(active.id, buildCampaignSnapshot(updated));
+    showNotification("Save carregado!", "success");
   };
 
   const deleteSlot = (saveId) => {
-    if (!confirm("Apagar este save permanentemente?")) return;
-    const updatedSaves = (active.saves || []).filter(s => s.id !== saveId);
+    if (!active || !confirm("Apagar este save permanentemente?")) return;
+    const updatedSaves = (active.saves || []).filter((s) => s.id !== saveId);
     const updated = { ...active, saves: updatedSaves };
     setActive(updated);
-    saveCamp(active.id, updated);
+    saveCamp(active.id, buildCampaignSnapshot(updated));
+    showNotification("Save apagado.", "info");
   };
 
   // ─── Lore fetch ───────────────────────────────────────────────────
@@ -938,8 +960,13 @@ export default function RPG() {
     setCampLore(data.lore || "");
     setHp(data.hp ?? 100);
     setMissions(data.missions || []);
-    setCharacterAge(parseInt(data.charAge) || 0);
+    setCharacterAge(parseInt(data.charAge, 10) || 0);
+    setExperience(data.experience ?? 0);
+    setLevel(data.level ?? 1);
+    setAttributes(data.attributes ?? { ...DEFAULT_ATTRIBUTES });
+    setSkills(data.skills ?? { ...DEFAULT_SKILLS });
     setShowChar(false);
+    setPlayPanel("narrator");
     setAutoMode(false); setAutoWaiting(false); setPending([]); autoRef.current = false; pendingRef.current = [];
     setView("play");
     if (!data.msgs?.length) doStart(data, data.lore || "");
@@ -1020,6 +1047,11 @@ export default function RPG() {
     }
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
     setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
+    setExperience(0);
+    setLevel(1);
+    setAttributes({ ...DEFAULT_ATTRIBUTES });
+    setSkills({ ...DEFAULT_SKILLS });
+    setPlayPanel("narrator");
 
     const initialAge = parseInt(form.charAge) || 18;
     setCharacterAge(initialAge);
@@ -1029,7 +1061,24 @@ export default function RPG() {
     if (form.isKnownIP) { setStatus("🔍 A procurar lore oficial de " + form.world + "..."); lore = await fetchLore(form.world); }
     else { setStatus("⚗️ A preparar mundo..."); }
     const id = uid();
-    const camp = { id, ...form, lore, msgs: [], disp: [], img: null, hp: 100, missions: [], saves: [], items: [], relationships: form.relationships || {}, createdAt: Date.now() };
+    const camp = {
+      id,
+      ...form,
+      lore,
+      msgs: [],
+      disp: [],
+      img: null,
+      hp: 100,
+      missions: [],
+      saves: [],
+      items: [],
+      relationships: form.relationships || {},
+      level: 1,
+      experience: 0,
+      attributes: { ...DEFAULT_ATTRIBUTES },
+      skills: { ...DEFAULT_SKILLS },
+      createdAt: Date.now(),
+    };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
     setIdx(next); saveIdx(next); await saveCamp(id, camp);
@@ -1049,6 +1098,7 @@ export default function RPG() {
   };
 
   const rollD20 = () => {
+    setPlayPanel("narrator");
     const roll = Math.floor(Math.random() * 20) + 1;
     setLastRoll(roll);
     setDiceNum(roll);
@@ -1137,7 +1187,21 @@ export default function RPG() {
         }
       }
 
-      const updated = { ...camp, msgs: finalMsgs, disp: finalDisp, img: newImg, lore, missions: updatedMissions, items: updatedItems, hp, updatedAt: Date.now() };
+      const updated = {
+        ...camp,
+        msgs: finalMsgs,
+        disp: finalDisp,
+        img: newImg,
+        lore,
+        missions: updatedMissions,
+        items: updatedItems,
+        hp,
+        level,
+        experience,
+        attributes,
+        skills,
+        updatedAt: Date.now(),
+      };
       setActive(updated);
       saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
@@ -1179,6 +1243,7 @@ export default function RPG() {
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;
     clearAuto();
+    setPlayPanel("narrator");
 
     const testMatch = input.match(/^\[TESTE:(\w+)\]\s*(.+)$/i);
     if (testMatch) {
@@ -1262,16 +1327,39 @@ export default function RPG() {
 
   // ─── Personagem / Combate ──────────────────────────────────────────
   const handleLevelUp = () => {
-    setLevel(prev => prev + 1);
-    setAttributes(prev => ({
-      strength: prev.strength + 1,
-      dexterity: prev.dexterity + 1,
-      mind: prev.mind + 1,
-      charisma: prev.charisma + 1
-    }));
-    showNotification(`⬆️ Você subiu para o nível ${level + 1}!`);
+    const newLevel = level + 1;
+    const newAttributes = {
+      strength: attributes.strength + 1,
+      dexterity: attributes.dexterity + 1,
+      mind: attributes.mind + 1,
+      charisma: attributes.charisma + 1,
+    };
+    setLevel(newLevel);
+    setAttributes(newAttributes);
+    showNotification(`⬆️ Você subiu para o nível ${newLevel}!`);
     changeHp(25);
+    if (active) {
+      const updated = { ...active, level: newLevel, attributes: newAttributes };
+      setActive(updated);
+      saveCamp(active.id, buildCampaignSnapshot(updated, { level: newLevel, attributes: newAttributes }));
+    }
   };
+
+  const toggleMission = useCallback((missionId) => {
+    const updatedMissions = missions.map((m) =>
+      m.id === missionId ? { ...m, completed: !m.completed } : m
+    );
+    setMissions(updatedMissions);
+    if (active) {
+      const updated = { ...active, missions: updatedMissions };
+      setActive(updated);
+      saveCamp(active.id, buildCampaignSnapshot(updated, { missions: updatedMissions }));
+    }
+  }, [missions, active, saveCamp, buildCampaignSnapshot]);
+
+  const switchPanel = useCallback((panelId) => {
+    setPlayPanel(panelId);
+  }, []);
 
   const handleUpdateCharacter = (updatedCharacter) => {
     if (!active) return;
@@ -1432,11 +1520,12 @@ export default function RPG() {
   const toggleTheme = () => setTheme((t) => (t === "dark" ? "light" : "dark"));
 
   const insertCmd = (cmd) => {
-    setInput(prev => {
+    setPlayPanel("narrator");
+    setInput((prev) => {
       const space = prev && !prev.endsWith(" ") ? " " : "";
       return prev + space + cmd;
     });
-    taRef.current?.focus();
+    setTimeout(() => taRef.current?.focus(), 50);
   };
 
   const activeMissions = missions.filter(m => !m.completed);
@@ -1458,7 +1547,7 @@ export default function RPG() {
         <div className="auth-box">
           {!firebaseOk && (
             <div className="auth-alert auth-alert-error">
-              ⚠️ Firebase não acessível. No <a href="https://console.firebase.google.com/project/siterpg32" target="_blank" rel="noreferrer">Firebase Console</a>, ative <strong>Authentication → E-mail/Senha</strong>, crie o <strong>Firestore</strong> e publique as rules em <code>firebase/firestore.rules</code>.
+                  ⚠️ Firebase não acessível. No <a href="https://console.firebase.google.com/project/siterpg32" target="_blank" rel="noreferrer">Firebase Console</a>, ative <strong>Authentication → E-mail/Senha</strong>, crie o <strong>Realtime Database</strong> e publique as rules em <code>firebase/database.rules.json</code>.
             </div>
           )}
           <div className="auth-tabs">
@@ -1736,7 +1825,7 @@ export default function RPG() {
       showRollButton={showRollButton}
       lastRoll={lastRoll}
       playPanel={playPanel}
-      setPlayPanel={setPlayPanel}
+      setPlayPanel={switchPanel}
       diceHistory={diceHistory}
       diceNum={diceNum}
       diceLabel={diceLabel}
@@ -1779,8 +1868,10 @@ export default function RPG() {
       exportToBook={exportToBook}
       saveSlot={saveSlot}
       loadSlot={loadSlot}
+      deleteSlot={deleteSlot}
       resetChat={resetChat}
       insertCmd={insertCmd}
+      toggleMission={toggleMission}
       intervene={intervene}
     />
   );

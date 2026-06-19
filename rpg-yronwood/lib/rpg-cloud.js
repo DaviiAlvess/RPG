@@ -1,14 +1,7 @@
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-} from "firebase/firestore";
+import { get, ref, remove, set } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { ensureFirebaseReady } from "./firebase-browser";
-import { prepareCampaignForFirestore } from "./firestore-util";
+import { prepareCampaignForRtdb } from "./rtdb-util";
 
 async function waitForUser(auth, timeoutMs = 5000) {
   if (auth.currentUser) return auth.currentUser;
@@ -40,8 +33,12 @@ async function getClient() {
   return { db, user, error: null };
 }
 
+function campaignsRef(db, userId) {
+  return ref(db, `users/${userId}/campaigns`);
+}
+
 function campaignRef(db, userId, campaignId) {
-  return doc(db, "users", userId, "campaigns", String(campaignId));
+  return ref(db, `users/${userId}/campaigns/${String(campaignId)}`);
 }
 
 export async function cloudSaveCampaign(campaign) {
@@ -51,23 +48,24 @@ export async function cloudSaveCampaign(campaign) {
 
   try {
     const now = new Date().toISOString();
-    const ref = campaignRef(db, user.uid, campaign.id);
-    const existing = await getDoc(ref);
-    const payload = prepareCampaignForFirestore({
+    const pathRef = campaignRef(db, user.uid, campaign.id);
+    const existingSnap = await get(pathRef);
+    const payload = prepareCampaignForRtdb({
       ...campaign,
       id: String(campaign.id),
       updatedAt: now,
-      createdAt: existing.exists() ? existing.data().createdAt || now : now,
+      createdAt: existingSnap.exists() ? existingSnap.val()?.createdAt || now : now,
     });
-    await setDoc(ref, payload);
+    await set(pathRef, payload);
     return { ok: true };
   } catch (err) {
     console.error("cloudSaveCampaign:", err);
     const code = err.code || "";
-    if (code === "permission-denied") {
+    if (code === "PERMISSION_DENIED" || code === "permission-denied") {
       return {
         ok: false,
-        error: "Sem permissão no Firestore. Publique firebase/firestore.rules e confirme que está logado.",
+        error:
+          "Sem permissão no Realtime Database. Publique firebase/database.rules.json e confirme que está logado.",
       };
     }
     return { ok: false, error: err.message || "Erro ao salvar campanha." };
@@ -79,11 +77,11 @@ export async function cloudLoadCampaign(id) {
   if (error) return { ok: false, error, data: null };
 
   try {
-    const snap = await getDoc(campaignRef(db, user.uid, id));
+    const snap = await get(campaignRef(db, user.uid, id));
     if (!snap.exists()) {
       return { ok: false, error: "Campanha não encontrada.", data: null };
     }
-    return { ok: true, data: snap.data() };
+    return { ok: true, data: snap.val() };
   } catch (err) {
     return { ok: false, error: err.message, data: null };
   }
@@ -94,19 +92,19 @@ export async function cloudListCampaigns() {
   if (error) return { ok: false, error, data: [] };
 
   try {
-    const snap = await getDocs(collection(db, "users", user.uid, "campaigns"));
-    const data = snap.docs
-      .map((d) => {
-        const r = d.data();
-        return {
-          id: r.id,
-          world: r.world,
-          charName: r.charName,
-          updatedAt: r.updatedAt,
-          createdAt: r.createdAt,
-        };
-      })
+    const snap = await get(campaignsRef(db, user.uid));
+    if (!snap.exists()) return { ok: true, data: [] };
+
+    const data = Object.values(snap.val() || {})
+      .map((r) => ({
+        id: r.id,
+        world: r.world,
+        charName: r.charName,
+        updatedAt: r.updatedAt,
+        createdAt: r.createdAt,
+      }))
       .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
     return { ok: true, data };
   } catch (err) {
     return { ok: false, error: err.message, data: [] };
@@ -118,7 +116,7 @@ export async function cloudDeleteCampaign(id) {
   if (error) return { ok: false, error };
 
   try {
-    await deleteDoc(campaignRef(db, user.uid, id));
+    await remove(campaignRef(db, user.uid, id));
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || "Erro ao apagar." };
@@ -130,20 +128,15 @@ export async function cloudHealthCheck() {
   if (error) return { ok: false, error };
 
   try {
-    await getDocs(collection(db, "users", user.uid, "campaigns"));
+    await get(campaignsRef(db, user.uid));
     return { ok: true, userId: user.uid };
   } catch (err) {
     const code = err.code || "";
-    if (code === "permission-denied") {
+    if (code === "PERMISSION_DENIED" || code === "permission-denied") {
       return {
         ok: false,
-        error: "Firestore sem permissão. Crie o banco e publique as rules em firebase/firestore.rules.",
-      };
-    }
-    if (code === "not-found" || err.message?.includes("NOT_FOUND")) {
-      return {
-        ok: false,
-        error: "Firestore não criado. No Firebase Console: Build → Firestore → Create database.",
+        error:
+          "Realtime Database sem permissão. Publique as rules em firebase/database.rules.json no console.",
       };
     }
     return { ok: false, error: err.message };

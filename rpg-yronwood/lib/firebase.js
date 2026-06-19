@@ -1,6 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyC3ImOHIc0ugpnmxsIJbcdfQDuakGAv9rU",
@@ -10,14 +10,15 @@ const firebaseConfig = {
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "980644619215",
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:980644619215:web:5fa7b28d6dd9da84f0e8ba",
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-LZTQBVRF1P",
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://siterpg32-default-rtdb.firebaseio.com",
+  databaseURL:
+    process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://siterpg32-default-rtdb.firebaseio.com",
 };
 
 let app = null;
 
 export function getFirebaseApp() {
   if (typeof window === "undefined") return null;
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) return null;
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId || !firebaseConfig.databaseURL) return null;
   if (!app) {
     app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
   }
@@ -29,11 +30,16 @@ export function getFirebaseAuth() {
   return firebaseApp ? getAuth(firebaseApp) : null;
 }
 
+/** Realtime Database — saves em users/{uid}/campaigns/{id} */
 export function getFirebaseDb() {
   const firebaseApp = getFirebaseApp();
-  return firebaseApp ? getFirestore(firebaseApp) : null;
+  return firebaseApp ? getDatabase(firebaseApp) : null;
 }
 
 export function isFirebaseConfigured() {
-  return !!(firebaseConfig.apiKey && firebaseConfig.projectId);
+  return !!(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.databaseURL);
+}
+
+export function getFirebaseDatabaseUrl() {
+  return firebaseConfig.databaseURL;
 }

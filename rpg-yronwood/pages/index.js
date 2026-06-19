@@ -8,8 +8,10 @@ const extractImagePrompt = (text) => {
   return m ? m[1].trim() : null;
 };
 const extractOptions = (text) => {
-  const matches = [...text.matchAll(/^\s*(\d)\.\s+(.+)/gm)];
-  return matches.slice(-3).map(m => m[2].trim());
+  const matches = [...text.matchAll(/^\s*(\d{1,2})\.\s+(.+)/gm)];
+  if (matches.length) return matches.slice(-3).map((m) => m[2].trim());
+  const bullets = [...text.matchAll(/^\s*[-•]\s+(.+)/gm)];
+  return bullets.slice(-3).map((m) => m[1].trim());
 };
 const extractItems = (text) => {
   const matches = [...text.matchAll(/\[ITEM:([^\]]+)\]/gi)];
@@ -399,6 +401,7 @@ export default function RPG() {
   const cdRef     = useRef(null);
   const sendMsgRef = useRef(null);
   const authTokenRef = useRef(null);
+  const pendingRef = useRef([]);
 
   const apiFetch = useCallback((url, options = {}) => {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
@@ -517,6 +520,7 @@ export default function RPG() {
   }, [authReady, user, view]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [disp, loading, autoWaiting]);
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
+  useEffect(() => { pendingRef.current = pendingOptions; }, [pendingOptions]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -541,21 +545,44 @@ export default function RPG() {
     }
   };
 
+  const buildCampaignSnapshot = useCallback((base, overrides = {}) => {
+    const camp = { ...(base || active || {}), ...overrides };
+    if (!camp.id) return null;
+    return {
+      ...camp,
+      msgs: overrides.msgs ?? camp.msgs ?? msgs,
+      disp: overrides.disp ?? camp.disp ?? disp,
+      hp: overrides.hp ?? camp.hp ?? hp,
+      missions: overrides.missions ?? camp.missions ?? missions,
+      img: overrides.img ?? sceneImg ?? camp.img ?? null,
+      lore: overrides.lore ?? campLore ?? camp.lore ?? "",
+      charAge: String(overrides.charAge ?? characterAge ?? camp.charAge ?? ""),
+      items: overrides.items ?? camp.items ?? [],
+      experience: overrides.experience ?? experience,
+      level: overrides.level ?? level,
+      attributes: overrides.attributes ?? attributes,
+      skills: overrides.skills ?? skills,
+      updatedAt: new Date().toISOString(),
+    };
+  }, [active, msgs, disp, hp, missions, sceneImg, campLore, characterAge, experience, level, attributes, skills]);
+
   const saveCamp = useCallback(async (id, d) => {
     if (!user) return;
+    const snapshot = buildCampaignSnapshot(d, { id: id || d?.id });
+    if (!snapshot) return;
     try {
-      localStorage.setItem(campKey(id), JSON.stringify(d));
+      localStorage.setItem(campKey(snapshot.id), JSON.stringify(snapshot));
     } catch (error) {
       console.error("Erro ao salvar no localStorage:", error);
     }
     const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
-    const result = await cloudSaveCampaign(d);
+    const result = await cloudSaveCampaign(snapshot);
     if (result.ok) {
       setLastSaved(Date.now());
     } else if (result.error) {
       showNotification(`Erro ao salvar na nuvem: ${result.error}`, "error");
     }
-  }, [user, showNotification]);
+  }, [user, buildCampaignSnapshot, showNotification]);
 
   const readCamp = async (id) => {
     if (!user) return null;
@@ -673,12 +700,12 @@ export default function RPG() {
   }, [soundEnabled]);
 
   const changeHp = useCallback((delta) => {
-    setHp(prev => {
+    setHp((prev) => {
       const next = Math.min(100, Math.max(0, prev + delta));
       if (delta < 0) {
         document.body.classList.add("damage-flash");
         setTimeout(() => document.body.classList.remove("damage-flash"), 300);
-        playSound('damage');
+        playSound("damage");
       }
       return next;
     });
@@ -688,9 +715,9 @@ export default function RPG() {
   const quickSave = useCallback(async () => {
     if (!active) return;
     try {
-      await saveCamp(active.id, active);
+      await saveCamp(active.id, buildCampaignSnapshot(active));
       setLastSaved(Date.now());
-      showNotification('Jogo salvo rapidamente!', 'success');
+      showNotification("Jogo salvo rapidamente!", "success");
       if (soundEnabled) {
         const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
         audio.volume = 0.3;
@@ -700,7 +727,7 @@ export default function RPG() {
       console.error('Erro no quick save:', error);
       showNotification('Erro ao salvar rapidamente', 'error');
     }
-  }, [active, saveCamp, showNotification, soundEnabled]);
+  }, [active, saveCamp, buildCampaignSnapshot, showNotification, soundEnabled]);
 
   // ─── Save Slots ───────────────────────────────────────────────────
   const saveSlot = () => {
@@ -836,24 +863,39 @@ export default function RPG() {
   };
 
   const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
-    if (!autoRef.current || !options.length) return;
+    if (!autoRef.current || sending.current) return;
+    const safeOptions = (options || []).filter(Boolean);
+    const turnOptions = safeOptions.length
+      ? safeOptions
+      : ["Continuo a aventura e reajo à situação da forma mais natural para meu personagem."];
     setAutoWaiting(true);
     setCountdown(autoDelay);
     cdRef.current = setInterval(() => {
-      setCountdown(prev => { if (prev <= 1) { clearInterval(cdRef.current); return 0; } return prev - 1; });
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cdRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     timerRef.current = setTimeout(() => {
       setAutoWaiting(false);
-      if (!autoRef.current) return;
+      if (!autoRef.current || sending.current) return;
 
       let chosen;
       const personality = camp.charPersonality?.toLowerCase() || "";
 
-      if (personality.includes("orgulhoso")) {
-        const proudOptions = options.filter(opt => opt.toLowerCase().includes("desafiar") || opt.toLowerCase().includes("exigir"));
-        chosen = proudOptions.length ? proudOptions[Math.floor(Math.random() * proudOptions.length)] : options[Math.floor(Math.random() * options.length)];
+      if (personality.includes("orgulhoso") && safeOptions.length) {
+        const proudOptions = turnOptions.filter((opt) => {
+          const lower = opt.toLowerCase();
+          return lower.includes("desafiar") || lower.includes("exigir");
+        });
+        chosen = proudOptions.length
+          ? proudOptions[Math.floor(Math.random() * proudOptions.length)]
+          : turnOptions[Math.floor(Math.random() * turnOptions.length)];
       } else {
-        chosen = options[Math.floor(Math.random() * options.length)];
+        chosen = turnOptions[Math.floor(Math.random() * turnOptions.length)];
       }
 
       sendMsgRef.current?.(chosen, currentMsgs, currentDisp, camp, lore, true);
@@ -864,7 +906,15 @@ export default function RPG() {
     const next = !autoMode;
     setAutoMode(next);
     autoRef.current = next;
-    if (!next) clearAuto();
+    if (!next) {
+      clearAuto();
+      return;
+    }
+    if (!loading && !sending.current && pendingRef.current.length > 0 && active) {
+      scheduleNextTurn(pendingRef.current, msgs, disp, active, campLore);
+    } else if (!loading && !sending.current && active) {
+      showNotification("Modo automático ligado. Aguardando a próxima resposta do narrador.", "info");
+    }
   };
 
   const intervene = () => {
@@ -873,6 +923,7 @@ export default function RPG() {
     autoRef.current = false;
     setAutoWaiting(false);
     setPending([]);
+    pendingRef.current = [];
   };
 
   // ─── Home ─────────────────────────────────────────────────────────
@@ -889,7 +940,7 @@ export default function RPG() {
     setMissions(data.missions || []);
     setCharacterAge(parseInt(data.charAge) || 0);
     setShowChar(false);
-    setAutoMode(false); setAutoWaiting(false); setPending([]);
+    setAutoMode(false); setAutoWaiting(false); setPending([]); autoRef.current = false; pendingRef.current = [];
     setView("play");
     if (!data.msgs?.length) doStart(data, data.lore || "");
   };
@@ -983,7 +1034,7 @@ export default function RPG() {
     const next = [summary, ...idx];
     setIdx(next); saveIdx(next); await saveCamp(id, camp);
     setActive(camp); setCampLore(lore); setShowChar(false);
-    setAutoMode(false); setAutoWaiting(false); setPending([]);
+    setAutoMode(false); setAutoWaiting(false); setPending([]); autoRef.current = false; pendingRef.current = [];
     setLoading(false); doStart(camp, lore);
   };
 
@@ -1092,10 +1143,12 @@ export default function RPG() {
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
       setPending(options);
-      if (autoRef.current && options.length > 0) {
-        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
-      } else if (autoRef.current && options.length === 0) {
-        intervene();
+      pendingRef.current = options;
+      if (autoRef.current) {
+        const autoOptions = options.length
+          ? options
+          : ["Observo o ambiente e avanço com cautela, buscando a melhor oportunidade."];
+        scheduleNextTurn(autoOptions, finalMsgs, finalDisp, updated, lore);
       }
 
       if (raw.toLowerCase().includes("[teste:")) {
@@ -1331,42 +1384,48 @@ export default function RPG() {
   // ─── Time-Skip ─────────────────────────────────────────────────────
   const executeTimeSkip = async () => {
     if (!active || !timeSkipConfig.focus.trim()) {
-      showNotification('Preencha o foco do personagem', 'warning');
+      showNotification("Preencha o foco do personagem", "warning");
       return;
     }
+    if (sending.current || loading) {
+      showNotification("Aguarde o narrador terminar a cena atual.", "warning");
+      return;
+    }
+    setShowTimeSkipModal(false);
+
+    const timePrompt = `[TIMESKIP: ${timeSkipConfig.amount} ${timeSkipConfig.unit}]\nFOCO: ${timeSkipConfig.focus}\nPERSONAGEM: ${active.charName} — ${active.charTitle}\nPERSONALIDADE: ${active.charPersonality}\nHABILIDADES: ${active.charSkills}\n\nGere uma narrativa detalhada sobre o que ${active.charName} fez durante este período de ${timeSkipConfig.amount} ${timeSkipConfig.unit}, focando em: ${timeSkipConfig.focus}. ${timeSkipConfig.includeProgression ? "Inclua ganho de experiência." : ""} ${timeSkipConfig.includeEvents ? "Crie 1-2 eventos significativos." : ""} Termine com a situação atual do personagem.`;
+
+    showNotification(`Avançando ${timeSkipConfig.amount} ${timeSkipConfig.unit} no tempo...`, "info");
+
     try {
-      setLoading(true);
-      setShowTimeSkipModal(false);
-
-      const timePrompt = `[TIMESKIP: ${timeSkipConfig.amount} ${timeSkipConfig.unit}]\nFOCO: ${timeSkipConfig.focus}\nPERSONAGEM: ${active.charName} — ${active.charTitle}\nPERSONALIDADE: ${active.charPersonality}\nHABILIDADES: ${active.charSkills}\n\nGere uma narrativa detalhada sobre o que ${active.charName} fez durante este período de ${timeSkipConfig.amount} ${timeSkipConfig.unit}, focando em: ${timeSkipConfig.focus}. ${timeSkipConfig.includeProgression ? 'Inclua ganho de experiência.' : ''} ${timeSkipConfig.includeEvents ? 'Crie 1-2 eventos significativos.' : ''} Termine com a situação atual do personagem.`;
-
       await sendMsg(timePrompt, msgs, disp, active, campLore, false);
-      showNotification(`Avançando ${timeSkipConfig.amount} ${timeSkipConfig.unit} no tempo...`, 'info');
 
       if (timeSkipConfig.includeProgression) {
-        const xpMultiplier = { 'dias': 5, 'semanas': 25, 'meses': 100, 'anos': 500 };
+        const xpMultiplier = { dias: 5, semanas: 25, meses: 100, anos: 500 };
         const xpGained = timeSkipConfig.amount * (xpMultiplier[timeSkipConfig.unit] || 5);
-        setExperience(prev => prev + xpGained);
+        setExperience((prev) => prev + xpGained);
       }
 
-      const ageMultiplier = { 'dias': 1/365, 'semanas': 1/52, 'meses': 1/12, 'anos': 1 };
+      const ageMultiplier = { dias: 1 / 365, semanas: 1 / 52, meses: 1 / 12, anos: 1 };
       const ageIncrease = timeSkipConfig.amount * (ageMultiplier[timeSkipConfig.unit] || 0);
       const newAge = Math.max(0, characterAge + ageIncrease);
       setCharacterAge(newAge);
 
-      if (active) {
-        const updated = { ...active, charAge: Math.floor(newAge).toString(), updatedAt: Date.now() };
-        setActive(updated);
-        await saveCamp(active.id, updated);
-      }
+      const updated = {
+        ...active,
+        charAge: Math.floor(newAge).toString(),
+        experience: (experience || 0) + (timeSkipConfig.includeProgression
+          ? timeSkipConfig.amount * ({ dias: 5, semanas: 25, meses: 100, anos: 500 }[timeSkipConfig.unit] || 5)
+          : 0),
+      };
+      setActive(updated);
+      await saveCamp(active.id, buildCampaignSnapshot(updated, { charAge: updated.charAge }));
 
-      showNotification(`👤 Seu personagem agora tem ${Math.floor(newAge)} anos!`, 'info');
+      showNotification(`Seu personagem agora tem ${Math.floor(newAge)} anos!`, "info");
     } catch (error) {
-      console.error('Erro no time-skip:', error);
-      showNotification('Erro ao avançar no tempo', 'error');
+      console.error("Erro no time-skip:", error);
+      showNotification("Erro ao avançar no tempo", "error");
       setShowTimeSkipModal(true);
-    } finally {
-      setLoading(false);
     }
   };
 

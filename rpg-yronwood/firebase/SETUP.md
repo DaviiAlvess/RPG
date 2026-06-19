@@ -10,6 +10,8 @@
 2. Modo **Production** (ou teste para dev)
 3. **Rules** → cole o conteúdo de `firebase/firestore.rules` → **Publish**
 
+> Se aparecer erro ao salvar, confirme que o Firestore foi criado e as rules publicadas. O app salva em `users/{seu-uid}/campaigns/{id}`.
+
 ## 3. Deploy
 Faça push do código e redeploy na Vercel. **Não precisa** de variáveis Supabase.
 

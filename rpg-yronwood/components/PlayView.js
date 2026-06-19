@@ -224,12 +224,21 @@ export default function PlayView(props) {
             </div>
 
             <button
+              className="topbar-btn"
+              onClick={() => setShowTimeSkipModal(true)}
+              type="button"
+              title="Avançar no tempo"
+            >
+              <i className="ti ti-clock-hour-4" />
+            </button>
+
+            <button
               className={`topbar-btn ${autoMode ? "on" : ""}`}
               onClick={toggleAuto}
               type="button"
               title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
             >
-              <i className="ti ti-player-track-next" />
+              <i className="ti ti-player-play" />
             </button>
 
             <button className="topbar-btn" onClick={quickSave} type="button" title="Salvar rápido">

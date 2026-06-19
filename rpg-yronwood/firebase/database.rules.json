@@ -4,6 +4,12 @@
       "$uid": {
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid",
+
+        "sessao": {
+          ".read": "$uid === auth.uid",
+          ".write": "$uid === auth.uid"
+        },
+
         "campaigns": {
           "$campaignId": {
             ".read": "$uid === auth.uid",

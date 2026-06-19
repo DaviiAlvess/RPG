@@ -441,6 +441,13 @@ export default function RPG() {
   const pendingRef = useRef([]);
   const skipNextTimeParseRef = useRef(false);
 
+  function clearAuto() {
+    clearTimeout(timerRef.current);
+    clearInterval(cdRef.current);
+    setCountdown(0);
+    setAutoWaiting(false);
+  }
+
   const apiFetch = useCallback((url, options = {}) => {
     const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
     if (authTokenRef.current) {
@@ -588,25 +595,6 @@ export default function RPG() {
     }, duration);
   }, []);
 
-  const dismissToast = useCallback(async (toast) => {
-    if (!toast) return;
-    setToasts((prev) => prev.filter((t) => t.id !== toast.id));
-    if (toast.undoItem && active) {
-      const items = active.items || [];
-      const idx = items.lastIndexOf(toast.undoItem);
-      if (idx >= 0) {
-        const newItems = items.filter((_, i) => i !== idx);
-        const updated = { ...active, items: newItems };
-        setActive(updated);
-        try {
-          await saveCamp(active.id, updated);
-        } catch (error) {
-          console.error("Erro ao desfazer item:", error);
-        }
-      }
-    }
-  }, [active, saveCamp]);
-
   const processTimeAdvance = useCallback((unit, quantity, options = {}) => {
     const result = applyTimeSkip(gameTimeRef.current, unit, quantity, options);
     const { active: activeEffects, expired } = resolveTemporalEffects(
@@ -671,6 +659,25 @@ export default function RPG() {
       showNotification(`Erro ao salvar na nuvem: ${result.error}`, "error");
     }
   }, [user, buildCampaignSnapshot, showNotification]);
+
+  const dismissToast = useCallback(async (toast) => {
+    if (!toast) return;
+    setToasts((prev) => prev.filter((t) => t.id !== toast.id));
+    if (toast.undoItem && active) {
+      const items = active.items || [];
+      const idx = items.lastIndexOf(toast.undoItem);
+      if (idx >= 0) {
+        const newItems = items.filter((_, i) => i !== idx);
+        const updated = { ...active, items: newItems };
+        setActive(updated);
+        try {
+          await saveCamp(active.id, updated);
+        } catch (error) {
+          console.error("Erro ao desfazer item:", error);
+        }
+      }
+    }
+  }, [active, saveCamp]);
 
   const readCamp = async (id) => {
     if (!user) return null;
@@ -962,13 +969,6 @@ export default function RPG() {
   };
 
   // ─── Auto mode ────────────────────────────────────────────────────
-  const clearAuto = () => {
-    clearTimeout(timerRef.current);
-    clearInterval(cdRef.current);
-    setCountdown(0);
-    setAutoWaiting(false);
-  };
-
   const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
     if (!autoRef.current || sending.current) return;
     const safeOptions = (options || []).filter(Boolean);

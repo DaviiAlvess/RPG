@@ -6,34 +6,11 @@
   --purple-primary: #534AB7;
   --purple-dark: #1B1530;
   --purple-dark-mid: #26215C;
-  --purple-light: #EEEDFE;
-  --purple-light-mid: #CECBF6;
+  --purple-light: #2E2850;
+  --purple-light-mid: #3D3670;
   --teal: #1D9E75;
   --teal-light: #5DCAA5;
 
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F5F5F7;
-  --bg-tertiary: #EEEDFE;
-  --text-primary: #1A1A2E;
-  --text-secondary: #5C5C72;
-  --border: rgba(27, 21, 48, 0.10);
-  --border-md: rgba(27, 21, 48, 0.18);
-  --purple: var(--purple-primary);
-  --purple-mid: #6B62C8;
-  --accent-solid: var(--purple-primary);
-  --accent-solid-hover: #4540A0;
-  --green: var(--teal);
-  --red: #D64545;
-  --amber: #B8860B;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --shadow: 0 2px 16px rgba(27, 21, 48, 0.08);
-  --sidebar-w: 220px;
-  --app-h: min(700px, calc(100dvh - 32px));
-  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-[data-theme="dark"] {
   --bg-primary: #1E1A2E;
   --bg-secondary: #26213D;
   --bg-tertiary: #1B1530;
@@ -41,16 +18,39 @@
   --text-secondary: #A8A3C4;
   --border: rgba(238, 237, 254, 0.10);
   --border-md: rgba(238, 237, 254, 0.18);
-  --purple-light: #2E2850;
-  --purple-light-mid: #3D3670;
-  --purple-mid: #7B72D4;
   --purple: #9B93E8;
+  --purple-mid: #7B72D4;
   --accent-solid: #534AB7;
   --accent-solid-hover: #6B62C8;
   --green: var(--teal-light);
   --red: #F07070;
   --amber: #D4A84A;
+  --radius-md: 10px;
+  --radius-lg: 12px;
   --shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
+  --sidebar-w: 220px;
+  --app-h: min(700px, calc(100dvh - 32px));
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+[data-theme="light"] {
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F5F5F7;
+  --bg-tertiary: #EEEDFE;
+  --text-primary: #1A1A2E;
+  --text-secondary: #5C5C72;
+  --border: rgba(27, 21, 48, 0.10);
+  --border-md: rgba(27, 21, 48, 0.18);
+  --purple-light: #EEEDFE;
+  --purple-light-mid: #CECBF6;
+  --purple-mid: #6B62C8;
+  --purple: var(--purple-primary);
+  --accent-solid: var(--purple-primary);
+  --accent-solid-hover: #4540A0;
+  --green: var(--teal);
+  --red: #D64545;
+  --amber: #B8860B;
+  --shadow: 0 2px 16px rgba(27, 21, 48, 0.08);
 }
 
 html {

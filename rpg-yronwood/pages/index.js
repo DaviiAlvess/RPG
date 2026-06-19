@@ -384,7 +384,7 @@ export default function RPG() {
   const [skills, setSkills] = useState({ ...DEFAULT_SKILLS });
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState("dark");
   const [lastRoll, setLastRoll] = useState(null);
   const [showRollButton, setShowRollButton] = useState(false);
   const [pendingTest, setPendingTest] = useState(null);

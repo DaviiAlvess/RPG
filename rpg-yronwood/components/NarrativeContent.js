@@ -2,10 +2,12 @@ import { parseNarrativeBlocks } from "../lib/dialogueFormat";
 
 export default function NarrativeContent({ text, playerName }) {
   const blocks = parseNarrativeBlocks(text);
+  const hasDialogue = blocks.some((block) => block.type === "dialogue");
 
   if (!blocks.length) return text || null;
-  if (blocks.length === 1 && blocks[0].type === "narrative") {
-    return <p className="narrative-prose">{blocks[0].text}</p>;
+
+  if (!hasDialogue) {
+    return <p className="narrative-prose">{blocks.map((b) => b.text).join("\n\n")}</p>;
   }
 
   return (
@@ -21,7 +23,7 @@ export default function NarrativeContent({ text, playerName }) {
               className={`dialogue-line${isPlayer ? " dialogue-line-player" : ""}`}
             >
               <span className="dialogue-speaker">{block.speaker}</span>
-              <span className="dialogue-text">{block.text}</span>
+              <span className="dialogue-text">&ldquo;{block.text}&rdquo;</span>
             </div>
           );
         }

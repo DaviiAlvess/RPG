@@ -17,6 +17,7 @@ import {
   formatGameTimeLong,
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText } from "../lib/autoMode";
+import { normalizeDialogueText } from "../lib/dialogueFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -34,9 +35,11 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  stripTimeSkipTags(
-    t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
-     .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
+  normalizeDialogueText(
+    stripTimeSkipTags(
+      t.replace(/IMAGE_PROMPT:\s*.+/gi, "")
+       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
+    )
   ).trim();
 const generateImage = (prompt, world) => {
   const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
@@ -249,17 +252,22 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `REGRA 4 — NPCs TÊM VIDA PRÓPRIA, VOZ PRÓPRIA, AGENDA PRÓPRIA.`,
     `Cada NPC quer algo específico. Eles mentem, omitem, têm pressa, guardam rancor. Cada um fala diferente — soldado usa frases curtas, curandeira fala em provérbios, nobre ri alto demais. Mostre o que fazem enquanto falam.`,
     ``,
-    `REGRA 4B — FORMATO DE DIÁLOGO (OBRIGATÓRIO).`,
-    `Quando qualquer personagem ou NPC falar, use SEMPRE uma linha própria neste formato:`,
+    `REGRA 4B — FORMATO DE DIÁLOGO (OBRIGATÓRIO EM TODA RESPOSTA COM FALA).`,
+    `Se alguém falar na cena, você DEVE usar linhas separadas neste formato exato:`,
     `Nome: "fala entre aspas"`,
-    `Exemplos:`,
+    `MODELO OBRIGATÓRIO (copie esta estrutura quando houver diálogo):`,
+    `[parágrafo de narração — ambiente, ações, sensações]`,
+    `NomeDoNPC: "fala do personagem aqui."`,
+    `[parágrafo de narração se necessário]`,
+    `Exemplos corretos:`,
     `Marujo: "Você não devia estar aqui a esta hora."`,
     `${c.charName}: "Preciso de passagem, e não vou embora de mãos vazias."`,
     `Curandeira: "Sente-se. Antes de curar, preciso saber o que você esconde."`,
+    `PROIBIDO:`,
+    `- NÃO escreva "disse ele", "falou a mulher", "sussurrou" — use sempre Nome: "fala".`,
+    `- NÃO coloque fala dentro de parágrafos de narração.`,
+    `- NÃO use apenas aspas soltas sem o nome na linha anterior ou no formato Nome: "..."`,
     `- Use o nome real de quem fala — inclusive "${c.charName}" quando for o personagem do jogador.`,
-    `- A narração (ambiente, ações, descrições) fica em parágrafos normais, SEM o formato Nome:.`,
-    `- Nunca misture fala e narração na mesma linha.`,
-    `- Cada fala em linha separada; a narração pode vir antes ou depois.`,
     ``,
     `REGRA 5 — AÇÕES TÊM PESO E O MUNDO PUNE DESCUIDO.`,
     `Decisões importam. Descuido gera consequência: aliado some, porta fecha, oportunidade se perde. Não avise antes. O mundo é indiferente — vitórias e erros devem pesar.`,

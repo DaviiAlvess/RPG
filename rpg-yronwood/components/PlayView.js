@@ -351,7 +351,7 @@ export default function PlayView(props) {
                           <div className="msg-speaker">{c.charName}</div>
                         ) : null}
                         <div className="msg-bubble">
-                          {isUser || isError ? (
+                          {isError ? (
                             message?.text || ""
                           ) : (
                             <NarrativeContent text={message?.text} playerName={c?.charName} />

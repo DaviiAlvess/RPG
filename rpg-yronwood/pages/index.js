@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import dynamic from "next/dynamic";
 import Head from "next/head";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
@@ -331,7 +332,7 @@ const authErrorPt = (msg) => {
 const getUserId = (u) => u?.uid || u?.id || null;
 
 // ═════════════════════════════════════════════════════════════════════
-export default function RPG() {
+function RPG() {
   const [view, setView]     = useState("home");
   const [idx, setIdx]       = useState([]);
   const [active, setActive] = useState(null);
@@ -2047,4 +2048,13 @@ function Toggle({ title, desc, value, onChange }) {
     </div>
   );
 }
+
+export default dynamic(() => Promise.resolve(RPG), {
+  ssr: false,
+  loading: () => (
+    <div className="rpg-shell">
+      <div className="auth-loading">Carregando...</div>
+    </div>
+  ),
+});
 

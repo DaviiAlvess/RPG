@@ -4,6 +4,7 @@ import {
   TIME_SKIP_PRESETS,
   formatGameTimeShort,
   formatGameTimeLong,
+  formatTimeSkipContext,
   getSeasonIcon,
   getTimeOfDayIcon,
 } from "../lib/timeSystem";
@@ -146,7 +147,17 @@ export default function PlayView(props) {
   const seasonIcon = getSeasonIcon(gameTime?.season);
   const todIcon = getTimeOfDayIcon(gameTime?.timeOfDay);
   const activePreset = TIME_SKIP_PRESETS.find((p) => p.id === timeSkipConfig?.preset) || TIME_SKIP_PRESETS[2];
-  const showCustomDays = timeSkipConfig?.preset === "days";
+  const showCustomAmount = Boolean(activePreset?.customAmount);
+  const customAmountLabels = {
+    dias: "Quantos dias?",
+    meses: "Quantos meses?",
+    anos: "Quantos anos?",
+  };
+  const customUnit = timeSkipConfig?.unit || activePreset.unit;
+  const customMax = customUnit === "anos" ? 100 : customUnit === "meses" ? 120 : 365;
+  const skipAmount = timeSkipConfig?.amount || activePreset.quantity;
+  const skipUnit = timeSkipConfig?.unit || activePreset.unit;
+  const skipSummary = formatTimeSkipContext(skipUnit, skipAmount);
 
   const navItems = [
     { id: "narrator", badge: null },
@@ -933,25 +944,25 @@ export default function PlayView(props) {
                 </div>
               </div>
 
-              {showCustomDays ? (
+              {showCustomAmount ? (
                 <div className="time-config-section">
-                  <label>Quantos dias?</label>
+                  <label>{customAmountLabels[customUnit] || "Quantidade"}</label>
                   <div className="time-input-group">
                     <input
                       className="time-input"
                       type="number"
                       min="1"
-                      max="365"
-                      value={timeSkipConfig?.amount || 3}
+                      max={customMax}
+                      value={skipAmount}
                       onChange={(event) =>
                         setTimeSkipConfig((prev) => ({
                           ...prev,
                           amount: parseInt(event.target.value, 10) || 1,
-                          unit: "dias",
+                          unit: customUnit,
                         }))
                       }
                     />
-                    <span className="time-unit-label">dias</span>
+                    <span className="time-unit-label">{customUnit}</span>
                   </div>
                 </div>
               ) : null}
@@ -959,7 +970,8 @@ export default function PlayView(props) {
               <div className="time-preview">
                 <h4>Resumo</h4>
                 <p>
-                  O tempo avançará <strong>{timeSkipConfig?.amount || activePreset.quantity} {timeSkipConfig?.unit || activePreset.unit}</strong>.
+                  {skipSummary.charAt(0).toUpperCase()}
+                  {skipSummary.slice(1)}.
                   O narrador receberá o contexto automaticamente.
                 </p>
                 <p className="time-preview-now">Agora: {timeLongLabel}</p>

@@ -9,10 +9,10 @@ export const MONTHS_PER_YEAR = 12;
 export const DAYS_PER_YEAR = 365;
 
 export const DEFAULT_GAME_TIME = {
-  day: 1,
-  month: 1,
-  year: 1,
-  season: "verão",
+  day: 0,
+  month: 0,
+  year: 0,
+  season: "inverno",
   timeOfDay: "manhã",
   totalDaysElapsed: 0,
 };
@@ -22,8 +22,8 @@ export const TIME_SKIP_PRESETS = [
   { id: "next_day", label: "Até o dia seguinte", unit: "dias", quantity: 1 },
   { id: "days", label: "Alguns dias", unit: "dias", quantity: 3, customAmount: true },
   { id: "weeks", label: "Algumas semanas", unit: "semanas", quantity: 2 },
-  { id: "months", label: "Alguns meses", unit: "meses", quantity: 1 },
-  { id: "year", label: "Um ano", unit: "anos", quantity: 1 },
+  { id: "months", label: "Alguns meses", unit: "meses", quantity: 1, customAmount: true },
+  { id: "year", label: "Um ou mais anos", unit: "anos", quantity: 1, customAmount: true },
 ];
 
 const UNIT_ALIASES = {
@@ -58,24 +58,34 @@ export function normalizeUnit(raw) {
 }
 
 export function getSeasonFromMonth(month) {
-  const m = Number(month) || 1;
-  if (m >= 3 && m <= 5) return "primavera";
-  if (m >= 6 && m <= 8) return "verão";
-  if (m >= 9 && m <= 11) return "outono";
+  const m = Number(month);
+  if (Number.isNaN(m)) return "inverno";
+  if (m >= 2 && m <= 4) return "primavera";
+  if (m >= 5 && m <= 7) return "verão";
+  if (m >= 8 && m <= 10) return "outono";
   return "inverno";
 }
 
 export function createDefaultGameTime() {
-  return { ...DEFAULT_GAME_TIME, season: getSeasonFromMonth(1) };
+  return { ...DEFAULT_GAME_TIME };
 }
 
 export function normalizeGameTime(gt) {
   if (!gt || typeof gt !== "object") return createDefaultGameTime();
-  const day = Math.max(1, Number(gt.day) || 1);
-  const month = Math.max(1, Math.min(MONTHS_PER_YEAR, Number(gt.month) || 1));
-  const year = Math.max(1, Number(gt.year) || 1);
+  let day = Math.max(0, Number(gt.day));
+  if (Number.isNaN(day)) day = 0;
+  let month = Math.max(0, Math.min(MONTHS_PER_YEAR - 1, Number(gt.month)));
+  if (Number.isNaN(month)) month = 0;
+  let year = Math.max(0, Number(gt.year));
+  if (Number.isNaN(year)) year = 0;
   const timeOfDay = TIME_OF_DAY_ORDER.includes(gt.timeOfDay) ? gt.timeOfDay : "manhã";
   const totalDaysElapsed = Math.max(0, Number(gt.totalDaysElapsed) || 0);
+  // Migra saves antigos que começavam em 1/1/1 sem tempo decorrido
+  if (totalDaysElapsed === 0 && day === 1 && month === 1 && year === 1) {
+    day = 0;
+    month = 0;
+    year = 0;
+  }
   return {
     day,
     month,
@@ -94,11 +104,11 @@ function advanceCalendar(day, month, year, daysToAdd) {
 
   while (remaining > 0) {
     d += 1;
-    if (d > DAYS_PER_MONTH) {
-      d = 1;
+    if (d >= DAYS_PER_MONTH) {
+      d = 0;
       m += 1;
-      if (m > MONTHS_PER_YEAR) {
-        m = 1;
+      if (m >= MONTHS_PER_YEAR) {
+        m = 0;
         y += 1;
       }
     }

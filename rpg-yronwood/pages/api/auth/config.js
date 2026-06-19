@@ -1,5 +1,9 @@
 export default function handler(_req, res) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
-  res.status(200).json({ configured: !!(url && key) });
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyC3ImOHIc0ugpnmxsIJbcdfQDuakGAv9rU";
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "siterpg32";
+  res.status(200).json({
+    configured: !!(apiKey && projectId),
+    provider: "firebase",
+    projectId,
+  });
 }

@@ -274,19 +274,31 @@ const idxKeyForUser = (userId) => (userId ? `rpg-idx-${userId}` : IDX_KEY);
 
 const authErrorPt = (msg) => {
   const m = (msg || "").toLowerCase();
-  if (m.includes("invalid login credentials")) return "E-mail ou senha incorretos.";
-  if (m.includes("email not confirmed")) return "Confirme seu e-mail antes de entrar (verifique a caixa de entrada e spam).";
-  if (m.includes("user already registered")) return "Este e-mail já está cadastrado. Use a aba Entrar.";
-  if (m.includes("signup is disabled")) return "Cadastro desativado no Supabase. Ative Email em Authentication → Providers.";
-  if (m.includes("supabase não configurado") || m.includes("not configured")) {
-    return "Supabase não configurado no servidor. Adicione NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY na Vercel.";
+  if (m.includes("invalid login credentials") || m.includes("invalid-credential") || m.includes("wrong-password") || m.includes("user-not-found")) {
+    return "E-mail ou senha incorretos.";
   }
-  if (m.includes("password") && m.includes("least")) return "Senha muito curta. Use pelo menos 6 caracteres.";
+  if (m.includes("email not confirmed") || m.includes("email-not-verified")) {
+    return "Confirme seu e-mail antes de entrar (verifique a caixa de entrada e spam).";
+  }
+  if (m.includes("user already registered") || m.includes("email-already-in-use")) {
+    return "Este e-mail já está cadastrado. Use a aba Entrar.";
+  }
+  if (m.includes("signup is disabled") || m.includes("operation-not-allowed")) {
+    return "Cadastro desativado no Firebase. Ative E-mail/Senha em Authentication → Sign-in method.";
+  }
+  if (m.includes("firebase não configurado") || m.includes("not configured")) {
+    return "Firebase não configurado. Verifique as credenciais do projeto siterpg32.";
+  }
+  if (m.includes("password") && (m.includes("least") || m.includes("weak"))) {
+    return "Senha muito curta. Use pelo menos 6 caracteres.";
+  }
   if (m.includes("failed to fetch") || m.includes("networkerror") || m.includes("load failed")) {
-    return "Não foi possível conectar ao Supabase. Verifique se NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY estão corretas na Vercel, se o projeto Supabase está ativo e faça redeploy.";
+    return "Não foi possível conectar ao Firebase. Verifique sua internet e tente novamente.";
   }
   return msg || "Erro desconhecido. Tente novamente.";
 };
+
+const getUserId = (u) => u?.uid || u?.id || null;
 
 // ═════════════════════════════════════════════════════════════════════
 export default function RPG() {
@@ -376,8 +388,7 @@ export default function RPG() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authBusy, setAuthBusy] = useState(false);
-  const [supabaseOk, setSupabaseOk] = useState(true);
-  const [supabaseNeedRedeploy, setSupabaseNeedRedeploy] = useState(false);
+  const [firebaseOk, setFirebaseOk] = useState(true);
   const [authMessage, setAuthMessage] = useState(null);
 
   const bottomRef = useRef(null);
@@ -446,58 +457,38 @@ export default function RPG() {
   }, [reloadCampaigns]);
 
   useEffect(() => {
-    let subscription = null;
+    let unsubscribe = null;
 
     const initAuth = async () => {
       try {
-        const { getSupabaseBrowser, isSupabaseConfigured, getSupabasePublicUrl } = await import("../lib/supabase-browser");
-        const configured = isSupabaseConfigured();
+        const { onAuthStateChanged } = await import("firebase/auth");
+        const { getFirebaseBrowser, isFirebaseConfigured } = await import("../lib/firebase-browser");
 
-        if (!configured) {
-          setSupabaseOk(false);
-          setSupabaseNeedRedeploy(false);
-          try {
-            const res = await fetch("/api/auth/config");
-            const data = await res.json();
-            if (data.configured) setSupabaseNeedRedeploy(true);
-          } catch {}
+        if (!isFirebaseConfigured()) {
+          setFirebaseOk(false);
           return;
         }
 
-        const publicUrl = getSupabasePublicUrl();
-        if (publicUrl) {
-          try {
-            const health = await fetch(`${publicUrl.replace(/\/$/, "")}/auth/v1/health`);
-            if (!health.ok) setSupabaseOk(false);
-          } catch {
-            setSupabaseOk(false);
-          }
-        }
-
-        const sb = getSupabaseBrowser();
-        if (!sb) {
-          setSupabaseOk(false);
+        const auth = getFirebaseBrowser();
+        if (!auth) {
+          setFirebaseOk(false);
           return;
         }
 
-        const { data: { session } } = await sb.auth.getSession();
-        authTokenRef.current = session?.access_token ?? null;
-        setUser(session?.user ?? null);
-
-        const { data: { subscription: sub } } = sb.auth.onAuthStateChange(async (event, nextSession) => {
-          authTokenRef.current = nextSession?.access_token ?? null;
-          setUser(nextSession?.user ?? null);
+        unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+          authTokenRef.current = firebaseUser ? await firebaseUser.getIdToken() : null;
+          setUser(firebaseUser);
         });
-        subscription = sub;
       } catch (e) {
         console.error("Erro ao iniciar auth:", e);
+        setFirebaseOk(false);
       } finally {
         setAuthReady(true);
       }
     };
 
     initAuth();
-    return () => subscription?.unsubscribe();
+    return () => unsubscribe?.();
   }, []);
 
   useEffect(() => {
@@ -506,11 +497,14 @@ export default function RPG() {
       return;
     }
     (async () => {
-      await migrateLocalCampaigns(user.id);
-      await reloadCampaigns(user.id);
+      const userId = getUserId(user);
+      if (!userId) return;
+      await migrateLocalCampaigns(userId);
+      await reloadCampaigns(userId);
       const { cloudHealthCheck } = await import("../lib/rpg-cloud");
       const h = await cloudHealthCheck();
-      if (!h.ok && h.error?.includes("Tabelas")) {
+      if (!h.ok) {
+        setFirebaseOk(false);
         setAuthMessage({ type: "error", text: h.error });
       }
     })();
@@ -530,7 +524,7 @@ export default function RPG() {
     }
   }, [theme]);
 
-  // ─── Storage (cache local + nuvem Supabase por conta) ─────────────
+  // ─── Storage (cache local + nuvem Firebase por conta) ─────────────
   const showNotification = useCallback((text, type = "info") => {
     const toast = { id: Date.now(), text, type, timestamp: new Date() };
     setToasts((prev) => [...prev, toast]);
@@ -541,7 +535,7 @@ export default function RPG() {
 
   const saveIdx = async (l, userId) => {
     try {
-      localStorage.setItem(idxKeyForUser(userId || user?.id), JSON.stringify(l));
+      localStorage.setItem(idxKeyForUser(userId || getUserId(user)), JSON.stringify(l));
     } catch (error) {
       console.error('Erro ao salvar índice:', error);
     }
@@ -583,11 +577,11 @@ export default function RPG() {
     const { cloudListCampaigns } = await import("../lib/rpg-cloud");
     const { ok, data } = await cloudListCampaigns();
     if (ok && Array.isArray(data)) {
-      localStorage.setItem(idxKeyForUser(user.id), JSON.stringify(data));
+      localStorage.setItem(idxKeyForUser(getUserId(user)), JSON.stringify(data));
       return data;
     }
     try {
-      return JSON.parse(localStorage.getItem(idxKeyForUser(user.id)) || "[]");
+      return JSON.parse(localStorage.getItem(idxKeyForUser(getUserId(user))) || "[]");
     } catch {
       return [];
     }
@@ -602,36 +596,17 @@ export default function RPG() {
     }
     setAuthBusy(true);
     try {
-      const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
-      if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
-      const sb = getSupabaseBrowser();
-      if (!sb) throw new Error("Supabase não configurado.");
+      const { createUserWithEmailAndPassword } = await import("firebase/auth");
+      const { getFirebaseBrowser, isFirebaseConfigured } = await import("../lib/firebase-browser");
+      if (!isFirebaseConfigured()) throw new Error("Firebase não configurado.");
+      const auth = getFirebaseBrowser();
+      if (!auth) throw new Error("Firebase não configurado.");
 
-      const { data, error } = await sb.auth.signUp({
-        email: authEmail.trim(),
-        password: authPassword,
-        options: {
-          emailRedirectTo: typeof window !== "undefined" ? window.location.origin + "/" : undefined,
-        },
-      });
-      if (error) throw error;
-
-      if (data.session) {
-        setAuthMessage({ type: "success", text: "Conta criada! Bem-vindo!" });
-        setAuthPassword("");
-      } else if (data.user?.identities?.length === 0) {
-        setAuthMessage({ type: "error", text: "Este e-mail já está cadastrado. Use a aba Entrar." });
-        setAuthTab("login");
-      } else {
-        setAuthMessage({
-          type: "info",
-          text: "Conta criada! Se o Supabase pedir confirmação, abra o link no e-mail e depois entre aqui.",
-        });
-        setAuthTab("login");
-        setAuthPassword("");
-      }
+      await createUserWithEmailAndPassword(auth, authEmail.trim(), authPassword);
+      setAuthMessage({ type: "success", text: "Conta criada! Bem-vindo!" });
+      setAuthPassword("");
     } catch (err) {
-      setAuthMessage({ type: "error", text: authErrorPt(err.message) });
+      setAuthMessage({ type: "error", text: authErrorPt(err?.code || err?.message) });
     } finally {
       setAuthBusy(false);
     }
@@ -646,20 +621,17 @@ export default function RPG() {
     }
     setAuthBusy(true);
     try {
-      const { getSupabaseBrowser, isSupabaseConfigured } = await import("../lib/supabase-browser");
-      if (!isSupabaseConfigured()) throw new Error("Supabase não configurado.");
-      const sb = getSupabaseBrowser();
-      if (!sb) throw new Error("Supabase não configurado.");
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
+      const { getFirebaseBrowser, isFirebaseConfigured } = await import("../lib/firebase-browser");
+      if (!isFirebaseConfigured()) throw new Error("Firebase não configurado.");
+      const auth = getFirebaseBrowser();
+      if (!auth) throw new Error("Firebase não configurado.");
 
-      const { error } = await sb.auth.signInWithPassword({
-        email: authEmail.trim(),
-        password: authPassword,
-      });
-      if (error) throw error;
+      await signInWithEmailAndPassword(auth, authEmail.trim(), authPassword);
       setAuthMessage({ type: "success", text: "Bem-vindo de volta!" });
       setAuthPassword("");
     } catch (err) {
-      setAuthMessage({ type: "error", text: authErrorPt(err.message) });
+      setAuthMessage({ type: "error", text: authErrorPt(err?.code || err?.message) });
     } finally {
       setAuthBusy(false);
     }
@@ -667,8 +639,10 @@ export default function RPG() {
 
   const handleSignOut = async () => {
     try {
-      const { getSupabaseBrowser } = await import("../lib/supabase-browser");
-      await getSupabaseBrowser()?.auth.signOut();
+      const { signOut } = await import("firebase/auth");
+      const { getFirebaseBrowser } = await import("../lib/firebase-browser");
+      const auth = getFirebaseBrowser();
+      if (auth) await signOut(auth);
     } catch {}
     authTokenRef.current = null;
     setUser(null);
@@ -1423,17 +1397,9 @@ export default function RPG() {
         <div className="auth-loading">Carregando conta...</div>
       ) : !user ? (
         <div className="auth-box">
-          {!supabaseOk && (
+          {!firebaseOk && (
             <div className="auth-alert auth-alert-error">
-              {supabaseNeedRedeploy ? (
-                <>
-                  ⚠️ Variáveis do Supabase existem no servidor, mas o site precisa de <strong>redeploy</strong>. Na Vercel, confirme <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> e clique em Redeploy.
-                </>
-              ) : (
-                <>
-                  ⚠️ Supabase não configurado ou inacessível. Na Vercel, adicione <strong>NEXT_PUBLIC_SUPABASE_URL</strong> e <strong>NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> (Settings → API no painel do Supabase), rode o SQL em <code>supabase/schema.sql</code> e faça redeploy.
-                </>
-              )}
+              ⚠️ Firebase não acessível. No <a href="https://console.firebase.google.com/project/siterpg32" target="_blank" rel="noreferrer">Firebase Console</a>, ative <strong>Authentication → E-mail/Senha</strong>, crie o <strong>Firestore</strong> e publique as rules em <code>firebase/firestore.rules</code>.
             </div>
           )}
           <div className="auth-tabs">
@@ -1465,7 +1431,7 @@ export default function RPG() {
               minLength={6}
               required
             />
-            <button type="submit" className="auth-submit" disabled={authBusy || !supabaseOk}>
+            <button type="submit" className="auth-submit" disabled={authBusy || !firebaseOk}>
               {authBusy ? "Aguarde..." : authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
             </button>
           </form>
@@ -1475,7 +1441,7 @@ export default function RPG() {
         <>
           {user && (
             <div className="auth-alert auth-alert-success" style={{ margin: "0 20px 12px" }}>
-              ☁️ Conectado — suas aventuras salvam automaticamente no Supabase.
+              ☁️ Conectado — suas aventuras salvam automaticamente no Firebase.
             </div>
           )}
           <div className="user-bar">

@@ -1,35 +1,36 @@
 # ⚔ RPG Edric Yronwood — Crônicas de Gelo e Fogo
 
-RPG de texto imersivo com IA como Mestre e geração de cenas automática.
+RPG de texto imersivo com IA como Mestre e saves na nuvem via **Firebase**.
 
 ---
 
-## 🚀 Como fazer deploy na Vercel
+## 🚀 Deploy na Vercel
 
-### 1. Suba o projeto no GitHub
-- Crie um repositório no github.com
-- Faça upload de todos os arquivos desta pasta
+1. Importe o repositório no [vercel.com](https://vercel.com)
+2. **Root Directory:** `rpg-yronwood`
+3. Adicione a variável `GEMINI_API_KEY` (Google AI Studio)
+4. Configure o Firebase (abaixo) e faça deploy
 
-### 2. Importe na Vercel
-- Acesse vercel.com e faça login
-- Clique em "Add New Project"
-- Selecione seu repositório do GitHub
-- Clique em "Deploy"
+> As credenciais do Firebase (`siterpg32`) já vêm no código. Só precisa ativar Auth + Firestore no console.
 
-### 3. Configure a variável de ambiente (CHAVE SEGURA)
-- No painel da Vercel, vá em **Settings → Environment Variables**
-- Adicione:
-  - **Name:** `GEMINI_KEY`
-  - **Value:** sua chave do Google AI Studio
-- Clique em Save e faça redeploy
+---
 
-> ⚠️ NUNCA suba o arquivo `.env.local` para o GitHub. Ele já está no `.gitignore`.
+## 🔥 Firebase (obrigatório para login e saves)
+
+Siga `firebase/SETUP.md`:
+
+1. [Firebase Console](https://console.firebase.google.com/project/siterpg32) → **Authentication** → E-mail/Senha → Enable
+2. **Firestore Database** → Create database
+3. **Rules** → cole `firebase/firestore.rules` → Publish
+
+Realtime Database (`https://siterpg32-default-rtdb.firebaseio.com/`) não é usado — saves ficam no Firestore.
 
 ---
 
 ## 🛠 Rodar localmente
 
 ```bash
+cd rpg-yronwood
 npm install
 npm run dev
 ```
@@ -38,9 +39,7 @@ Acesse: http://localhost:3000
 
 ---
 
-## 🔑 Gerar nova chave Gemini
+## 🔑 Chave Gemini (Mestre IA)
 
-1. Acesse: https://aistudio.google.com
-2. Clique em **Get API Key**
-3. Crie uma nova chave
-4. Adicione na Vercel conforme passo 3 acima
+1. https://aistudio.google.com → **Get API Key**
+2. Na Vercel: **Settings → Environment Variables** → `GEMINI_API_KEY`

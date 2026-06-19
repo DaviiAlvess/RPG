@@ -1,5 +1,5 @@
 import Head from "next/head";
-import { fmtTime, attrMod, relationClass, hpColor } from "../lib/rpg-ui-helpers";
+import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 
 const PANEL_META = {
   narrator: { label: "Narrador", icon: "ti ti-message-2" },
@@ -192,7 +192,7 @@ export default function PlayView(props) {
             <div className="char-mini-class">{c.charTitle || styleMeta?.label || "Em jornada"}</div>
             <div className="hp-bar-wrap">
               <div className="hp-bar">
-                <div className="hp-fill" style={{ width: `${hpPct}%`, background: hpColor(hpPct) }} />
+                <div className="hp-fill" style={{ width: `${hpPct}%` }} />
               </div>
               <div className="hp-label">{hpPct}/100</div>
             </div>
@@ -214,7 +214,12 @@ export default function PlayView(props) {
             </button>
 
             <div className="main-topbar-title">
-              <h2>{panel.label}</h2>
+              <div className="main-topbar-heading">
+                <span className="main-topbar-icon" aria-hidden="true">
+                  <i className={panel.icon} />
+                </span>
+                <h2>{panel.label}</h2>
+              </div>
               <p>{panelSubtitle}</p>
             </div>
 
@@ -358,7 +363,7 @@ export default function PlayView(props) {
                 <div>
                   <div className="hp-bar-wrap" style={{ marginBottom: 10 }}>
                     <div className="hp-bar">
-                      <div className="hp-fill" style={{ width: `${hpPct}%`, background: hpColor(hpPct) }} />
+                      <div className="hp-fill" style={{ width: `${hpPct}%` }} />
                     </div>
                     <span className="hp-label">{hpPct}/100</span>
                   </div>

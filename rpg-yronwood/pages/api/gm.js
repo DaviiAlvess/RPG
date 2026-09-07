@@ -54,13 +54,19 @@ export default async function handler(req, res) {
   const chamarGemini = async (body, modelo) => {
     const shuffled = [...chavesUnicas].sort(() => Math.random() - 0.5);
     let lastError = null;
+    const deadline = Date.now() + 25000;
 
     for (const apiKey of shuffled) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) break;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), Math.min(12000, remaining));
       try {
         const geminiRes = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
           {
             method: "POST",
+            signal: controller.signal,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
           }
@@ -69,7 +75,8 @@ export default async function handler(req, res) {
         const data = await geminiRes.json();
 
         if (geminiRes.status === 429 || geminiRes.status === 503) {
-          lastError = data?.error?.message || `HTTP ${geminiRes.status}`;
+          lastError = new Error("O Mestre está ocupado. Tente novamente em instantes.");
+          lastError.status = geminiRes.status;
           continue;
         }
 
@@ -80,7 +87,9 @@ export default async function handler(req, res) {
           throw err;
         }
 
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        const text = data?.candidates?.[0]?.content?.parts
+          ?.filter((part) => !part.thought && typeof part.text === "string")
+          .map((part) => part.text).join("");
         if (!text) {
           const err = new Error("Resposta vazia da API Gemini.");
           err.fatal = true;
@@ -90,12 +99,16 @@ export default async function handler(req, res) {
         return text;
       } catch (err) {
         if (err.fatal) throw err;
-        lastError = err.message;
-        console.error("Erro ao chamar Gemini com chave:", err);
+        lastError = new Error(err.name === "AbortError"
+          ? "O Mestre demorou para responder. Tente novamente."
+          : "Não foi possível conectar ao Mestre. Tente novamente.");
+        lastError.status = err.name === "AbortError" ? 504 : 502;
+      } finally {
+        clearTimeout(timeout);
       }
     }
 
-    throw new Error(lastError || "Todas as chaves API estão com rate limit. Tente em instantes.");
+    throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
   };
 
   // ── Modo: busca de personagem canônico ─────────────────────────────
@@ -243,11 +256,13 @@ export default async function handler(req, res) {
   }
 
   // ── Modo: narração do Mestre ───────────────────────────────────────
-  if (!messages || !Array.isArray(messages)) {
+  if (!Array.isArray(messages) || messages.length === 0 || messages.some((m) =>
+    !m || !["user", "assistant"].includes(m.role) ||
+    typeof m.content !== "string" || !m.content.trim())) {
     return res.status(400).json({ error: 'Campo "messages" ausente ou inválido.' });
   }
 
-  if (!systemPrompt) {
+  if (typeof systemPrompt !== "string" || !systemPrompt.trim()) {
     return res.status(400).json({ error: 'Campo "systemPrompt" ausente.' });
   }
 
@@ -267,7 +282,6 @@ export default async function handler(req, res) {
     return res.status(200).json({ text });
   } catch (e) {
     console.error("Todas as chaves Gemini falharam. Último erro:", e.message);
-    const isRateLimit = e.message?.includes("rate limit") || e.message?.startsWith("HTTP 429");
-    return res.status(isRateLimit ? 429 : 500).json({ error: e.message });
+    return res.status(e.status || 500).json({ error: e.message });
   }
 }

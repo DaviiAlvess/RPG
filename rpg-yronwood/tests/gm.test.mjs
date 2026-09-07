@@ -1,0 +1,42 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+
+const source = await readFile(new URL('../pages/api/gm.js', import.meta.url), 'utf8');
+const { default: handler } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+
+test('Mestre: validação, respostas completas e indisponibilidade', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
+  const call = async (body, method = 'POST') => {
+    const res = { setHeader() {}, status(code) { this.code = code; return this; },
+      json(data) { this.data = data; return this; }, end() { return this; } };
+    await handler({ method, body }, res);
+    return res;
+  };
+  const valid = { messages: [{ role: 'user', content: 'Entrar na taverna' }], systemPrompt: 'Narre a aventura.' };
+  try {
+    globalThis.fetch = async () => { throw new Error('Não deveria chamar a API'); };
+    assert.equal((await call(valid, 'GET')).code, 405);
+    for (const messages of [[], [null], [{ role: 'user', content: 12 }], [{ role: 'user', content: ' ' }]]) {
+      assert.equal((await call({ ...valid, messages })).code, 400);
+    }
+    assert.equal((await call({ ...valid, systemPrompt: {} })).code, 400);
+    globalThis.fetch = async (_url, options) => {
+      assert.ok(options.signal instanceof AbortSignal);
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [
+        { text: 'interno', thought: true }, { text: 'Uma porta ' }, { text: 'se abre.' }
+      ] } }] }) };
+    };
+    assert.equal((await call(valid)).data.text, 'Uma porta se abre.');
+    globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: { message: 'Quota exceeded' } }) });
+    assert.equal((await call(valid)).code, 429);
+    globalThis.fetch = async () => { const err = new Error('aborted'); err.name = 'AbortError'; throw err; };
+    assert.equal((await call(valid)).code, 504);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalKey;
+  }
+});

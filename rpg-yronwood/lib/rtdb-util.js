@@ -21,21 +21,15 @@ export function sanitizeForRtdb(value) {
   return String(value);
 }
 
-const MAX_CHAT_MESSAGES = 150;
-
 export function prepareCampaignForRtdb(campaign) {
   const copy = { ...campaign };
-  if (Array.isArray(copy.msgs) && copy.msgs.length > MAX_CHAT_MESSAGES) {
-    copy.msgs = copy.msgs.slice(-MAX_CHAT_MESSAGES);
-  }
-  if (Array.isArray(copy.disp) && copy.disp.length > MAX_CHAT_MESSAGES) {
-    copy.disp = copy.disp.slice(-MAX_CHAT_MESSAGES);
-  }
+  // Keep the archive intact: memoryUntil refers to positions in this history.
+  // Only the context sent to the narrator is compacted, never the player's save.
   if (Array.isArray(copy.saves)) {
     copy.saves = copy.saves.slice(-20).map((slot) => ({
       ...slot,
-      msgs: Array.isArray(slot.msgs) ? slot.msgs.slice(-40) : [],
-      disp: Array.isArray(slot.disp) ? slot.disp.slice(-40) : [],
+      msgs: Array.isArray(slot.msgs) ? slot.msgs : [],
+      disp: Array.isArray(slot.disp) ? slot.disp : [],
     }));
   }
   return sanitizeForRtdb(copy);

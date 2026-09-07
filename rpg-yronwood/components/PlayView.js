@@ -130,6 +130,7 @@ export default function PlayView(props) {
   } = props;
 
   const c = active || {};
+  const lastScene = [...(disp || [])].reverse().find(m => m.type === "gm");
   const panel = PANEL_META[playPanel] || PANEL_META.narrator;
   const hpPct = Math.max(0, Math.min(100, Number(hp) || 0));
   const xpPct = Math.max(0, Math.min(100, Number(experience) % 100 || 0));
@@ -187,7 +188,7 @@ export default function PlayView(props) {
           <div className="sidebar-logo">
             <h1>
               <i className="ti ti-sword" />
-              <span style={{ display: "inline", marginTop: 0, color: "inherit" }}>RPG App</span>
+              <span style={{ display: "inline", marginTop: 0, color: "inherit" }}>Forja de Mundos</span>
             </h1>
             <span>{c.world || "Campanha ativa"}</span>
           </div>
@@ -242,6 +243,7 @@ export default function PlayView(props) {
                 <h2>{panel.label}</h2>
               </div>
               <p>{panelSubtitle}</p>
+              <span className="save-indicator" role="status">{props.saveStatus}</span>
               {playPanel === "narrator" ? (
                 <div className="game-time-indicator" title={timeLongLabel}>
                   <i className={`ti ${todIcon}`} />
@@ -313,6 +315,7 @@ export default function PlayView(props) {
               ) : null}
 
               <div className="chat-messages">
+                {lastScene && !loading ? <details className="journey-recap"><summary>Sua jornada até aqui</summary><p>{c.worldState?.location ? `Local: ${c.worldState.location}` : c.world}</p><p>{activeMissionList[0]?.text ? `Objetivo: ${activeMissionList[0].text}` : "Explore a cena e escolha seu próximo passo."}</p><p>{lastScene.text.slice(0, 420)}{lastScene.text.length > 420 ? "…" : ""}</p>{c.worldState?.promises?.length ? <p>Promessas: {c.worldState.promises.join(" · ")}</p> : null}</details> : null}
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
                 {(disp || []).map((message, index) => {
@@ -379,6 +382,7 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
+              <button className="idea-help" type="button" disabled={loading || autoWaiting} onClick={() => setInput("Observo a cena com atenção e procuro uma pista sobre o que está acontecendo.")}>✧ Preciso de uma ideia</button>
               <div className="chat-input-row">
                 <button
                   className="btn-time-skip"
@@ -399,6 +403,7 @@ export default function PlayView(props) {
                   {autoMode ? "AUTO ON" : "AUTO OFF"}
                 </button>
 
+                {props.failedAction ? <button className="retry-action" type="button" disabled={loading} onClick={props.retryAction}>↻ Tentar ação novamente</button> : null}
                 <textarea
                   ref={taRef}
                   value={input}

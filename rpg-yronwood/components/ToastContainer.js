@@ -20,14 +20,14 @@ export default function ToastContainer({ toasts = [], onDismiss }) {
             <div className="toast-body">
               <span className="toast-text">{toast.text}</span>
               {isInventory ? (
-                <span className="toast-hint">X remove do inventário</span>
+                <button type="button" className="toast-hint" onClick={() => onDismiss?.(toast)}>Desfazer adição</button>
               ) : null}
             </div>
             <button
               type="button"
               className="toast-close"
-              onClick={() => onDismiss?.(toast)}
-              aria-label={isInventory ? "Remover item do inventário e fechar" : "Fechar notificação"}
+              onClick={() => onDismiss?.({ ...toast, undoItem: null })}
+              aria-label="Fechar notificação"
             >
               <i className="ti ti-x" aria-hidden="true" />
             </button>

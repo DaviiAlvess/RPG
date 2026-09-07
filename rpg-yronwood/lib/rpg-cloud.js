@@ -1,4 +1,4 @@
-import { get, ref, remove, set } from "firebase/database";
+import { get, ref, remove, runTransaction } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { ensureFirebaseReady } from "./firebase-browser";
 import { prepareCampaignForRtdb } from "./rtdb-util";
@@ -53,10 +53,14 @@ export async function cloudSaveCampaign(campaign) {
     const payload = prepareCampaignForRtdb({
       ...campaign,
       id: String(campaign.id),
-      updatedAt: now,
+      updatedAt: campaign.updatedAt || now,
       createdAt: existingSnap.exists() ? existingSnap.val()?.createdAt || now : now,
     });
-    await set(pathRef, payload);
+    const result = await runTransaction(pathRef, (current) => {
+      if (current && new Date(current.updatedAt || 0).getTime() > new Date(payload.updatedAt).getTime()) return;
+      return payload;
+    }, { applyLocally: false });
+    if (!result.committed) return { ok: false, conflict: true, error: "Existe uma versão mais recente na nuvem. Reabra a campanha para recuperá-la." };
     return { ok: true };
   } catch (err) {
     console.error("cloudSaveCampaign:", err);

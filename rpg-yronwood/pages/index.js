@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
+import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
 import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
@@ -154,6 +155,9 @@ const buildPrompt = (c, loreExtra, gameTime) => {
   const style = GAME_STYLES[c.gameStyle] ? c.gameStyle : "aventura";
   const lines = [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
+    c.ordinaryCharacter ? `PERSONAGEM COADJUVANTE ORIGINAL: começa como pessoa comum. Sem profecia, linhagem secreta, poderes exclusivos ou intimidade gratuita com protagonistas. Conquistas e influência devem surgir das escolhas do jogador. Eventos e personagens desta aventura são ficção original dentro do cenário, não canon oficial. Esta regra prevalece sobre a regra de exceção de poderes.` : "",
+    c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
+    c.storyStartPoint ? `PREMISSA ESCOLHIDA: ${c.storyStartPoint}` : "",
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, items: c.items, missions: c.missions, attributes: c.attributes, world: c.worldState })}`,
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
@@ -1817,7 +1821,8 @@ export default function RPG() {
             ))}
           </div>
           <div className="shell-foot">
-            <button className="btn-primary" onClick={startCreate}>+ Novo mundo</button>
+            <button className="btn-primary" type="button" onClick={() => setView("presets")}>✦ Explorar RPGs prontos</button>
+            <button className="settings-action" type="button" onClick={startCreate}>+ Criar meu próprio RPG</button>
           </div>
         </>
       )}
@@ -1827,6 +1832,25 @@ export default function RPG() {
   );
 
   // ═══ CREATE ════════════════════════════════════════════════════════
+  if (view === "presets") return (
+    <><div className="rpg-shell">
+      <Head><title>RPGs prontos — Forja de Mundos</title></Head>
+      <div className="cr-head"><button className="btn-ghost" type="button" onClick={() => setView("home")}>← Voltar</button><span className="shell-eyebrow">RPGS PRONTOS</span></div>
+      <main className="cr-body"><section className="preset-library" aria-labelledby="preset-title">
+            <h2 id="preset-title">Um mundo. Uma vida comum. Sua história.</h2>
+            <p className="settings-hint">Escolha uma aventura pronta com personagens originais, longe dos holofotes dos protagonistas. Você pode revisar a ficha antes de começar.</p>
+            <div className="preset-grid">
+              <article className="preset-card"><span className="preset-world">Westeros · Clássico</span><h3>Edric Yronwood</h3><p>Lorde de Pedra Sangrenta. Política, lealdade e o destino da sua casa.</p><button type="button" className="btn-primary" onClick={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}>Escolher Edric →</button></article>
+              {ADVENTURE_PRESETS.map(preset => <article className="preset-card" key={preset.id}>
+                <span className="preset-world">{preset.world}</span><span className="preset-genre">{preset.genre}</span>
+                <h3>{preset.charName}</h3><span className="preset-role">{preset.charTitle} · {preset.charAge} anos</span>
+                <p>{preset.hook}</p><button type="button" className="btn-primary" onClick={() => { setForm({ ...preset, appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Escolher esta história →</button>
+              </article>)}
+            </div>
+          </section></main>
+    </div><ToastContainer toasts={toasts} onDismiss={dismissToast} /></>
+  );
+
   if (view === "create") return (
     <>
     <div className="rpg-shell">
@@ -1842,14 +1866,14 @@ export default function RPG() {
           ))}
         </div>
         {step === 0
-          ? <button className="btn-ghost" onClick={() => setForm({ ...PRESET })}>🐉 Edric</button>
+          ? <button className="btn-ghost" type="button" onClick={() => setView("presets")}>RPGs prontos</button>
           : <div style={{ width: 56 }} />}
       </div>
 
       <div className="cr-body">
         {step === 0 && <>
           <div className="cr-lbl">PASSO 1 — O MUNDO</div>
-          <div className="starter-card"><strong>Uma aventura pronta para você</strong><p>Em Westeros, uma chegada inesperada pode mudar o destino de Edric Yronwood. Você decide como reagir.</p><button className="btn-primary" onClick={() => { setForm({ ...PRESET }); setStep(2); }}>Usar personagem pronto →</button><span>Ou crie seu próprio mundo abaixo.</span></div>
+
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
             desc={form.isKnownIP ? "A IA prepara um contexto inicial. Revise os fatos importantes antes de jogar." : "✨ Mundo original — você define o contexto abaixo"}
@@ -1965,7 +1989,8 @@ export default function RPG() {
         </>}
 
         {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
-          <div className="cr-lbl">PASSO 3 — APARÊNCIA</div>
+          <div className="cr-lbl">PASSO 3 — REVISE E COMECE</div>
+          {form.ordinaryCharacter ? <section className="starter-card"><span className="preset-world">{form.world} · Personagem original</span><h2>{form.charName}</h2><p>{form.charTitle}</p><F label="Nome" value={form.charName} set={v => setForm(f => ({ ...f, charName: v }))} /><F label="História" value={form.charBg} set={v => setForm(f => ({ ...f, charBg: v }))} ta rows={3} /><F label="Personalidade" value={form.charPersonality} set={v => setForm(f => ({ ...f, charPersonality: v }))} /><F label="Habilidades" value={form.charSkills} set={v => setForm(f => ({ ...f, charSkills: v }))} ta rows={2} /><F label="Cena inicial" value={form.storyStartPoint} set={v => setForm(f => ({ ...f, storyStartPoint: v }))} ta rows={3} /><p>Personagens ao seu redor: {form.supportingCast}</p></section> : null}
           <p className="settings-hint">A aparência é opcional. Você já pode começar com os detalhes atuais.</p>
           <button className="btn-primary" onClick={finishCreate}>Começar com esta aparência →</button>
           <div className="app-preview">

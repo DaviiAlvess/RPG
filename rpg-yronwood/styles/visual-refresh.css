@@ -113,3 +113,15 @@ button:disabled { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Ready-to-play original side stories. */
+.preset-library { margin: 20px 0 32px; }
+.preset-library > h2 { font: 400 28px/1.25 Georgia, serif; margin-bottom: 12px; }
+.preset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
+.preset-card { display: flex; flex-direction: column; gap: 10px; padding: 22px; border: 1px solid var(--border-md); border-radius: 16px; background: var(--bg-secondary); }
+.preset-world { color: var(--purple); font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.preset-genre, .preset-role { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.preset-card h3 { font: 400 25px Georgia, serif; }
+.preset-card p { font-size: 14px; color: var(--text-secondary); line-height: 1.7; flex: 1; }
+.preset-card .btn-primary { margin-top: 8px; font-size: 12px; letter-spacing: 0; }
+@media (max-width: 540px) { .preset-grid { grid-template-columns: 1fr; } .preset-card { padding: 18px; } }

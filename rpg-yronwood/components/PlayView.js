@@ -785,6 +785,8 @@ export default function PlayView(props) {
               <div className="panel-sub">Ajuste a experiência e acesse ações da campanha.</div>
             </div>
 
+            <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
+            {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
             <NarrationSettings value={c.narration} onChange={props.onNarrationChange} disabled={loading || autoMode} />
             {autoMode ? <p className="settings-hint">Pause o modo automático para mudar a narração.</p> : null}
             <div className="settings-list">

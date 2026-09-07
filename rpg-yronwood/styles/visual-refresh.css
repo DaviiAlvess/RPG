@@ -149,3 +149,7 @@ button:disabled { cursor: not-allowed; }
 .reader-mode .msg { max-width: 760px; }
 .reader-mode .narrative-prose { font-size: 20px; line-height: 1.95; }
 @media(max-width:540px) { .narration-grid { grid-template-columns: 1fr; } .narration-controls { grid-template-columns: 1fr; } .reader-mode .narrative-prose { font-size: 18px; } }
+
+.economy-setting { display: flex; gap: 14px; align-items: flex-start; margin: 18px 0; padding: 18px; border: 1px solid var(--border-md); border-radius: 14px; background: var(--bg-secondary); cursor: pointer; }
+.economy-setting input { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--accent-solid); }
+.economy-setting small { display: block; margin-top: 6px; color: var(--text-secondary); font-size: 12px; line-height: 1.7; }

@@ -280,7 +280,7 @@ export default async function handler(req, res) {
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: 2048, temperature: 0.9 },
+      generationConfig: { maxOutputTokens: req.body?.economyMode === true ? 1024 : 2048, temperature: 0.9 },
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
 

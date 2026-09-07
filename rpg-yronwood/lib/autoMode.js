@@ -145,6 +145,7 @@ export function buildLocalAutoAction(camp, lastGmText) {
 export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
   const fromOptions = pickFromOptions(options, camp);
   if (fromOptions) return fromOptions;
+  if (camp?.economyMode) return buildLocalAutoAction(camp, lastGmText);
 
   try {
     const res = await apiFetch("/api/gm", {

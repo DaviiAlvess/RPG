@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
+import NarrationSettings from "../components/NarrationSettings";
+import { buildNarrationDirection, normalizeNarration } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
 import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
@@ -320,6 +322,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
   );
 
   lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(buildNarrationDirection(c.narration));
   return lines.filter(Boolean).join("\n");
 };
 
@@ -901,6 +904,7 @@ export default function RPG() {
     const updated = {
       ...active,
       msgs: save.msgs || [],
+      narration: normalizeNarration(save.narration),
       memory: save.memory || "", memoryUntil: save.memoryUntil || 0,
       worldState: save.worldState || {},
       level: save.level ?? 1, experience: save.experience ?? 0,
@@ -1871,6 +1875,7 @@ export default function RPG() {
       </div>
 
       <div className="cr-body">
+        {step === 2 && <NarrationSettings value={form.narration} onChange={narration => setForm(f => ({ ...f, narration }))} />}
         {step === 0 && <>
           <div className="cr-lbl">PASSO 1 — O MUNDO</div>
 
@@ -2036,7 +2041,12 @@ export default function RPG() {
         saveStatus={saveStatus}
         failedAction={failedAction}
         retryAction={() => failedAction && sendMsg(failedAction.text, failedAction.baseMsgs, failedAction.baseDisp, failedAction.camp, failedAction.lore)}
-        active={active}
+        onNarrationChange={narration => {
+        if (!active || sending.current) return;
+        const updated = { ...active, narration: normalizeNarration(narration) };
+        setActive(updated); saveCamp(active.id, updated);
+      }}
+      active={active}
       disp={disp}
       loading={loading}
       statusText={statusText}

@@ -41,3 +41,18 @@ Acesse: http://localhost:3000
 
 1. https://aistudio.google.com → **Get API Key**
 2. Na Vercel: **Settings → Environment Variables** → `GEMINI_API_KEY`
+
+## Narração e modelo do Mestre
+
+A criação da aventura e a aba Ajustes permitem escolher seis vozes de narração,
+tamanho da resposta e ritmo. As preferências ficam na campanha e valem a partir
+da próxima resposta. Saves antigos usam o estilo cinematográfico equilibrado.
+
+O modelo padrão agora é `gemini-3.5-flash-lite`. Para alterar na hospedagem:
+- `GEMINI_MODEL`: modelo usado para narração, memória e ações automáticas.
+- `GEMINI_LORE_MODEL`: opcional, modelo separado para lore e fichas.
+
+Após alterar variáveis ou atualizar o código, faça um novo deploy. Uma variável
+`GEMINI_MODEL` antiga tem prioridade sobre o padrão: atualize-a ou remova-a.
+A disponibilidade efetiva depende da chave e do projeto no Google AI Studio.
+Documentação: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite

@@ -1,3 +1,5 @@
+import { useState } from "react";
+import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
 import NarrativeContent from "./NarrativeContent";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
@@ -53,6 +55,8 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
 }
 
 export default function PlayView(props) {
+  const [readerMode, setReaderMode] = useState(false);
+  const [ideasOpen, setIdeasOpen] = useState(false);
   const {
     active,
     disp,
@@ -178,7 +182,7 @@ export default function PlayView(props) {
   };
 
   return (
-    <div className="play-wrap" data-theme={theme}>
+    <div className={`play-wrap ${readerMode && playPanel === "narrator" ? "reader-mode" : ""}`} data-theme={theme}>
       <Head>
         <title>{c.charName ? `${c.charName} — ${c.world || "RPG"}` : "RPG"}</title>
       </Head>
@@ -315,6 +319,7 @@ export default function PlayView(props) {
               ) : null}
 
               <div className="chat-messages">
+                {c.worldState && <details className="journey-recap"><summary>Diário de pessoas e segredos</summary>{Object.entries(c.worldState.npcs || {}).map(([name, facts]) => <p key={name}><strong>{name}</strong> — {facts}</p>)}{(c.worldState.secrets || []).map((secret, i) => <p key={i}>Segredo: {secret}</p>)}{!Object.keys(c.worldState.npcs || {}).length && !c.worldState.secrets?.length ? <p>As pessoas conhecidas e os segredos registrados pelo Mestre aparecerão aqui.</p> : null}</details>}
                 {lastScene && !loading ? <details className="journey-recap"><summary>Sua jornada até aqui</summary><p>{c.worldState?.location ? `Local: ${c.worldState.location}` : c.world}</p><p>{activeMissionList[0]?.text ? `Objetivo: ${activeMissionList[0].text}` : "Explore a cena e escolha seu próximo passo."}</p><p>{lastScene.text.slice(0, 420)}{lastScene.text.length > 420 ? "…" : ""}</p>{c.worldState?.promises?.length ? <p>Promessas: {c.worldState.promises.join(" · ")}</p> : null}</details> : null}
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
@@ -382,7 +387,8 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
-              <button className="idea-help" type="button" disabled={loading || autoWaiting} onClick={() => setInput("Observo a cena com atenção e procuro uma pista sobre o que está acontecendo.")}>✧ Preciso de uma ideia</button>
+              <div className="reading-tools"><button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>✧ Ideias para agir</button><button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? 'Sair do modo leitura' : 'Modo leitura'}</button></div>
+              {ideasOpen ? <div className="action-ideas">{[{ label: 'Investigar', text: 'Examino ' }, { label: 'Conversar', text: 'Me aproximo de ' }, { label: 'Agir', text: 'Tento ' }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               <div className="chat-input-row">
                 <button
                   className="btn-time-skip"
@@ -779,6 +785,8 @@ export default function PlayView(props) {
               <div className="panel-sub">Ajuste a experiência e acesse ações da campanha.</div>
             </div>
 
+            <NarrationSettings value={c.narration} onChange={props.onNarrationChange} disabled={loading || autoMode} />
+            {autoMode ? <p className="settings-hint">Pause o modo automático para mudar a narração.</p> : null}
             <div className="settings-list">
               <div className="settings-item">
                 <div className="settings-item-label">

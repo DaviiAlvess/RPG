@@ -1,9 +1,11 @@
 // pages/api/gm.js
 
-const MODELO_GM   = "gemini-2.5-flash-lite";
-const MODELO_LORE = "gemini-2.5-flash-lite";
+const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 
 export default async function handler(req, res) {
+  const MODELO_GM = modelName(process.env.GEMINI_MODEL);
+  const MODELO_LORE = modelName(process.env.GEMINI_LORE_MODEL || process.env.GEMINI_MODEL);
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -82,7 +84,11 @@ export default async function handler(req, res) {
 
         if (!geminiRes.ok) {
           console.error("Gemini API error:", data);
-          const err = new Error(data?.error?.message || "Erro na API Gemini");
+          const unavailable = geminiRes.status === 404 || /no longer available|deprecated|not available to new users/i.test(data?.error?.message || "");
+          const err = new Error(unavailable
+            ? "O modelo do Mestre não está disponível. Atualize GEMINI_MODEL no servidor e publique novamente o site. Sua ação foi preservada."
+            : "Não foi possível obter uma resposta do Mestre. Confira a configuração da API no servidor.");
+          err.status = unavailable ? 503 : 502;
           err.fatal = true;
           throw err;
         }

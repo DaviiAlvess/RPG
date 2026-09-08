@@ -8,10 +8,11 @@ export function normalizeSkipIntent(config = {}) {
     intention: String(config.intention || '').trim().slice(0, 2000)
   };
 }
-export function buildSkipMessage(config, interval) {
+export function buildSkipMessage(config, interval, cancelledTest = null) {
   const intent = normalizeSkipIntent(config);
   return `[O jogador avançou o tempo: ${interval}.
 Foco escolhido: ${intent.focus}.
+${cancelledTest ? `Antes do intervalo, o jogador desistiu da tentativa pendente de ${cancelledTest.attribute}: ${cancelledTest.description || 'ação proposta'}. Não houve rolagem nem sucesso confirmado. Registre a desistência no balanço; não repita esse teste nem conceda sua recompensa. Preserve riscos e consequências já estabelecidos, narrando uma transição coerente para o período solicitado.` : ''}
 O que pretende fazer: ${intent.intention || 'Seguir a rotina atual, sem assumir compromissos novos.'}
 Narre este intervalo a partir dessa intenção, respeitando recursos, habilidades, local e relações já estabelecidos. Intenção não é resultado garantido.
 Mostre a passagem do tempo com 2 ou 3 momentos concretos conectados, em vez de listar dias ou repetir a rotina. Dê um detalhe de progresso e uma consequência coerente quando houver; não force tragédia, combate ou reviravolta.

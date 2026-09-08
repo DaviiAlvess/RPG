@@ -11,6 +11,10 @@ export function resolveTest(test, attributes, roll) {
   const outcome = roll === 1 ? 'falha crítica' : roll === 20 ? 'sucesso crítico' : total >= test.difficulty ? 'sucesso' : total >= test.difficulty - 3 ? 'sucesso parcial com custo' : 'falha';
   return { total, modifier, outcome };
 }
+export function pendingTestFromMessages(messages = []) {
+  const last = messages.at(-1);
+  return last?.role === 'assistant' ? parseTest(last.content) : null;
+}
 export function itemEffect(name) {
   const text = normalize(name).trim();
   if (/^(pocao|elixir) (de )?(cura|vida|saude)(\b|$)/.test(text)) return { consume: true, heal: 20 };

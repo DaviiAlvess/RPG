@@ -4,12 +4,13 @@ import SpecialAbilitySettings from "../components/SpecialAbilitySettings";
 import { normalizeSpecialAbility, specialAbilityDirection } from "../lib/special-ability.mjs";
 import { requestJson } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
+import { masterChatPrompt, masterGuidance } from "../lib/master-chat.mjs";
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
 import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, normalizeNarration } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
-import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState } from "../lib/gameplay.mjs";
+import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
 import {
@@ -330,6 +331,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
 
   lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration));
+  lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
   lines.push(specialAbilityDirection(c.specialAbility));
   return lines.filter(Boolean).join("\n");
@@ -429,6 +431,7 @@ export default function RPG() {
   const [lastRoll, setLastRoll] = useState(null);
   const [showRollButton, setShowRollButton] = useState(false);
   const [pendingTest, setPendingTest] = useState(null);
+  const [masterBusy, setMasterBusy] = useState(false);
   const [showStatusDashboard, setShowStatusDashboard] = useState(false);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('online');
@@ -918,6 +921,7 @@ export default function RPG() {
       narration: normalizeNarration(save.narration),
       memory: save.memory || "", memoryUntil: save.memoryUntil || 0,
       worldState: save.worldState || {},
+      masterChat: save.masterChat || [], masterGuidance: save.masterGuidance || '',
       level: save.level ?? 1, experience: save.experience ?? 0,
       attributes: save.attributes || { ...DEFAULT_ATTRIBUTES }, skills: save.skills || { ...DEFAULT_SKILLS },
       gameTime: normalizeGameTime(save.gameTime), temporalEffects: save.temporalEffects || [], timelineEvents: save.timelineEvents || [],
@@ -932,7 +936,8 @@ export default function RPG() {
     setMsgs(updated.msgs);
     setLevel(updated.level); setExperience(updated.experience); setAttributes(updated.attributes); setSkills(updated.skills);
     setGameTime(updated.gameTime); setTemporalEffects(updated.temporalEffects); setTimelineEvents(updated.timelineEvents);
-    setFailedAction(null); setPendingTest(null); setShowRollButton(false);
+    const restoredTest = pendingTestFromMessages(updated.msgs);
+    setFailedAction(null); setPendingTest(restoredTest); setShowRollButton(Boolean(restoredTest)); setLastRoll(null);
     setDisp(updated.disp);
     setSceneImg(updated.img);
     setImgOk(!!updated.img);
@@ -1094,7 +1099,8 @@ export default function RPG() {
     if (!data) return;
     setActive(data);
     setFailedAction(null); setInput(""); setSaveStatus("Progresso recuperado");
-    const restoredTest = data.msgs?.at(-1)?.role === "assistant" ? parseTest(data.msgs.at(-1).content) : null;
+    const restoredTest = pendingTestFromMessages(data.msgs);
+    setLastRoll(null);
     setPendingTest(restoredTest); setShowRollButton(Boolean(restoredTest));
     setMsgs(data.msgs || []);
     setDisp(data.disp || []);
@@ -1193,7 +1199,7 @@ export default function RPG() {
       return;
     }
     setView("play"); setLoading(true); setDisp([]); setMsgs([]); setSceneImg(null);
-    setHp(100); setMissions([]); setLastRoll(null); setShowRollButton(false); setInput("");
+    setHp(100); setMissions([]); setLastRoll(null); setPendingTest(null); setShowRollButton(false); setInput("");
     setExperience(0);
     setLevel(1);
     setAttributes({ ...DEFAULT_ATTRIBUTES });
@@ -1256,6 +1262,8 @@ export default function RPG() {
 
   const rollD20 = () => {
     if (sending.current || !active) return;
+    if (failedAction) { showNotification("Use Tentar ação novamente para recuperar a resposta sem fazer outra rolagem.", "warning"); return; }
+    clearAuto(); setAutoMode(false); autoRef.current = false;
     setPlayPanel("narrator");
     const roll = Math.floor(Math.random() * 20) + 1;
     setLastRoll(roll);
@@ -1444,13 +1452,10 @@ export default function RPG() {
         showNotification("Modo automático pausado — role o dado para continuar.", "warning");
       }
 
-      if (raw.toLowerCase().includes("[teste:")) {
-        const testMatch = parseTest(raw);
-        if (testMatch) {
-          setPendingTest(testMatch);
-          setShowRollButton(true);
-        }
-      }
+      const nextTest = pendingTestFromMessages(finalMsgs);
+      setPendingTest(nextTest);
+      setShowRollButton(Boolean(nextTest));
+      if (nextTest) setLastRoll(null);
 
       // Inventory is updated once per turn from explicit [ITEM: ...] events.
 
@@ -1503,6 +1508,7 @@ export default function RPG() {
       timelineEvents: [createAdventureStartEvent()],
     };
     setActive(updated); setMsgs([]); setDisp([]); setSceneImg(null);
+    setPendingTest(null); setShowRollButton(false); setLastRoll(null); setFailedAction(null); setInput("");
     setMissions([]); setHp(100); setPending([]);
     setGameTime(defaultTime);
     setTemporalEffects([]);
@@ -1687,16 +1693,34 @@ export default function RPG() {
   }, [parseMessageForAutoDetection, addItem, showNotification]);
 
   // ─── Time-Skip ─────────────────────────────────────────────────────
-  const executeTimeSkip = async () => {
+  const askMaster = async (question) => {
+    if (!active || sending.current || autoRef.current) throw new Error("Aguarde o turno atual terminar antes de conversar.");
+    sending.current = true; setMasterBusy(true);
+    try {
+      const history = [...(active.masterChat || []), { role: 'user', content: question.slice(0, 2000) }];
+      const response = await apiFetch('/api/gm', { method: 'POST', body: JSON.stringify({
+        economyMode: Boolean(active.economyMode), systemPrompt: masterChatPrompt(active), messages: history.slice(-7),
+      }) });
+      const result = await response.json();
+      if (!response.ok || result.error || typeof result.text !== 'string' || !result.text.trim()) {
+        const error = new Error(result.error || 'O Mestre não conseguiu responder. Sua mensagem foi mantida.');
+        error.retryAfter = result.retryAfter; throw error;
+      }
+      const updated = { ...active, masterChat: [...history, { role: 'assistant', content: result.text }], updatedAt: Date.now() };
+      setActive(updated); saveCamp(active.id, updated);
+    } finally { sending.current = false; setMasterBusy(false); }
+  };
+
+  const executeTimeSkip = async (cancelPendingTest = false) => {
     if (!active || sending.current || loading) return;
-    if (pendingTest) { showNotification("Resolva o teste pendente antes de avançar no tempo.", "warning"); return; }
+    if (pendingTest && cancelPendingTest !== true) { showNotification("Escolha rolar o teste ou desistir da tentativa para avançar.", "warning"); return; }
     clearAuto(); setAutoMode(false); autoRef.current = false;
     const intent = normalizeSkipIntent(timeSkipConfig);
     const advance = applyTimeSkip(normalizeGameTime(gameTime), intent.unit, intent.amount);
     const effects = resolveTemporalEffects(temporalEffects, advance.gameTime.totalDaysElapsed);
     const updatedCamp = { ...active, gameTime: advance.gameTime, temporalEffects: effects.active };
     const skipPlan = { id: `skip-${Date.now()}`, intent, startGameTime: normalizeGameTime(gameTime), separator: { type: "time_sep", text: formatTimeSkipSeparator(advance.daysAdvanced, intent.unit, intent.amount) } };
-    const contextMsg = buildSkipMessage(intent, formatTimeSkipContext(intent.unit, intent.amount));
+    const contextMsg = buildSkipMessage(intent, formatTimeSkipContext(intent.unit, intent.amount), pendingTest);
     setShowTimeSkipModal(false);
     await sendMsg(contextMsg, msgs, disp, updatedCamp, campLore, false, skipPlan);
   };
@@ -2042,6 +2066,13 @@ export default function RPG() {
   return (
     <>
     <PlayView
+        masterBusy={masterBusy}
+        onAskMaster={askMaster}
+        onSaveMasterGuidance={value => {
+          if (!active || sending.current) return;
+          const updated = { ...active, masterGuidance: value.slice(0, 1500), updatedAt: Date.now() };
+          setActive(updated); saveCamp(active.id, updated);
+        }}
         saveStatus={saveStatus}
         failedAction={failedAction}
         retryAction={() => failedAction && sendMsg(failedAction.text, failedAction.baseMsgs, failedAction.baseDisp, failedAction.camp, failedAction.lore, false, failedAction.skipPlan)}
@@ -2088,6 +2119,7 @@ export default function RPG() {
       autoWaiting={autoWaiting}
       countdown={countdown}
       showRollButton={showRollButton}
+      pendingTest={pendingTest}
       lastRoll={lastRoll}
       playPanel={playPanel}
       setPlayPanel={switchPanel}

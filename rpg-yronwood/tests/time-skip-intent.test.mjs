@@ -31,3 +31,11 @@ test('Sem título esperado, preserva a narrativa sem inventar conquistas', () =>
   assert.equal(record.narrative, 'A tentativa não deu resultado.');
   assert.ok(buildSkipMessage({}, 'um dia').includes('**Balanço do período**'));
 });
+
+test('Desistência no salto é explícita, preserva o plano e não concede sucesso', () => {
+  const prompt = buildSkipMessage({ intention: 'Trabalhar na estalagem' }, 'dois dias', { attribute: 'Força', description: 'Arrombar a porta' });
+  assert.ok(prompt.includes('desistiu da tentativa pendente de Força: Arrombar a porta'));
+  assert.ok(prompt.includes('Não houve rolagem nem sucesso confirmado'));
+  assert.ok(prompt.includes('Trabalhar na estalagem'));
+  assert.ok(!buildSkipMessage({}, 'um dia').includes('desistiu da tentativa'));
+});

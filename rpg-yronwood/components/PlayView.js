@@ -1,5 +1,7 @@
 import SpecialAbilitySettings from "./SpecialAbilitySettings";
+import MasterChat from "./MasterChat";
 import { TIME_SKIP_FOCUSES } from "../lib/time-skip-intent.mjs";
+import { resolveTest } from "../lib/gameplay.mjs";
 import { useState, useEffect } from "react";
 import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
@@ -57,6 +59,7 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
 }
 
 export default function PlayView(props) {
+  const [masterChatOpen, setMasterChatOpen] = useState(false);
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
     const update = () => setRetrySeconds(Math.max(0, Math.ceil(((props.failedAction?.retryAt || 0) - Date.now()) / 1000)));
@@ -93,6 +96,7 @@ export default function PlayView(props) {
     autoWaiting,
     countdown,
     showRollButton,
+    pendingTest,
     lastRoll,
     playPanel,
     setPlayPanel,
@@ -401,6 +405,7 @@ export default function PlayView(props) {
               </div>
 
               <div className="ability-shortcut">
+                <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)}>Conversar com o Mestre</button>
                 <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
                   <span aria-hidden="true">✦</span><span>Habilidade</span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
                 </button>
@@ -419,6 +424,11 @@ export default function PlayView(props) {
               <div className="reading-tools"><button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>✧ Ideias para agir</button><button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? 'Sair do modo leitura' : 'Modo leitura'}</button></div>
               {ideasOpen ? <div className="action-ideas">{[{ label: 'Investigar', text: 'Examino ' }, { label: 'Conversar', text: 'Me aproximo de ' }, { label: 'Agir', text: 'Tento ' }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               <div className="chat-input-row">
+                {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
+                  <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
+                  {pendingTest.description ? <span>{pendingTest.description}</span> : null}
+                  <span>D20 + modificador ({resolveTest(pendingTest, attributes || {}, 10).modifier}). Role o dado abaixo ou desista da tentativa no salto de tempo.</span>
+                </div> : null}
                 <button
                   className="btn-time-skip"
                   onClick={() => setShowTimeSkipModal(true)}
@@ -461,8 +471,8 @@ export default function PlayView(props) {
                 />
 
                 {showRollButton ? (
-                  <button className="btn-roll" onClick={rollD20} type="button" title="Rolar d20">
-                    {lastRoll || "D20"}
+                  <button className="btn-roll" onClick={rollD20} disabled={loading || Boolean(props.failedAction)} type="button" title="Resolver teste com D20">
+                    Rolar D20
                   </button>
                 ) : null}
 
@@ -994,6 +1004,7 @@ export default function PlayView(props) {
         </nav>
       </div>
 
+      {masterChatOpen ? <MasterChat key={c.id} campaign={c} busy={props.masterBusy} onAsk={props.onAskMaster} onSaveGuidance={props.onSaveMasterGuidance} onClose={() => setMasterChatOpen(false)} /> : null}
       {showTimeSkipModal ? (
         <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
           <div className="modal-content" onClick={(event) => event.stopPropagation()}>
@@ -1007,6 +1018,12 @@ export default function PlayView(props) {
             <div className="modal-body">
               <div className="time-config-section">
                 <label>Escolha o intervalo</label>
+                {pendingTest ? <div className="journey-recap" role="status">
+                  <p><strong>Teste pendente: {pendingTest.attribute}</strong></p>
+                  <p>{pendingTest.description}</p>
+                  <p>Você pode rolar agora ou desistir dessa tentativa e avançar. Desistir não conta como sucesso; seu plano para o período será mantido.</p>
+                  <button type="button" className="btn-cancel" disabled={loading || autoWaiting} onClick={() => { setShowTimeSkipModal(false); rollD20(); }}>Rolar teste agora</button>
+                </div> : null}
                 <div className="time-preset-grid">
                   {TIME_SKIP_PRESETS.map((preset) => (
                     <button
@@ -1077,11 +1094,11 @@ export default function PlayView(props) {
               </button>
               <button
                 className="btn-confirm"
-                onClick={executeTimeSkip}
+                onClick={() => executeTimeSkip(Boolean(pendingTest))}
                 disabled={loading}
                 type="button"
               >
-                {loading ? "Avançando..." : "Confirmar salto"}
+                {loading ? "Avançando..." : pendingTest ? "Desistir do teste e avançar" : "Confirmar salto"}
               </button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState } from '../lib/gameplay.mjs';
+import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
 test('Testes acentuados e dificuldade explícita', () => {
   const trial = parseTest('[TESTE:Força|DC:16] Abrir a porta');
   assert.equal(trial.attribute, 'Força');
@@ -10,6 +10,15 @@ test('Testes acentuados e dificuldade explícita', () => {
   assert.equal(resolveTest(trial, { strength: 18 }, 12).outcome, 'sucesso');
   assert.equal(resolveTest(trial, { strength: 10 }, 12).outcome, 'falha');
   assert.equal(resolveTest(trial, { strength: 30 }, 1).outcome, 'falha crítica');
+});
+
+test('Só a cena atual mantém um teste pendente ao continuar ou carregar a campanha', () => {
+  const request = { role: 'assistant', content: '[TESTE:Força|DC:16] Abrir a porta' };
+  assert.equal(pendingTestFromMessages([request]).difficulty, 16);
+  assert.equal(pendingTestFromMessages([request, { role: 'assistant', content: 'Você segue para a cidade.' }]), null);
+  assert.equal(pendingTestFromMessages([request, { role: 'user', content: 'Resultado do teste: 18' }]), null);
+  assert.equal(pendingTestFromMessages([]), null);
+  assert.equal(pendingTestFromMessages(), null);
 });
 test('Equipamentos e itens desconhecidos não desaparecem nem curam', () => {
   for (const item of ['Espada', 'Chave da missão', 'Poção de veneno', 'Cajado de cura']) assert.deepEqual(itemEffect(item), { consume: false, heal: 0 });

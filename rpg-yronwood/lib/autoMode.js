@@ -158,6 +158,7 @@ export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
           charPersonality: camp?.charPersonality,
           charBg: camp?.charBg,
           charSkills: camp?.charSkills,
+          specialAbility: camp?.specialAbility,
           charTitle: camp?.charTitle,
           world: camp?.world,
           gameStyle: camp?.gameStyle,

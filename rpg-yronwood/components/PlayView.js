@@ -1,4 +1,6 @@
-import { useState } from "react";
+import SpecialAbilitySettings from "./SpecialAbilitySettings";
+import { TIME_SKIP_FOCUSES } from "../lib/time-skip-intent.mjs";
+import { useState, useEffect } from "react";
 import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
 import NarrativeContent from "./NarrativeContent";
@@ -55,6 +57,14 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
 }
 
 export default function PlayView(props) {
+  const [retrySeconds, setRetrySeconds] = useState(0);
+  useEffect(() => {
+    const update = () => setRetrySeconds(Math.max(0, Math.ceil(((props.failedAction?.retryAt || 0) - Date.now()) / 1000)));
+    update();
+    if (!(props.failedAction?.retryAt > Date.now())) return;
+    const timer = setInterval(() => { update(); if (Date.now() >= props.failedAction.retryAt) clearInterval(timer); }, 1000);
+    return () => clearInterval(timer);
+  }, [props.failedAction?.retryAt]);
   const [readerMode, setReaderMode] = useState(false);
   const [ideasOpen, setIdeasOpen] = useState(false);
   const {
@@ -134,6 +144,8 @@ export default function PlayView(props) {
   } = props;
 
   const c = active || {};
+  const [abilityDraft, setAbilityDraft] = useState(c.specialAbility || {});
+  useEffect(() => { setAbilityDraft(c.specialAbility || {}); }, [c.id, c.specialAbility]);
   const lastScene = [...(disp || [])].reverse().find(m => m.type === "gm");
   const panel = PANEL_META[playPanel] || PANEL_META.narrator;
   const hpPct = Math.max(0, Math.min(100, Number(hp) || 0));
@@ -387,6 +399,7 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
+              {c.specialAbility?.enabled && c.specialAbility.name ? <button type="button" className="idea-help" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(`Uso ${c.specialAbility.name} para `); taRef.current?.focus(); }}>✦ Usar {c.specialAbility.name}</button> : null}
               <div className="reading-tools"><button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>✧ Ideias para agir</button><button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? 'Sair do modo leitura' : 'Modo leitura'}</button></div>
               {ideasOpen ? <div className="action-ideas">{[{ label: 'Investigar', text: 'Examino ' }, { label: 'Conversar', text: 'Me aproximo de ' }, { label: 'Agir', text: 'Tento ' }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               <div className="chat-input-row">
@@ -409,7 +422,7 @@ export default function PlayView(props) {
                   {autoMode ? "AUTO ON" : "AUTO OFF"}
                 </button>
 
-                {props.failedAction ? <button className="retry-action" type="button" disabled={loading} onClick={props.retryAction}>↻ Tentar ação novamente</button> : null}
+                {props.failedAction ? <div className="api-failure" role="alert"><p>{props.failedAction.errorMessage || "Não foi possível responder. Sua ação foi preservada."}</p><button className="retry-action" type="button" disabled={loading || retrySeconds > 0} onClick={props.retryAction}>{retrySeconds > 0 ? `Aguarde ${retrySeconds}s` : "↻ Tentar ação novamente"}</button></div> : null}
                 <textarea
                   ref={taRef}
                   value={input}
@@ -787,6 +800,8 @@ export default function PlayView(props) {
 
             <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
             {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
+            <SpecialAbilitySettings value={abilityDraft} onChange={setAbilityDraft} disabled={loading || autoMode} />
+            <button className="settings-action" type="button" disabled={loading || autoMode} onClick={() => props.onSpecialAbilityChange(abilityDraft)}>Salvar habilidade especial</button>
             <NarrationSettings value={c.narration} onChange={props.onNarrationChange} disabled={loading || autoMode} />
             {autoMode ? <p className="settings-hint">Pause o modo automático para mudar a narração.</p> : null}
             <div className="settings-list">
@@ -976,11 +991,12 @@ export default function PlayView(props) {
                       type="button"
                       className={`time-preset-btn ${timeSkipConfig?.preset === preset.id ? "on" : ""}`}
                       onClick={() =>
-                        setTimeSkipConfig({
+                        setTimeSkipConfig((previous) => ({
+                          ...previous,
                           preset: preset.id,
                           amount: preset.quantity,
                           unit: preset.unit,
-                        })
+                        }))
                       }
                     >
                       {preset.label}
@@ -1012,6 +1028,15 @@ export default function PlayView(props) {
                 </div>
               ) : null}
 
+              <div className="time-config-section">
+                <label htmlFor="skip-focus">Em que você quer focar?</label>
+                <select id="skip-focus" className="time-select" value={timeSkipConfig.focus || 'Livre'} onChange={event => setTimeSkipConfig(previous => ({ ...previous, focus: event.target.value }))}>{TIME_SKIP_FOCUSES.map(focus => <option key={focus}>{focus}</option>)}</select>
+              </div>
+              <div className="time-config-section">
+                <label htmlFor="skip-intention">O que você vai tentar fazer nesse tempo?</label>
+                <textarea id="skip-intention" className="time-textarea" rows={4} maxLength={2000} value={timeSkipConfig.intention || ''} onChange={event => setTimeSkipConfig(previous => ({ ...previous, intention: event.target.value }))} placeholder="Ex.: durante essas duas semanas, treino espada pela manhã e trabalho na estalagem à noite para juntar dinheiro. Quero manter o treino em segredo." />
+                <p className="settings-hint">Descreva a rotina, seu objetivo e os cuidados que quer tomar. O Mestre narrará o progresso possível, sem garantir sucesso.</p>
+              </div>
               <div className="time-preview">
                 <h4>Resumo</h4>
                 <p>
@@ -1019,7 +1044,7 @@ export default function PlayView(props) {
                   {skipSummary.slice(1)}.
                   O narrador receberá o contexto automaticamente.
                 </p>
-                <p className="time-preview-now">Agora: {timeLongLabel}</p>
+                <p>Foco: {timeSkipConfig.focus || "Livre"}</p>{timeSkipConfig.intention?.trim() ? <p className="skip-intention-preview">{timeSkipConfig.intention.trim()}</p> : null}<p className="time-preview-now">Agora: {timeLongLabel}</p><p>O calendário só avança quando a resposta do Mestre chegar.</p>
               </div>
             </div>
 

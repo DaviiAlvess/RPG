@@ -56,3 +56,25 @@ Após alterar variáveis ou atualizar o código, faça um novo deploy. Uma vari�
 `GEMINI_MODEL` antiga tem prioridade sobre o padrão: atualize-a ou remova-a.
 A disponibilidade efetiva depende da chave e do projeto no Google AI Studio.
 Documentação: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+
+## Salto de tempo com intenção
+
+O salto permite escolher um foco e escrever até 2.000 caracteres sobre rotina,
+objetivos e cuidados. Trocar a duração mantém esse texto. O calendário só é
+confirmado após a resposta; uma tentativa com erro mantém a intenção para repetir.
+Testes de dados pendentes precisam ser resolvidos antes do salto.
+
+A direção narrativa privilegia intenção, mudança perceptível, subtexto e
+consequências reconhecíveis, sem assumir decisões ou emoções do jogador.
+Referências de escrita e narrativa interativa:
+- https://writingexcuses.com/writing-excuses-10-25-what-makes-a-scene/
+- https://www.inklestudios.com/2012/08/31/whats-in-a-game
+
+## Diagnóstico de erros da IA
+
+A resposta distingue RATE_LIMIT, API_AUTH, MODEL_UNAVAILABLE, TIMEOUT,
+UPSTREAM_RESPONSE, UPSTREAM_UNAVAILABLE, CONTENT_BLOCKED e EMPTY_RESPONSE.
+HTTP 429 informa Retry-After; o cliente preserva a ação e aguarda esse intervalo.
+Falhas 500/502/503 com JSON permitem uma repetição limitada. Timeout e falha de
+rede não são repetidos automaticamente, pois a chamada pode ter consumido tokens.
+Guia do provedor: https://ai.google.dev/gemini-api/docs/troubleshooting

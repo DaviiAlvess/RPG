@@ -1,3 +1,4 @@
+import { specialAbilityDirection } from "./special-ability.mjs";
 import { buildNarrationDirection } from './narration.mjs';
 import { buildCharacterNamingDirection } from './character-names.mjs';
 
@@ -31,6 +32,7 @@ export function economyPrompt(c, lore, calendar) {
     'Passagem real de tempo: [TIME_SKIP: unidade=horas, quantidade=2]. Unidades: minutos, horas, dias, semanas, meses, anos. Não avance novamente se o jogador já avançou o calendário.',
     c.useImages ? 'Ao final, IMAGE_PROMPT: cenário em inglês, sem texto.' : 'Não gere IMAGE_PROMPT.',
     buildNarrationDirection({ ...c.narration, length: 'short' }),
-    buildCharacterNamingDirection(c)
+    buildCharacterNamingDirection(c),
+    specialAbilityDirection(c.specialAbility)
   ].join('\n');
 }

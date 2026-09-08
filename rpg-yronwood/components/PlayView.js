@@ -402,10 +402,11 @@ export default function PlayView(props) {
 
               <div className="ability-shortcut">
                 <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
-                  <span aria-hidden="true">✦</span><span><strong>Habilidade especial</strong><small>{c.specialAbility?.enabled && c.specialAbility.name ? c.specialAbility.name : 'Escolha seu poder'}</small></span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
+                  <span aria-hidden="true">✦</span><span>Habilidade</span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
                 </button>
                 {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Usar habilidade especial">
                   {c.specialAbility?.enabled && c.specialAbility.name && c.specialAbility.description ? <>
+                    <p><strong>{c.specialAbility.name}</strong></p>
                     <p>{c.specialAbility.description}</p>
                     {c.specialAbility.limits ? <p><strong>Limites:</strong> {c.specialAbility.limits}</p> : null}
                     <p className="settings-hint">{c.specialAbility.secret !== false ? 'Configurada para começar em segredo. Usá-la diante de alguém pode revelá-la.' : 'Sem segredo obrigatório.'}</p>

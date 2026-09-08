@@ -65,6 +65,7 @@ export default function PlayView(props) {
     const timer = setInterval(() => { update(); if (Date.now() >= props.failedAction.retryAt) clearInterval(timer); }, 1000);
     return () => clearInterval(timer);
   }, [props.failedAction?.retryAt]);
+  const [abilityOpen, setAbilityOpen] = useState(false);
   const [readerMode, setReaderMode] = useState(false);
   const [ideasOpen, setIdeasOpen] = useState(false);
   const {
@@ -399,7 +400,21 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
-              {c.specialAbility?.enabled && c.specialAbility.name ? <button type="button" className="idea-help" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(`Uso ${c.specialAbility.name} para `); taRef.current?.focus(); }}>✦ Usar {c.specialAbility.name}</button> : null}
+              <div className="ability-shortcut">
+                <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
+                  <span aria-hidden="true">✦</span><span><strong>Habilidade especial</strong><small>{c.specialAbility?.enabled && c.specialAbility.name ? c.specialAbility.name : 'Escolha seu poder'}</small></span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
+                </button>
+                {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Usar habilidade especial">
+                  {c.specialAbility?.enabled && c.specialAbility.name && c.specialAbility.description ? <>
+                    <p>{c.specialAbility.description}</p>
+                    {c.specialAbility.limits ? <p><strong>Limites:</strong> {c.specialAbility.limits}</p> : null}
+                    <p className="settings-hint">{c.specialAbility.secret !== false ? 'Configurada para começar em segredo. Usá-la diante de alguém pode revelá-la.' : 'Sem segredo obrigatório.'}</p>
+                    <button className="btn-primary" type="button" disabled={loading || autoWaiting} onClick={() => { setInput(previous => (previous.trim() ? previous.trimEnd() + '\n' : '') + "Uso " + c.specialAbility.name + " para "); setAbilityOpen(false); taRef.current?.focus(); }}>✦ Preparar uso da habilidade</button>
+                    <p className="settings-hint">Complete o que quer fazer e toque em enviar. Seu texto atual será mantido.</p>
+                  </> : <p>Você ainda não configurou uma habilidade especial. Pode escolher um poder deste universo ou de outro.</p>}
+                  <button type="button" className="idea-help" onClick={() => { setPlayPanel('settings'); setAbilityOpen(false); }}>Configurar habilidade →</button>
+                </section> : null}
+              </div>
               <div className="reading-tools"><button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>✧ Ideias para agir</button><button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? 'Sair do modo leitura' : 'Modo leitura'}</button></div>
               {ideasOpen ? <div className="action-ideas">{[{ label: 'Investigar', text: 'Examino ' }, { label: 'Conversar', text: 'Me aproximo de ' }, { label: 'Agir', text: 'Tento ' }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               <div className="chat-input-row">

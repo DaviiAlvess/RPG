@@ -17,6 +17,19 @@ Narre este intervalo a partir dessa intenção, respeitando recursos, habilidade
 Mostre a passagem do tempo com 2 ou 3 momentos concretos conectados, em vez de listar dias ou repetir a rotina. Dê um detalhe de progresso e uma consequência coerente quando houver; não force tragédia, combate ou reviravolta.
 Treino e trabalho exigem esforço e condições; não conceda poderes, dinheiro, itens ou níveis sem fundamento nas regras. Descanso não resolve automaticamente doenças ou ferimentos graves.
 Não invente falas, sentimentos, decisões ou relacionamentos do jogador. Se surgir uma decisão importante, apresente-a ao fim do intervalo como uma oportunidade ainda em aberto, sem resolvê-la por ele.
-Respeite o estilo e tamanho de narração escolhidos. Termine com uma cena concreta para retomar o jogo.
+Respeite o estilo e tamanho de narração escolhidos. Apresente uma cena concreta para retomar o jogo e encerre com o título **Balanço do período**. Nesse balanço, use quatro tópicos curtos: **O que fez**, **Conquistas e progresso**, **Mudanças e consequências**, **Pendências**. Relacione cada atividade solicitada ao que realmente aconteceu, inclusive tentativas incompletas. Diferencie intenção, progresso parcial e conquista confirmada; se nada foi conquistado, diga isso. Não invente recompensas para preencher o balanço. Ele faz parte da história e os próximos turnos devem respeitar esses resultados. No modo curto, reduza as cenas para reservar espaço ao balanço.
 O calendário deste intervalo será confirmado pelo jogo após sua resposta. Não inclua TIME_SKIP nem avance tempo adicional.]`;
+}
+
+export function createSkipEvent(plan, narrative, gameTime) {
+  const intent = normalizeSkipIntent(plan.intent);
+  const result = String(narrative || '').trim();
+  const heading = /(?:^|\n)[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?Balanço do período(?:\*\*)?[ \t]*:?/i.exec(result);
+  return {
+    id: plan.id, type: 'time_skip', label: plan.separator.text,
+    totalDaysElapsed: gameTime.totalDaysElapsed,
+    startGameTime: plan.startGameTime, endGameTime: gameTime,
+    intent, narrative: result,
+    balance: heading ? result.slice(heading.index).trim() : '',
+  };
 }

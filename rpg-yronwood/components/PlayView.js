@@ -513,6 +513,13 @@ export default function PlayView(props) {
                       <div className="timeline-sub">
                         Dia {event?.totalDaysElapsed ?? 0} da aventura
                       </div>
+                      {event?.type === "time_skip" ? <details className="journey-recap">
+                        <summary>Ver plano e resultado</summary>
+                        <p><strong>Foco:</strong> {event.intent?.focus}</p>
+                        <p><strong>O que você pediu:</strong> {event.intent?.intention || "Seguir a rotina atual, sem assumir compromissos novos."}</p>
+                        <NarrativeContent text={event.balance || event.narrative} />
+                        {event.balance ? <details><summary>Ler o período completo</summary><NarrativeContent text={event.narrative} /></details> : null}
+                      </details> : null}
                     </div>
                   </div>
                 ))}

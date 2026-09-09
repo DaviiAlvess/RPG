@@ -14,6 +14,7 @@ import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
 import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
+import IosInstallHint from "../components/IosInstallHint";
 import {
   applyTimeSkip,
   parseTimeSkip,
@@ -266,16 +267,16 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Estilo, tamanho e ritmo da resposta vêm na DIREÇÃO DE NARRAÇÃO mais abaixo e prevalecem nesses pontos. As regras a seguir definem presença e agência — não brigam com ela.`,
     ``,
     `REGRA 1 — PRESENÇA, NÃO RESUMO.`,
-    `Dramatize o próximo momento. Comece na última ação do jogador e mostre o mundo reagindo. Não recapitule a cena como um guia. Proibido abrir com "Você está em…", pôr-do-sol genérico ou clima sem aposta. O jogador deve sentir que está dentro da história, não lendo sobre ela.`,
+    `Dramatize o próximo momento. Comece na última ação do jogador e mostre o mundo reagindo. Não recapitule a cena como um guia. Proibido abrir com "Você está em…", pôr-do-sol genérico ou clima sem aposta. A câmera é o jogador: narre em "você"; o primeiro sujeito visível é o corpo dele (mão, carroça, pacote), nunca um transeunte ou figura encapuzada como protagonista do parágrafo. O jogador deve sentir que está dentro da história, não lendo sobre ela.`,
     ``,
     `REGRA 2 — DETALHE QUE REVELA, NÃO LISTA DE SENTIDOS.`,
-    `Um ou dois detalhes concretos — som, calor, cheiro, textura — que revelem lugar, pista ou caráter. Não obrigue todos os sentidos a cada turno. "Menos é mais" significa recusar listas decorativas, não encolher a cena a um resumo turístico. Frases curtas e precisas ainda valem.`,
+    `Um ou dois detalhes concretos — som, calor, cheiro, textura — que revelem lugar, pista ou caráter, chegando pelo corpo do jogador, não por um plano que segue um NPC. Não obrigue todos os sentidos a cada turno. "Menos é mais" significa recusar listas decorativas, não encolher a cena a um resumo turístico. Frases curtas e precisas ainda valem.`,
     ``,
     `REGRA 3 — O MUNDO, NÃO A ALMA.`,
     `Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Pode descrever o que o mundo faz ao corpo — o calor, o silêncio, uma mão que pausa — para o jogador sentir por conta própria. Corpo observável é permitido; emoção rotulada, não. Não feche toda resposta com "Como você reage?".`,
     ``,
     `REGRA 4 — NPCs TÊM VIDA PRÓPRIA.`,
-    `Cada NPC quer algo específico. Mentem, omitem, têm pressa, guardam rancor. Voz distinta: o soldado corta frases, a curandeira fala em provérbios, o nobre ri alto demais. Mostre o que fazem enquanto falam. A cena orbita o jogador — NPCs reagem a ele, não a um palco paralelo.`,
+    `Cada NPC quer algo específico. Mentem, omitem, têm pressa, guardam rancor. Voz distinta: o soldado corta frases, a curandeira fala em provérbios, o nobre ri alto demais. Mostre o que fazem enquanto falam. A cena orbita o jogador — NPCs entram a partir de você (À sua frente…), reagem a ele, nunca como herói do parágrafo.`,
     ``,
     `REGRA 5 — FORMATO DE DIÁLOGO (SÓ NPCs).`,
     `Fala em linha própria neste formato: Nome: "fala entre aspas"`,
@@ -1796,6 +1797,8 @@ export default function RPG() {
       {!authReady ? (
         <div className="auth-loading">Carregando conta...</div>
       ) : !user ? (
+        <>
+        <IosInstallHint />
         <div className="auth-box">
           {!firebaseOk && (
             <div className="auth-alert auth-alert-error">
@@ -1848,6 +1851,7 @@ export default function RPG() {
           </form>
           <p className="auth-hint">Suas histórias ficam salvas na nuvem. Acesse de qualquer celular ou computador.</p>
         </div>
+        </>
       ) : (
         <>
           {user && (

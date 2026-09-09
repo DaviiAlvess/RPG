@@ -18,6 +18,13 @@ test('Os seis estilos mudam a orientação e preservam escolhas e regras', () =>
     assert.ok(prompt.includes('Nunca invente diálogo para o personagem do jogador'));
     assert.ok(prompt.includes('você sente medo'));
     assert.ok(prompt.includes('última ação do jogador'));
+    assert.match(config.sample, /você/i);
+    assert.ok(config.instruction.includes('segunda pessoa'));
+    assert.ok(config.instruction.includes('câmera é o corpo do jogador'));
+    assert.ok(config.instruction.includes('À sua frente'));
+    assert.ok(config.instruction.includes('transeunte'));
+    assert.ok(config.instruction.includes('figura encapuzada'));
+    assert.equal(/^o (transeunte|mensageiro)/i.test(config.sample.trim()), false);
   }
   assert.ok(buildNarrationDirection({ length: 'balanced' }).includes('200–320'));
   assert.ok(buildNarrationDirection({ length: 'rich' }).includes('300–450'));
@@ -63,6 +70,36 @@ test('Personagem canônico e original ainda posicionam no canon quando há story
   assert.match(original, /canon/i);
   assert.match(original, /original/i);
   assert.ok(original.includes('Mira'));
+});
+test('POV ancora no jogador e proíbe câmera em NPC', () => {
+  const prompt = buildNarrationDirection({ style: 'literary', length: 'balanced', pace: 'balanced' });
+  assert.match(prompt, /câmera é o jogador/i);
+  assert.ok(prompt.includes('segunda pessoa'));
+  assert.ok(prompt.includes('"você"'));
+  assert.ok(prompt.includes('transeunte'));
+  assert.ok(prompt.includes('figura encapuzada'));
+  assert.ok(prompt.includes('a partir de você'));
+  assert.ok(prompt.includes('NÃO terceira pessoa de conto'));
+  assert.ok(prompt.includes('Não corte no meio'));
+  assert.ok(prompt.includes('conflito na sua cara'));
+  assert.ok(prompt.includes('você sente medo'));
+  assert.ok(prompt.includes('Nunca invente diálogo para o personagem do jogador'));
+  const start = buildStartPrompt({ charName: 'Edric', world: 'Dorne' });
+  assert.match(start, /câmera é o jogador/i);
+  assert.ok(start.includes('"você"'));
+  assert.ok(start.includes('transeunte'));
+  assert.ok(start.includes('figura encapuzada'));
+  assert.ok(start.includes('a partir de você'));
+});
+test('Os seis samples ensinam segunda pessoa a partir do corpo', () => {
+  const keys = ['cinematic', 'literary', 'dark', 'light', 'epic', 'intimate'];
+  assert.deepEqual(Object.keys(NARRATION_STYLES), keys);
+  for (const key of keys) {
+    const sample = NARRATION_STYLES[key].sample;
+    assert.match(sample, /você/i, `${key} sample precisa de "você"`);
+    assert.ok(/carta|selo|envelope/i.test(sample), `${key} sample deve ser a cena do mensageiro`);
+    assert.equal(/^o (transeunte|mensageiro|figura)/i.test(sample.trim()), false, `${key} não abre no NPC`);
+  }
 });
 test('Campanha tipo Edric inclui o storyStartPoint no prompt de início', () => {
   const storyStartPoint = 'A palma ainda arde do ferro do portão quando o capataz empurra o pergaminho contra a mesa de Pedra Sangrenta.';

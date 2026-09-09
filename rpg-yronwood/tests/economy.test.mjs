@@ -4,9 +4,9 @@ import { readFile } from 'node:fs/promises';
 import { economyPrompt, memoryCutoff } from '../lib/economy.mjs';
 const load = async path => import(`data:text/javascript;base64,${Buffer.from(await readFile(new URL(path, import.meta.url), 'utf8')).toString('base64')}`);
 test('Economia preserva regras, ficha e segredos e força respostas curtas', () => {
-  const prompt = economyPrompt({ world: 'Teste', charName: 'Mara', items: ['Chave de bronze'], worldState: { secrets: ['Somente Mara sabe da carta'] }, narration: { style: 'dark', length: 'rich' } }, 'Contexto importante', 'Dia 2');
-  for (const value of ['Chave de bronze', 'Somente Mara sabe da carta', 'Contexto importante', '80–140', '[TESTE:Força|DC:12]', 'suspense']) assert.ok(prompt.includes(value));
-  assert.ok(!prompt.includes('250–400'));
+  const prompt = economyPrompt({ world: 'Teste', charName: 'Mara', items: ['Chave de bronze'], memory: 'A carta está no forro da capa.', worldState: { secrets: ['Somente Mara sabe da carta'] }, narration: { style: 'dark', length: 'rich' } }, 'Contexto importante', 'Dia 2');
+  for (const value of ['Teste', 'Mara', 'A carta está no forro da capa', 'Chave de bronze', 'Somente Mara sabe da carta', 'Contexto importante', '80–140', '[TESTE:Força|DC:12]', 'suspense', 'comece na ação do jogador', 'detalhe sensorial revelador', 'nunca fale ou sinta pelo jogador']) assert.ok(prompt.includes(value));
+  for (const length of ['150–250', '200–320', '250–400', '300–450']) assert.ok(!prompt.includes(length));
 });
 test('Memória considera tamanho e preserva a próxima ação sem cortar histórico', () => {
   const messages = Array.from({ length: 27 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(1000) }));

@@ -28,6 +28,7 @@ export function economyPrompt(c, lore, calendar) {
     'Respeite o universo e a época. Contextos gerados por IA não são fontes verificadas. Não invente fatos canônicos. Personagens originais não substituem protagonistas.',
     c.ordinaryCharacter ? 'O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes especiais não estabelecidos.' : 'Habilidades excepcionais só existem quando definidas na ficha; NPCs não as conhecem sem evidência.',
     'Nunca fale, escolha ou sinta pelo jogador. Use seu nome só quando necessário. Diálogos em linhas Nome: "fala". Não liste opções obrigatórias.',
+    'Mesmo curto: comece na ação do jogador, um detalhe sensorial revelador, NPC com intenção; nunca fale ou sinta pelo jogador.',
     'Ação incerta: [TESTE:Força|DC:12] ou Destreza, Mente, Carisma. DC 8 fácil, 12 normal, 16 difícil, 20 extremo. Interrompa e aguarde o dado. Respeite o resultado calculado pelo jogo.',
     'Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [LOCAL:nome], [NPC:nome|função, local e fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe]. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.',
     'Passagem real de tempo: [TIME_SKIP: unidade=horas, quantidade=2]. Unidades: minutos, horas, dias, semanas, meses, anos. Não avance novamente se o jogador já avançou o calendário.',

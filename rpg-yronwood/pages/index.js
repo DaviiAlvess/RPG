@@ -6,9 +6,10 @@ import { requestJson } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
 import { masterChatPrompt, masterGuidance } from "../lib/master-chat.mjs";
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
+import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseCompletedMissions, missionXp } from "../lib/progression.mjs";
 import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
-import { buildNarrationDirection, normalizeNarration } from "../lib/narration.mjs";
+import { buildNarrationDirection, buildStartPrompt, normalizeNarration } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
 import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
@@ -49,7 +50,7 @@ const cleanText = (t) =>
   normalizeDialogueText(
     stripTimeSkipTags(
       t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
-       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM):([^\]]+)\]/gi, "")
+       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP):([^\]]+)\]/gi, "")
     )
   ).trim();
 const generateImage = (prompt, world) => {
@@ -134,6 +135,8 @@ const PRESET = {
   charPersonality: "Orgulhoso, calculista, justo. Desconfia de sorrisos que chegam antes das palavras.",
   charSkills: "Armas pesadas, liderança militar, política dornesa, equitação no deserto, genealogia.",
   appearance: { body: "Atlético", height: "Alto", skin: "Morena", hairLen: "Curto", hairColor: "Preto", hairStyle: "Liso", eyeColor: "Castanhos", eyeShape: "Amendoados", face: "Quadrada", extras: "Cicatriz" },
+  storyStartPoint: "A palma ainda arde do ferro do portão quando o capataz empurra o pergaminho contra a mesa de Pedra Sangrenta. Abaixo, no pátio, um emissário recusa desmontar: o selo é de Porto Real, e a lista pede mais cabeças dornesas depois da de Seth. Ele espera a sua palavra enquanto o vento traz cal e sangue velho das muralhas que você acabou de erguer.",
+  narration: { style: "dark", length: "rich", pace: "balanced" },
   useImages: true,
   gameStyle: "aventura",
   relationships: {
@@ -169,7 +172,8 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
     c.storyStartPoint ? `PREMISSA ESCOLHIDA: ${c.storyStartPoint}` : "",
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
-    `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, items: c.items, missions: c.missions, attributes: c.attributes, world: c.worldState })}`,
+    `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
+    c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
     loreExtra
       ? `CONTEXTO DO UNIVERSO (gerado por IA e sujeito a revisão):\n${loreExtra}`
@@ -298,6 +302,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     ``,
     `REGRA 11 — MISSÕES E OBJETIVOS.`,
     `Quando surgir um objetivo claro — tarefa, pedido, promessa — inclua na última linha: [MISSÃO: descrição em 1 linha]. Ao cumprir: [CONCLUÍDA: descrição]. Use com parcimônia.`,
+    `Quando o jogador conquistar um marco confirmado — vitória, missão concluída ou risco inteligente — acrescente a tag oculta [XP:10] (ajuste entre 5 e 25). Não mencione XP na narração falada. Não conceda XP a cada turno.`,
     ``,
     c.useImages
       ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
@@ -321,7 +326,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [XP:n]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration));
   lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
@@ -479,6 +484,7 @@ export default function RPG() {
   const authTokenRef = useRef(null);
   const pendingRef = useRef([]);
   const skipNextTimeParseRef = useRef(false);
+  const pendingLevelNoteRef = useRef("");
 
   function clearAuto() {
     clearTimeout(timerRef.current);
@@ -1244,12 +1250,7 @@ export default function RPG() {
 
   // ─── Game ─────────────────────────────────────────────────────────
   const doStart = (camp, lore) => {
-    const startPrompt = camp.storyStartPoint?.trim()
-      ? camp.isExistingChar
-        ? `Iniciar aventura. O jogador escolheu começar neste ponto da história canônica: "${camp.storyStartPoint}". Posicione ${camp.charName} exatamente neste momento do universo "${camp.world}", respeitando o lore oficial. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`
-        : `Iniciar aventura. ${camp.charName} é um personagem original (não faz parte da obra) inserido no universo de "${camp.world}". Comece neste momento do canon: "${camp.storyStartPoint}". Posicione o personagem de forma coerente com o lore — sem substituir figuras canônicas. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`
-      : `Iniciar aventura. Narre o cenário inicial onde ${camp.charName} está agora no universo de "${camp.world}"${camp.isKnownIP && !camp.isExistingChar ? " — personagem original, fora do elenco da obra" : ""}. Use no máximo 3 elementos concretos. Ative pelo menos dois sentidos além da visão. Não explique tudo — deixe lacunas. Apresente uma situação viva que exige uma reação, sem listar opções.`;
-    sendMsg(startPrompt, [], [], camp, lore, false);
+    sendMsg(buildStartPrompt(camp), [], [], camp, lore, false);
   };
 
   const rollD20 = () => {
@@ -1264,11 +1265,12 @@ export default function RPG() {
     setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
     if (pendingTest) {
       const { attribute, description, difficulty } = pendingTest;
-      const result = resolveTest(pendingTest, attributes, roll);
+      const result = resolveTest(pendingTest, attributes, roll, skills);
       setPendingTest(null);
       setShowRollButton(false);
+      const skillPart = result.skillBonus != null ? `; perícia: ${result.skillBonus}` : "";
       sendMsg(
-        `Resultado do teste de ${attribute}: ${description}. D20: ${roll}; modificador: ${result.modifier}; total: ${result.total}; dificuldade: ${difficulty}. Resultado definido pelas regras: ${result.outcome}. Narre esta consequência sem rolar novamente.`,
+        `Resultado do teste de ${attribute}: ${description}. D20: ${roll}; modificador: ${result.modifier}${skillPart}; total: ${result.total}; dificuldade: ${difficulty}. Resultado definido pelas regras: ${result.outcome}. Narre esta consequência sem rolar novamente.`,
         msgs, disp, active, campLore, false
       );
     } else {
@@ -1322,6 +1324,7 @@ export default function RPG() {
     ];
     setMsgs(newMsgs); setDisp(newDisp);
     let retryCamp = camp;
+    let pendingLevelNote = "";
 
     try {
       let memory = camp.memory || "";
@@ -1334,9 +1337,11 @@ export default function RPG() {
         memory = summary.text; memoryUntil = cutoff;
         retryCamp = { ...camp, memory, memoryUntil };
       }
+      pendingLevelNote = pendingLevelNoteRef.current;
+      pendingLevelNoteRef.current = "";
       const res = await apiFetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ economyMode: Boolean(camp.economyMode), messages: newMsgs.slice(memoryUntil), systemPrompt: buildPrompt({ ...camp, memory }, lore, camp.gameTime || gameTimeRef.current) }),
+        body: JSON.stringify({ economyMode: Boolean(camp.economyMode), messages: newMsgs.slice(memoryUntil), systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current) }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error || typeof data.text !== "string") {
@@ -1349,6 +1354,28 @@ export default function RPG() {
       const updatedMissions = parseMissions(raw, missions);
       const updatedItems = parseItems(raw, active?.items || []);
       setMissions(updatedMissions);
+
+      const currentXp = Number(camp.experience ?? experience) || 0;
+      const currentLevel = Number(camp.level ?? level) || 1;
+      const prevMissions = camp.missions || missions || [];
+      const newMissionCount = parseCompletedMissions(raw).filter((text) => {
+        const t = text.toLowerCase();
+        const existing = prevMissions.find((m) => {
+          const mt = (m.text || "").toLowerCase();
+          return mt.includes(t) || t.includes(mt);
+        });
+        return !existing?.completed;
+      }).length;
+      const gained = parseExperience(raw) + missionXp(newMissionCount);
+      let nextExperience = currentXp;
+      if (gained > 0) {
+        nextExperience = addExperience(currentXp, gained).experience;
+        showNotification(`Você ganhou ${gained} XP`, "success");
+        if (canLevelUp({ experience: nextExperience, level: currentLevel })) {
+          showNotification("Você pode abrir a Ficha para subir de nível.", "info");
+        }
+      }
+      setExperience(nextExperience);
 
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
@@ -1421,8 +1448,8 @@ export default function RPG() {
         missions: updatedMissions,
         items: updatedItems,
         hp,
-        level,
-        experience,
+        level: camp.level ?? level,
+        experience: nextExperience,
         attributes,
         skills,
         gameTime: nextGameTime,
@@ -1452,6 +1479,7 @@ export default function RPG() {
       // Inventory is updated once per turn from explicit [ITEM: ...] events.
 
     } catch (error) {
+      if (pendingLevelNote) pendingLevelNoteRef.current = pendingLevelNote;
       clearAuto(); setAutoMode(false); autoRef.current = false;
       setMsgs(baseMsgs); setDisp(baseDisp); setInput(text);
       setFailedAction({ text, baseMsgs, baseDisp, camp: retryCamp, lore, skipPlan, errorMessage: error.message, retryAt: Date.now() + Math.min(300, Math.max(0, Number(error.retryAfter) || 0)) * 1000 });
@@ -1560,24 +1588,35 @@ export default function RPG() {
   }, [active, hp, saveCamp, showNotification]);
 
   // ─── Personagem / Combate ──────────────────────────────────────────
-  const handleLevelUp = () => {
-    if (sending.current) return;
-    const newLevel = level + 1;
-    const newAttributes = {
-      strength: attributes.strength + 1,
-      dexterity: attributes.dexterity + 1,
-      mind: attributes.mind + 1,
-      charisma: attributes.charisma + 1,
-    };
-    setLevel(newLevel);
-    setAttributes(newAttributes);
-    showNotification(`⬆️ Você subiu para o nível ${newLevel}!`);
-    const nextHp = Math.min(100, hp + 25);
-    setHp(nextHp);
+  const handleLevelUp = (choice) => {
+    if (sending.current || !choice || typeof choice !== "object") return;
+    if (!canLevelUp({ experience, level })) return;
+    const next = applyLevelUp({ level, attributes, skills, hp, choice, experience });
+    if (!next || next.level === level) return;
+    playSound("levelup");
+    setLevel(next.level);
+    setAttributes(next.attributes);
+    setSkills(next.skills);
+    setHp(next.hp);
+    showNotification(`Você subiu para o nível ${next.level}!`, "success");
+    pendingLevelNoteRef.current = `O personagem subiu para o nível ${next.level}. Não fale nem decida pelo jogador.`;
     if (active) {
-      const updated = { ...active, hp: nextHp, level: newLevel, attributes: newAttributes };
+      const updated = {
+        ...active,
+        hp: next.hp,
+        level: next.level,
+        attributes: next.attributes,
+        skills: next.skills,
+        experience,
+      };
       setActive(updated);
-      saveCamp(active.id, buildCampaignSnapshot(updated, { level: newLevel, attributes: newAttributes }));
+      saveCamp(active.id, buildCampaignSnapshot(updated, {
+        hp: next.hp,
+        level: next.level,
+        attributes: next.attributes,
+        skills: next.skills,
+        experience,
+      }));
     }
   };
 
@@ -1751,7 +1790,7 @@ export default function RPG() {
         <div className="hero-features" aria-label="Sobre o jogo">
           <span>Mestre com IA</span><span>Escolhas livres</span><span>Histórias contínuas</span>
         </div>
-        {!user ? <details className="scene-preview"><summary>Veja como uma aventura começa</summary><p>A chuva apaga as últimas pegadas diante da taverna. A estalajadeira esconde uma carta quando você entra.</p><p>Estalajadeira: “Se veio pelo mensageiro, chegou tarde.”</p><p>Você pode perguntar sobre a carta, investigar as pegadas ou escolher outro caminho. A decisão é sua.</p></details> : null}
+        {!user ? <details className="scene-preview"><summary>Veja como uma aventura começa</summary><p>A chuva esfria o ombro da capa. No limiar da taverna, as últimas pegadas se desfazem na lama. A estalajadeira empurra um envelope para baixo do copo no instante em que a porta se abre.</p><p>Estalajadeira: “Se veio pelo mensageiro, chegou tarde.”</p><p>O copo treme. Um canto de papel ainda aparece sob a base.</p></details> : null}
       </div>
 
       {!authReady ? (

@@ -24,18 +24,20 @@ export function economyPrompt(c, lore, calendar) {
     `MUNDO: ${lore || c.worldBg || ''}\nCONTEXTO DO PERSONAGEM: ${c.charLore || ''}`,
     `INÍCIO: ${c.storyStartPoint || ''}\nELENCO: ${c.supportingCast || ''}`,
     `MEMÓRIA: ${c.memory || ''}\nDATA: ${calendar}`,
-    `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, attributes: c.attributes, items: c.items, missions: c.missions, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
+    `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
+    c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
     'Respeite o universo e a época. Contextos gerados por IA não são fontes verificadas. Não invente fatos canônicos. Personagens originais não substituem protagonistas.',
     c.ordinaryCharacter ? 'O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes especiais não estabelecidos.' : 'Habilidades excepcionais só existem quando definidas na ficha; NPCs não as conhecem sem evidência.',
     'Nunca fale, escolha ou sinta pelo jogador. Use seu nome só quando necessário. Diálogos em linhas Nome: "fala". Não liste opções obrigatórias.',
     'Mesmo curto: comece na ação do jogador, um detalhe sensorial revelador, NPC com intenção; nunca fale ou sinta pelo jogador.',
     'Ação incerta: [TESTE:Força|DC:12] ou Destreza, Mente, Carisma. DC 8 fácil, 12 normal, 16 difícil, 20 extremo. Interrompa e aguarde o dado. Respeite o resultado calculado pelo jogo.',
-    'Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [LOCAL:nome], [NPC:nome|função, local e fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe]. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.',
+    'Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [XP:n], [LOCAL:nome], [NPC:nome|função, local e fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe]. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.',
+    'Conceda XP só por vitória confirmada, missão concluída ou risco inteligente — 5–25 em geral, nunca por andar ou conversar. Não mencione XP na narração.',
     'Passagem real de tempo: [TIME_SKIP: unidade=horas, quantidade=2]. Unidades: minutos, horas, dias, semanas, meses, anos. Não avance novamente se o jogador já avançou o calendário.',
     c.useImages ? 'Ao final, IMAGE_PROMPT: cenário em inglês, sem texto.' : 'Não gere IMAGE_PROMPT.',
     buildNarrationDirection({ ...c.narration, length: 'short' }),
     masterGuidance(c),
     buildCharacterNamingDirection(c),
     specialAbilityDirection(c.specialAbility)
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }

@@ -2,6 +2,7 @@ import SpecialAbilitySettings from "./SpecialAbilitySettings";
 import MasterChat from "./MasterChat";
 import { TIME_SKIP_FOCUSES } from "../lib/time-skip-intent.mjs";
 import { resolveTest } from "../lib/gameplay.mjs";
+import { xpProgress, canLevelUp, skillForAttribute } from "../lib/progression.mjs";
 import { useState, useEffect } from "react";
 import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
@@ -44,6 +45,81 @@ const SKILL_LABELS = {
   perception: "Percepção",
 };
 
+function LevelUpChoice({ attributes, skills, onConfirm, onCancel }) {
+  const [mode, setMode] = useState(null);
+  const [picked, setPicked] = useState([]);
+  const attrEntries = Object.entries(attributes || {});
+  const skillEntries = Object.entries(skills || {});
+  const toggleAttr = (key) => {
+    setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : prev.length < 2 ? [...prev, key] : prev));
+  };
+  return (
+    <div className="card-box" style={{ marginTop: 10 }}>
+      <div className="section-label">Escolha o bônus de nível</div>
+      {!mode ? (
+        <div className="time-preset-grid">
+          <button type="button" className="time-preset-btn" onClick={() => setMode("attr")}>+2 em um atributo</button>
+          <button type="button" className="time-preset-btn" onClick={() => { setMode("attrs"); setPicked([]); }}>+1 em dois atributos</button>
+          <button type="button" className="time-preset-btn" onClick={() => setMode("skill")}>+1 em uma perícia</button>
+          <button type="button" className="time-preset-btn" onClick={() => onConfirm({ type: "hp" })}>+25 HP</button>
+        </div>
+      ) : null}
+      {mode === "attr" ? (
+        <>
+          <div className="panel-sub">Qual atributo recebe +2?</div>
+          <div className="time-preset-grid">
+            {attrEntries.map(([key]) => (
+              <button key={key} type="button" className="time-preset-btn" onClick={() => onConfirm({ type: "attr", key })}>
+                {ATTR_LABELS[key] || key}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+      {mode === "attrs" ? (
+        <>
+          <div className="panel-sub">Escolha dois atributos diferentes (+1 cada).</div>
+          <div className="time-preset-grid">
+            {attrEntries.map(([key]) => (
+              <button key={key} type="button" className={`time-preset-btn ${picked.includes(key) ? "on" : ""}`} onClick={() => toggleAttr(key)}>
+                {ATTR_LABELS[key] || key}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="inventory-add-btn"
+            disabled={picked.length !== 2}
+            onClick={() => onConfirm({ type: "attrs", keys: picked })}
+            style={{ marginTop: 8, opacity: picked.length === 2 ? 1 : 0.45 }}
+          >
+            Confirmar
+          </button>
+        </>
+      ) : null}
+      {mode === "skill" ? (
+        <>
+          <div className="panel-sub">Qual perícia recebe +1?</div>
+          <div className="time-preset-grid">
+            {skillEntries.map(([key, value]) => (
+              <button
+                key={key}
+                type="button"
+                className="time-preset-btn"
+                disabled={Number(value) >= 5}
+                onClick={() => onConfirm({ type: "skill", key })}
+              >
+                {SKILL_LABELS[key] || key} ({value}/5)
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
+      <button type="button" className="btn-cancel" onClick={onCancel} style={{ marginTop: 8 }}>Cancelar</button>
+    </div>
+  );
+}
+
 function renderMessageTime(message) {
   return fmtTime(message?.ts || message?.time || message?.createdAt || message?.timestamp);
 }
@@ -71,6 +147,7 @@ export default function PlayView(props) {
   const [abilityOpen, setAbilityOpen] = useState(false);
   const [readerMode, setReaderMode] = useState(false);
   const [ideasOpen, setIdeasOpen] = useState(false);
+  const [levelUpOpen, setLevelUpOpen] = useState(false);
   const {
     active,
     disp,
@@ -154,7 +231,9 @@ export default function PlayView(props) {
   const lastScene = [...(disp || [])].reverse().find(m => m.type === "gm");
   const panel = PANEL_META[playPanel] || PANEL_META.narrator;
   const hpPct = Math.max(0, Math.min(100, Number(hp) || 0));
-  const xpPct = Math.max(0, Math.min(100, Number(experience) % 100 || 0));
+  const xpBar = xpProgress(experience) || { current: 0, needed: 100, pct: 0 };
+  const xpPct = Math.max(0, Math.min(100, Number(xpBar.pct) || 0));
+  const readyToLevel = canLevelUp({ experience, level });
   const itemList = c.items || [];
   const relationshipEntries = Object.entries(c.relationships || {});
   const saveList = c.saves || [];
@@ -181,10 +260,14 @@ export default function PlayView(props) {
   const skipAmount = timeSkipConfig?.amount || activePreset.quantity;
   const skipUnit = timeSkipConfig?.unit || activePreset.unit;
   const skipSummary = formatTimeSkipContext(skipUnit, skipAmount);
+  useEffect(() => { if (!readyToLevel) setLevelUpOpen(false); }, [readyToLevel]);
+  const pendingPreview = pendingTest ? resolveTest(pendingTest, attributes || {}, 10, skills || {}) : null;
+  const pendingSkillKey = pendingTest ? skillForAttribute(pendingTest.attribute) : null;
+  const pendingSkillName = pendingSkillKey ? (SKILL_LABELS[pendingSkillKey] || pendingSkillKey) : null;
 
   const navItems = [
     { id: "narrator", badge: null },
-    { id: "sheet", badge: null },
+    { id: "sheet", badge: readyToLevel ? "↑" : null },
     { id: "dice", badge: null },
     { id: "inventory", badge: itemList.length || null },
     { id: "missions", badge: activeMissionList.length || missionTotal || null },
@@ -427,7 +510,11 @@ export default function PlayView(props) {
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
                   {pendingTest.description ? <span>{pendingTest.description}</span> : null}
-                  <span>D20 + modificador ({resolveTest(pendingTest, attributes || {}, 10).modifier}). Role o dado abaixo ou desista da tentativa no salto de tempo.</span>
+                  <span>
+                    {pendingSkillName
+                      ? `D20 + modificador ${pendingTest.attribute} (${pendingPreview.modifier >= 0 ? "+" : ""}${pendingPreview.modifier}) + perícia ${pendingSkillName} (+${pendingPreview.skillBonus || 0}). Role o dado abaixo ou desista da tentativa no salto de tempo.`
+                      : `D20 + modificador (${pendingPreview?.modifier >= 0 ? "+" : ""}${pendingPreview?.modifier ?? 0}). Role o dado abaixo ou desista da tentativa no salto de tempo.`}
+                  </span>
                 </div> : null}
                 <button
                   className="btn-time-skip"
@@ -575,16 +662,33 @@ export default function PlayView(props) {
                     <div className="xp-bar">
                       <div className="xp-fill" style={{ width: `${xpPct}%` }} />
                     </div>
-                    <span className="xp-label">{xpPct}/100 XP</span>
+                    <span className="xp-label">{xpBar.current}/{xpBar.needed} XP</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                     <span className="skill-val">Nível {level || 1}</span>
-                    <button className="inventory-add-btn" onClick={handleLevelUp} type="button">
-                      Subir de nível
-                    </button>
+                    {readyToLevel && !levelUpOpen ? (
+                      <button className="inventory-add-btn" onClick={() => setLevelUpOpen(true)} type="button">
+                        Subir de nível
+                      </button>
+                    ) : !readyToLevel ? (
+                      <button className="inventory-add-btn" type="button" disabled style={{ opacity: 0.45 }}>
+                        Subir de nível
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </div>
+              {levelUpOpen && readyToLevel ? (
+                <LevelUpChoice
+                  attributes={attributes}
+                  skills={skills}
+                  onConfirm={(choice) => {
+                    handleLevelUp(choice);
+                    setLevelUpOpen(false);
+                  }}
+                  onCancel={() => setLevelUpOpen(false)}
+                />
+              ) : null}
             </div>
 
             <div className="stat-grid">
@@ -639,7 +743,7 @@ export default function PlayView(props) {
                       <div key={key} className="skill-row">
                         <span className={`skill-dot ${Number(value) > 1 ? "prof" : ""}`} />
                         <span className="skill-name">{SKILL_LABELS[key] || key}</span>
-                        <span className="skill-val">{value}</span>
+                        <span className="skill-val">grau {value}</span>
                       </div>
                     ))
                   ) : (
@@ -1021,6 +1125,7 @@ export default function PlayView(props) {
                 {pendingTest ? <div className="journey-recap" role="status">
                   <p><strong>Teste pendente: {pendingTest.attribute}</strong></p>
                   <p>{pendingTest.description}</p>
+                  {pendingPreview ? <p>D20 + modificador ({pendingPreview.modifier >= 0 ? "+" : ""}{pendingPreview.modifier}){pendingSkillName ? ` + perícia ${pendingSkillName} (+${pendingPreview.skillBonus || 0})` : ""}.</p> : null}
                   <p>Você pode rolar agora ou desistir dessa tentativa e avançar. Desistir não conta como sucesso; seu plano para o período será mantido.</p>
                   <button type="button" className="btn-cancel" disabled={loading || autoWaiting} onClick={() => { setShowTimeSkipModal(false); rollD20(); }}>Rolar teste agora</button>
                 </div> : null}

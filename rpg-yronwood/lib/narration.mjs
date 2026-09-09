@@ -76,3 +76,47 @@ export function buildNarrationDirection(value) {
     'Nunca avance uma decisão pelo jogador, determine seus sentimentos ou conceda sucesso para agradá-lo. Humor, épico e drama respeitam a escala atual do personagem.'
   ].join('\n');
 }
+
+export function buildStartPrompt(camp = {}) {
+  const name = String(camp.charName || '').trim() || 'o personagem';
+  const world = String(camp.world || '').trim() || 'este mundo';
+  const moment = String(camp.storyStartPoint || '').trim();
+  const parts = [];
+
+  if (moment) {
+    if (camp.isExistingChar) {
+      parts.push(
+        `A aventura começa neste instante da história canônica — narre de dentro dele, não o resuma: ${moment}`,
+        `Posicione ${name} exatamente neste momento do universo "${world}", respeitando o lore oficial.`
+      );
+    } else {
+      parts.push(
+        `A aventura começa neste instante do canon — narre de dentro dele, não o resuma: ${moment}`,
+        `${name} é um personagem original (não faz parte da obra) inserido no universo de "${world}". Posicione-o de forma coerente com o lore, sem substituir figuras canônicas.`
+      );
+    }
+  } else if (camp.isKnownIP && !camp.isExistingChar) {
+    parts.push(
+      `A aventura começa no primeiro instante vivido de ${name} no universo de "${world}" — personagem original, fora do elenco da obra.`,
+      'Caia num primeiro batimento concreto deste mundo; não descreva o cenário de fora.'
+    );
+  } else {
+    parts.push(
+      `A aventura começa no primeiro instante vivido de ${name} no universo de "${world}".`,
+      'Caia num primeiro batimento concreto deste mundo; não descreva o cenário de fora.'
+    );
+  }
+
+  if (camp.ordinaryCharacter) {
+    parts.push('O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes não estabelecidos.');
+  }
+
+  parts.push(
+    'Narre a partir do corpo: o que chega aos olhos, ouvidos, pele ou olfato de onde o personagem está.',
+    'Um ou dois detalhes reveladores. Um NPC ou o mundo já quer algo do jogador.',
+    'Nunca abra com "Você está em…". Nunca invente diálogo, pensamento ou decisão para o personagem do jogador. Sem menus numerados.',
+    'Encerre onde o jogador pode agir.'
+  );
+
+  return parts.join(' ');
+}

@@ -8,6 +8,8 @@ test('Salto preserva foco e intenção e limita valores inválidos', () => {
   assert.ok(prompt.includes('Treinar'));
   assert.ok(prompt.includes('Intenção não é resultado garantido'));
   assert.ok(prompt.includes('após sua resposta'));
+  assert.ok(prompt.includes('momentos vividos'));
+  assert.ok(!prompt.includes('2 ou 3 momentos'));
   assert.equal(normalizeSkipIntent({ unit: 'anos', amount: 999 }).amount, 100);
   assert.equal(normalizeSkipIntent({ unit: 'inválido', amount: -1 }).unit, 'dias');
   assert.ok(buildSkipMessage({}, 'um dia').includes('sem assumir compromissos novos'));

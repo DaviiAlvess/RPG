@@ -7,63 +7,63 @@ const TRAIT_PROFILES = [
     keywords: ["orgulhoso", "arrogante", "nobre", "imperador", "rei", "rainha"],
     prefer: ["desafiar", "exigir", "confrontar", "negar", "exibir", "dominar", "ordenar"],
     actions: [
-      "Enfrento a situação de frente, sem recuar nem pedir permissão.",
-      "Exijo respeito e deixo claro que não aceito ser subestimado.",
-      "Tomo a iniciativa e conduzo a cena com autoridade.",
+      "Dou um passo à frente e falo em voz alta, sem pedir licença.",
+      "Ergo o queixo e olho direto para quem está à minha frente.",
+      "Interrompo o que está acontecendo e tomo a palavra.",
     ],
   },
   {
     keywords: ["cauteloso", "calmo", "reservado", "silencioso", "estratégico", "analítico"],
     prefer: ["observar", "esperar", "investigar", "analisar", "estudar", "rastrear"],
     actions: [
-      "Observo em silêncio, buscando entender a situação antes de agir.",
-      "Procuro pistas no ambiente e avanço com cuidado.",
-      "Fico atento a detalhes que os outros parecem ignorar.",
+      "Paro onde estou e percorro a cena com o olhar antes de avançar.",
+      "Chego mais perto das bordas, vendo o que está fora do foco dos outros.",
+      "Escuto um instante o que se passa e só então me movo.",
     ],
   },
   {
     keywords: ["impulsivo", "agressivo", "bravo", "violento", "guerreiro", "lutador"],
     prefer: ["atacar", "investir", "partir", "golpear", "correr", "ir"],
     actions: [
-      "Ajo sem hesitar — o momento pede decisão, não reflexão.",
-      "Parto para a ação enquanto a oportunidade ainda existe.",
-      "Avanço com determinação, pronto para o que vier.",
+      "Ajo já e cruzo o espaço até o que está acontecendo.",
+      "Pego o que está ao alcance enquanto a abertura ainda existe.",
+      "Avanço até o centro da cena e forço o próximo instante.",
     ],
   },
   {
     keywords: ["carismático", "persuasivo", "charmoso", "diplomata", "negociador"],
     prefer: ["convencer", "negociar", "persuadir", "dialogar", "falar", "propor"],
     actions: [
-      "Tento abordar a situação com palavras antes de força.",
-      "Busco uma conversa que possa virar a favor.",
-      "Faço uma pergunta que pode abrir caminho para entendimento.",
+      "Me aproximo de quem parece decidir e falo primeiro.",
+      "Abro as palmas e proponho um acordo em voz baixa.",
+      "Faço uma pergunta direta a quem está na minha frente.",
     ],
   },
   {
     keywords: ["curioso", "investigador", "sábio", "estudioso", "místico", "mago"],
     prefer: ["investigar", "examinar", "estudar", "decifrar", "explorar", "perguntar"],
     actions: [
-      "Investigo o que chama minha atenção nesta cena.",
-      "Faço uma pergunta que pode revelar algo importante.",
-      "Examinar o ambiente parece mais urgente do que agir de imediato.",
+      "Me agacho e examino o que está à vista, sem tocar ainda.",
+      "Apontando para o detalhe que não combina, pergunto o que aquilo significa.",
+      "Chego mais perto da marca, do objeto ou da abertura que os outros ignoram.",
     ],
   },
   {
     keywords: ["leal", "protetor", "herói", "bondoso", "compassivo", "gentil"],
     prefer: ["proteger", "ajudar", "defender", "cuidar", "salvar", "apoiar"],
     actions: [
-      "Priorizo quem precisa de ajuda nesta situação.",
-      "Me aproximo para entender se alguém está em perigo.",
-      "Ofereço apoio antes de pensar no meu próprio interesse.",
+      "Me coloco entre quem parece vulnerável e o resto da cena.",
+      "Me aproximo de quem está parado demais e pergunto se precisa de ajuda.",
+      "Estendo a mão a quem está mais perto de mim.",
     ],
   },
   {
     keywords: ["sombrio", "cínico", "solitário", "misterioso", "traído"],
     prefer: ["desconfiar", "esconder", "mentir", "observar", "recuar", "evitar"],
     actions: [
-      "Mantenho distância e observo antes de confiar em qualquer um.",
-      "Escondo minhas intenções e deixo os outros falarem primeiro.",
-      "Procuro uma saída ou vantagem que ninguém percebeu ainda.",
+      "Fico junto à parede e deixo os outros falarem primeiro.",
+      "Mantenho as mãos visíveis e recuo meio passo, medindo as saídas.",
+      "Olho para o que os outros ignoram — uma abertura, um bolso, um silêncio.",
     ],
   },
 ];
@@ -128,14 +128,14 @@ export function buildLocalAutoAction(camp, lastGmText) {
   const scene = normalizeText(lastGmText);
 
   if (scene.includes("?")) {
-    return "Respondo de acordo com quem sou — direto ao ponto, sem rodeios.";
+    return "Olho para quem falou e respondo em voz alta, direto ao ponto.";
   }
   if (scene.includes("perigo") || scene.includes("inimigo") || scene.includes("ataque")) {
     return profile.actions.find((action) => action.includes("frente") || action.includes("Ajo"))
       || profile.actions[0];
   }
   if (scene.includes("porta") || scene.includes("corredor") || scene.includes("sala")) {
-    return "Avanço para explorar o que está à frente, atento a qualquer detalhe.";
+    return "Sigo até a próxima abertura e olho o que há do outro lado antes de cruzar.";
   }
 
   const pool = profile.actions;

@@ -10,6 +10,16 @@ test('Testes acentuados e dificuldade explícita', () => {
   assert.equal(resolveTest(trial, { strength: 18 }, 12).outcome, 'sucesso');
   assert.equal(resolveTest(trial, { strength: 10 }, 12).outcome, 'falha');
   assert.equal(resolveTest(trial, { strength: 30 }, 1).outcome, 'falha crítica');
+  const withSkill = resolveTest(trial, { strength: 10 }, 12, { combat: 5 });
+  assert.equal(withSkill.modifier, 0);
+  assert.equal(withSkill.skillBonus, 4);
+  assert.equal(withSkill.total, 16);
+  assert.equal(withSkill.outcome, 'sucesso');
+  const untrained = resolveTest(trial, { strength: 10 }, 12);
+  assert.equal(untrained.skillBonus, 0);
+  assert.equal(untrained.total, 12);
+  assert.equal(resolveTest(trial, { strength: 10 }, 20, { combat: 5 }).outcome, 'sucesso crítico');
+  assert.equal(resolveTest(trial, { strength: 30 }, 1, { combat: 5 }).outcome, 'falha crítica');
 });
 
 test('Só a cena atual mantém um teste pendente ao continuar ou carregar a campanha', () => {

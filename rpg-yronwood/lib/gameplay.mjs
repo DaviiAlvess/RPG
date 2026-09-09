@@ -1,3 +1,5 @@
+import { skillForAttribute } from './progression.mjs';
+
 export const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const attributeKeys = { forca: 'strength', destreza: 'dexterity', mente: 'mind', carisma: 'charisma' };
 export function parseTest(text) {
@@ -5,11 +7,12 @@ export function parseTest(text) {
   if (!match || !attributeKeys[normalize(match[1].trim())]) return null;
   return { attribute: match[1].trim(), description: match[3], difficulty: Math.max(5, Math.min(30, Number(match[2]) || 12)) };
 }
-export function resolveTest(test, attributes, roll) {
-  const modifier = Math.floor(((Number(attributes[attributeKeys[normalize(test.attribute)]]) || 10) - 10) / 2);
-  const total = roll + modifier;
+export function resolveTest(test, attributes, roll, skills = {}) {
+  const attrMod = Math.floor(((Number(attributes[attributeKeys[normalize(test.attribute)]]) || 10) - 10) / 2);
+  const skillBonus = Math.max(0, (Number(skills[skillForAttribute(test.attribute)]) || 1) - 1);
+  const total = roll + attrMod + skillBonus;
   const outcome = roll === 1 ? 'falha crítica' : roll === 20 ? 'sucesso crítico' : total >= test.difficulty ? 'sucesso' : total >= test.difficulty - 3 ? 'sucesso parcial com custo' : 'falha';
-  return { total, modifier, outcome };
+  return { total, modifier: attrMod, skillBonus, outcome };
 }
 export function pendingTestFromMessages(messages = []) {
   const last = messages.at(-1);

@@ -8,6 +8,8 @@ import { applyMasterAgreements, listMasterAgreements, masterChatPrompt, masterGu
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
 import { knownIpFidelityRule, shouldGroundGmTurn } from "../lib/canon.mjs";
 import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseCompletedMissions, missionXp } from "../lib/progression.mjs";
+import { parseHpDelta, applyHpDelta, stripHpTags, hpChangeToast } from "../lib/vitals.mjs";
+import { parseRelationships } from "../lib/relationships.mjs";
 import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, normalizeNarration } from "../lib/narration.mjs";
@@ -51,8 +53,10 @@ const extractItems = (text) => {
 const cleanText = (t) =>
   normalizeDialogueText(
     stripTimeSkipTags(
-      t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
-       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO):([^\]]+)\]/gi, "")
+      stripHpTags(
+        t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
+         .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO|RELAÇÃO|RELACAO):([^\]]+)\]/gi, "")
+      )
     )
   ).trim();
 const generateImage = (prompt, world) => {
@@ -309,21 +313,20 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `REGRA 11 — MISSÕES E OBJETIVOS.`,
     `Quando surgir um objetivo claro — tarefa, pedido, promessa — inclua na última linha: [MISSÃO: descrição em 1 linha]. Ao cumprir: [CONCLUÍDA: descrição]. Use com parcimônia.`,
     `Quando o jogador conquistar um marco confirmado — vitória, missão concluída ou risco inteligente — acrescente a tag oculta [XP:10] (ajuste entre 5 e 25). Não mencione XP na narração falada. Não conceda XP a cada turno.`,
+    `Quando a cena ferir ou curar o corpo de fato — golpe, veneno, queda, sutura, poção — acrescente a tag oculta [HP:-8] ou [HP:+12] (somente deltas com sinal). Não use a cada turno nem por cansaço leve. A 0 HP, narre desmaio e inconsciência; o jogador NÃO morre automaticamente a menos que o mundo o mate naquele instante. Aguarde o jogador ou o Mestre.`,
     ``,
     c.useImages
       ? `IMAGEM: Ao final de CADA resposta, na penúltima ou última linha (antes ou depois de [MISSÃO] se houver), adicione: IMAGE_PROMPT: [prompt em inglês descrevendo o cenário atual, estilo cinematic, sem texto, sem personagens de frente].`
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
     ``,
     `REGRA 12 — MECÂNICA DE JOGO E DADOS.`,
-    `Sempre que o jogador tentar algo difícil, incerto ou arriscado, interrompa a narração com: "[TESTE:ATRIBUTO] [Descrição do teste]" — onde ATRIBUTO é Força, Destreza, Mente ou Carisma.
-    Exemplo: "[TESTE:Força] Role um dado de 20 faces para arrombar a porta."
-    O jogador então lança o dado usando o botão "🎲 D20" no input. O Mestre deve narrar a consequência baseada no resultado (1-5: falha crítica, 6-10: falha, 11-15: sucesso parcial, 16-20: sucesso completo).
-    Nunca diga o resultado do dado — deixe o jogador interpretá-lo. Apenas narre a consequência no contexto da cena.`,
+    `Ação difícil, incerta ou arriscada: interrompa com [TESTE:Atributo|DC:n] e uma descrição curta (Força, Destreza, Mente ou Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Exemplo: [TESTE:Força|DC:12] Arrombar a porta. Pare e aguarde o total que o jogo enviar (d20 + modificador + perícia vs DC). Narre só esse resultado: 1 no dado = falha crítica; 20 = sucesso crítico; senão sucesso, parcial ou falha. Não invente faixas 1-5/16-20 nem role por conta própria.`,
     ``,
     `REGRA 13 — RELACIONAMENTOS E FACÇÕES.`,
     `Atitudes dos NPCs em relação ao jogador:`,
     `${Object.entries(c.relationships || {}).map(([npc, attitude]) => `- ${npc}: ${attitude}`).join("\n") || "- (nenhum definido ainda)"}`,
     `Ações rudes mudam para Hostil/Suspeito. Gentileza muda para Amigável/Neutral. Nunca explique a mudança — apenas ajuste o tom.`,
+    `Quando a atitude de um NPC em relação ao jogador MUDAR, acrescente a tag oculta [RELAÇÃO:Nome|Atitude] (Hostil, Suspeito, Neutral ou Amigável). Emita a tag só na mudança, não a cada turno. Nunca escreva a tag no diálogo falado.`,
     ``,
     `REGRA 14 — PASSAGEM DE TEMPO.`,
     `TEMPO ATUAL NA AVENTURA: ${formatGameTimeLong(gt)}.`,
@@ -332,7 +335,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [XP:n]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Alterne tensão, descoberta e descanso; use detalhes sensoriais quando relevantes, sem lista obrigatória. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude]. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration));
   lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
@@ -1367,6 +1370,7 @@ export default function RPG() {
       let raw = data.text;
       const updatedMissions = parseMissions(raw, missions);
       const updatedItems = parseItems(raw, active?.items || []);
+      const updatedRelationships = parseRelationships(raw, camp.relationships || active?.relationships || {});
       setMissions(updatedMissions);
 
       const currentXp = Number(camp.experience ?? experience) || 0;
@@ -1390,6 +1394,15 @@ export default function RPG() {
         }
       }
       setExperience(nextExperience);
+
+      const currentHp = Number(camp.hp ?? hp);
+      const baseHp = Number.isFinite(currentHp) ? currentHp : 100;
+      const nextHp = applyHpDelta(baseHp, parseHpDelta(raw));
+      if (nextHp !== baseHp) {
+        setHp(nextHp);
+        const toast = hpChangeToast(baseHp, nextHp);
+        if (toast) showNotification(toast, nextHp < baseHp ? "warning" : "success");
+      }
 
       const imgPrompt = camp.useImages ? extractImagePrompt(raw) : null;
       const clean = cleanText(raw);
@@ -1461,7 +1474,8 @@ export default function RPG() {
         lore,
         missions: updatedMissions,
         items: updatedItems,
-        hp,
+        relationships: updatedRelationships,
+        hp: nextHp,
         level: camp.level ?? level,
         experience: nextExperience,
         attributes,

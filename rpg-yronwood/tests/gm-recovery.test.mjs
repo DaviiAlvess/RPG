@@ -79,6 +79,39 @@ test('Falhas de API são distinguíveis e cota/indisponibilidade tentam outra ch
   }
 });
 
+test('403 na primeira chave usa a segunda na mesma chamada', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));
+  for (const name of KEY_VARS) delete process.env[name];
+  process.env.GEMINI_API_KEY_1 = 'recusada';
+  process.env.GEMINI_API_KEY_2 = 'valida';
+  try {
+    resetGeminiKeyState();
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === 'recusada') {
+        return { ok: false, status: 403, json: async () => ({ error: { message: 'API key not valid' } }) };
+      }
+      return okText();
+    };
+    const res = await callHandler();
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, 'Uma cena.');
+    assert.deepEqual(used, ['recusada', 'valida']);
+    assert.equal(isGeminiKeyHealthy('recusada'), false);
+    assert.equal(isGeminiKeyHealthy('valida'), true);
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetGeminiKeyState();
+    for (const name of KEY_VARS) {
+      if (previousKeys[name] === undefined) delete process.env[name];
+      else process.env[name] = previousKeys[name];
+    }
+  }
+});
+
 test('Várias chaves: tenta todas as únicas (até 7); uma chave boa recupera a cota da outra', async () => {
   const previousFetch = globalThis.fetch;
   const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));

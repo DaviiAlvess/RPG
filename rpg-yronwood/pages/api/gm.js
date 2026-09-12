@@ -22,9 +22,17 @@ const ALL_RESTING_WAIT_MS = 8000;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
 const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
+const withoutGoogleSearch = body => {
+  const next = { ...body };
+  delete next.tools;
+  return next;
+};
+const hasGoogleSearch = body => Array.isArray(body?.tools) && body.tools.some(t => t && t.google_search != null);
+const geminiText = data => data?.candidates?.[0]?.content?.parts
+  ?.filter((part) => !part.thought && typeof part.text === "string")
+  .map((part) => part.text).join("");
 const SEARCH_FALLBACK_CODES = new Set([
   "API_REQUEST",
-  "API_AUTH",
   "EMPTY_RESPONSE",
   "CONTENT_BLOCKED",
   "TIMEOUT",
@@ -88,6 +96,13 @@ export default async function handler(req, res) {
     if (pick.allResting) throw geminiKeysAllRestingError(pick.retryAfterSec);
   };
 
+  const recusarChave = () => {
+    const error = new Error("A chave de IA foi recusada ou não tem permissão. Confira a GEMINI_API_KEY e o projeto no servidor.");
+    error.status = 502;
+    error.code = "API_AUTH";
+    return error;
+  };
+
   const chamarGemini = async (body, modelo) => {
     const maxAttempts = Math.min(Math.max(chavesUnicas.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
     const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS + Math.max(0, maxAttempts - 5) * 2500);
@@ -97,14 +112,37 @@ export default async function handler(req, res) {
     let lastError = null;
     let emptyRetries = 0;
     const deadline = Date.now() + deadlineMs;
+    const triedThisCall = new Set();
+    const authRefusedKeys = new Set();
+
+    const postGemini = (apiKey, modeloAtual, requestBody, signal) => fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestBody),
+      }
+    );
+
+    const skipRefusedKey = (apiKey) => {
+      triedThisCall.add(apiKey);
+      authRefusedKeys.add(apiKey);
+      markGeminiKeyExhausted(apiKey);
+    };
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
 
-      const pick = nextGeminiKey(chavesUnicas);
+      const pool = chavesUnicas.filter(key => !triedThisCall.has(key));
+      if (!pool.length) break;
+
+      const pick = nextGeminiKey(pool);
       if (pick.allResting) {
-        lastError = geminiKeysAllRestingError(pick.retryAfterSec);
+        if (authRefusedKeys.size < chavesUnicas.length) {
+          lastError = geminiKeysAllRestingError(pick.retryAfterSec);
+        }
         if (pick.waitMs > 0 && pick.waitMs < ALL_RESTING_WAIT_MS && remaining > pick.waitMs + 1500 && attempt < maxAttempts - 1) {
           await wait(pick.waitMs);
           continue;
@@ -117,15 +155,7 @@ export default async function handler(req, res) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
       try {
-        const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${apiKey}`,
-          {
-            method: "POST",
-            signal: controller.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        );
+        const geminiRes = await postGemini(apiKey, modeloAtual, body, controller.signal);
 
         let data;
         try { data = await geminiRes.json(); }
@@ -133,6 +163,7 @@ export default async function handler(req, res) {
           lastError = new Error("O serviço de IA retornou uma resposta inválida. Tente novamente em instantes.");
           lastError.status = 502;
           lastError.code = "UPSTREAM_RESPONSE";
+          triedThisCall.add(apiKey);
           if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
           continue;
         }
@@ -140,6 +171,7 @@ export default async function handler(req, res) {
         if (geminiRes.status === 429) {
           const headerRetry = geminiRes.headers?.get?.("retry-after");
           markGeminiKeyExhausted(apiKey, headerRetry);
+          triedThisCall.add(apiKey);
           lastError = quotaError(headerRetry);
           continue;
         }
@@ -147,6 +179,7 @@ export default async function handler(req, res) {
           lastError = new Error("O serviço de IA está temporariamente indisponível. Tente novamente em instantes.");
           lastError.status = geminiRes.status;
           lastError.code = "UPSTREAM_UNAVAILABLE";
+          triedThisCall.add(apiKey);
           if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
           continue;
         }
@@ -163,24 +196,45 @@ export default async function handler(req, res) {
           }
           if (quotaHint && !unavailable) {
             markGeminiKeyExhausted(apiKey);
+            triedThisCall.add(apiKey);
             lastError = quotaError(90);
             continue;
           }
           lastError = new Error(unavailable
             ? "O modelo do Mestre não está disponível. Atualize GEMINI_MODEL no servidor e publique novamente o site. Sua ação foi preservada."
-            : authError ? "A chave de IA foi recusada ou não tem permissão. Confira a GEMINI_API_KEY e o projeto no servidor."
+            : authError ? recusarChave().message
             : "A solicitação foi recusada pela IA. Confira o modelo e a configuração da API no servidor.");
           lastError.status = unavailable ? 503 : 502;
           lastError.code = unavailable ? "MODEL_UNAVAILABLE" : authError ? "API_AUTH" : "API_REQUEST";
           if (unavailable) break;
-          if (authError && attempt < maxAttempts - 1) continue;
+          if (authError) {
+            if (hasGoogleSearch(body)) {
+              const retryRes = await postGemini(apiKey, modeloAtual, withoutGoogleSearch(body), controller.signal);
+              let retryData = null;
+              try { retryData = await retryRes.json(); } catch { retryData = null; }
+              if (retryRes.status === 429) {
+                const headerRetry = retryRes.headers?.get?.("retry-after");
+                markGeminiKeyExhausted(apiKey, headerRetry);
+                triedThisCall.add(apiKey);
+                lastError = quotaError(headerRetry);
+                continue;
+              }
+              if (retryRes.ok) {
+                const retryText = geminiText(retryData);
+                if (retryText) {
+                  recordKeyUsage(apiKey, parseUsageTokens(retryData));
+                  return retryText;
+                }
+              }
+            }
+            skipRefusedKey(apiKey);
+            continue;
+          }
           lastError.fatal = true;
           throw lastError;
         }
 
-        const text = data?.candidates?.[0]?.content?.parts
-          ?.filter((part) => !part.thought && typeof part.text === "string")
-          .map((part) => part.text).join("");
+        const text = geminiText(data);
         if (!text) {
           const blocked = Boolean(data?.promptFeedback?.blockReason) || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(data?.candidates?.[0]?.finishReason);
           lastError = new Error(blocked ? "A IA não respondeu a esse conteúdo. Reformule sua ação e tente novamente." : "O Mestre retornou uma resposta vazia. Sua ação foi preservada; tente novamente.");
@@ -199,13 +253,14 @@ export default async function handler(req, res) {
         return text;
       } catch (err) {
         if (err.fatal) throw err;
+        triedThisCall.add(apiKey);
         const timedOut = err.name === "AbortError";
         lastError = new Error(timedOut
           ? "O Mestre demorou para responder. Tente novamente."
           : "Não foi possível conectar ao Mestre. Tente novamente.");
         lastError.status = timedOut ? 504 : 502;
         lastError.code = timedOut ? "TIMEOUT" : "NETWORK";
-        const healthyLeft = chavesUnicas.filter(key => isGeminiKeyHealthy(key));
+        const healthyLeft = chavesUnicas.filter(key => !triedThisCall.has(key) && isGeminiKeyHealthy(key));
         if (timedOut && healthyLeft.length <= 1) break;
         if (deadline - Date.now() < 2000) break;
       } finally {
@@ -213,6 +268,7 @@ export default async function handler(req, res) {
       }
     }
 
+    if (authRefusedKeys.size >= chavesUnicas.length) throw lastError?.code === "API_AUTH" ? lastError : recusarChave();
     if (lastError?.code === "RATE_LIMIT") failIfAllResting();
     throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
   };

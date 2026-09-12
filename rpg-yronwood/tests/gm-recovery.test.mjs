@@ -100,8 +100,13 @@ test('403 na primeira chave usa a segunda na mesma chamada', async () => {
     assert.equal(res.code, 200);
     assert.equal(res.data.text, 'Uma cena.');
     assert.deepEqual(used, ['recusada', 'valida']);
-    assert.equal(isGeminiKeyHealthy('recusada'), false);
+    assert.equal(isGeminiKeyHealthy('recusada'), true);
     assert.equal(isGeminiKeyHealthy('valida'), true);
+
+    used.length = 0;
+    const second = await callHandler();
+    assert.equal(second.code, 200);
+    assert.deepEqual(used, ['recusada', 'valida']);
   } finally {
     globalThis.fetch = previousFetch;
     resetGeminiKeyState();
@@ -224,10 +229,13 @@ test('Uso de tokens: a próxima escolha prefere a chave com menos tokens; 429 de
     assert.equal(getGeminiKeyRecord('alpha').tokensUsed, 9000);
 
     resetGeminiKeyState();
-    process.env.GEMINI_KEY_TOKEN_BUDGET = '100';
-    recordKeyUsage('alpha', 100);
-    assert.equal(isGeminiKeyHealthy('alpha'), false);
+    recordKeyUsage('alpha', 250000);
+    assert.equal(isGeminiKeyHealthy('alpha'), true);
     assert.equal(nextGeminiKey(['alpha', 'beta']).key, 'beta');
+    recordKeyUsage('beta', 250000);
+    const bothOverBudget = nextGeminiKey(['alpha', 'beta']);
+    assert.equal(bothOverBudget.allResting, false);
+    assert.ok(bothOverBudget.key);
 
     resetGeminiKeyState();
     const day1 = Date.UTC(2026, 0, 1, 12);

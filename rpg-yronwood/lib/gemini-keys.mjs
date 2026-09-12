@@ -37,11 +37,6 @@ function utcDay(now = Date.now()) {
   return new Date(now).toISOString().slice(0, 10);
 }
 
-function nextUtcMidnight(now = Date.now()) {
-  const date = new Date(now);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
-}
-
 function emptyRecord(now = Date.now()) {
   return {
     tokensUsed: 0,
@@ -155,13 +150,7 @@ export function markGeminiKeyExhausted(key, retryAfter, now = Date.now()) {
 
 export function isGeminiKeyHealthy(key, now = Date.now()) {
   const rec = getRecord(key, now);
-  if (rec.cooldownUntil > now) return false;
-  if (rec.tokensUsed >= dailyTokenBudget()) {
-    rec.cooldownUntil = Math.max(rec.cooldownUntil, nextUtcMidnight(now));
-    persist();
-    return false;
-  }
-  return true;
+  return rec.cooldownUntil <= now;
 }
 
 export function nextGeminiKey(keys, now = Date.now()) {
@@ -182,11 +171,10 @@ export function nextGeminiKey(keys, now = Date.now()) {
     return { key: healthy[0], waitMs: 0, allResting: false, retryAfterSec: 0 };
   }
 
-  let soonest = { key: list[0], until: Infinity };
+  let soonest = { key: list[0], until: getRecord(list[0], now).cooldownUntil };
   for (const key of list) {
     const rec = getRecord(key, now);
-    const until = rec.cooldownUntil > now ? rec.cooldownUntil : nextUtcMidnight(now);
-    if (until < soonest.until) soonest = { key, until };
+    if (rec.cooldownUntil < soonest.until) soonest = { key, until: rec.cooldownUntil };
   }
   const waitMs = Math.max(0, soonest.until - now);
   return {

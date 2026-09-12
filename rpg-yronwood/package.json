@@ -5,12 +5,17 @@
     "test": "node --test tests/*.test.mjs",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "check:keys": "npx tsx scripts/check-gemini-keys.ts"
   },
   "dependencies": {
     "firebase": "^11.0.0",
     "next": "14.2.3",
     "react": "^18",
     "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@cursor/sdk": "^1.0.31",
+    "tsx": "^4.23.13"
   }
 }

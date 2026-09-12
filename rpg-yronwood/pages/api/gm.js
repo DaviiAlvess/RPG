@@ -18,7 +18,6 @@ const MAX_ATTEMPTS_CAP = 7;
 const PER_REQUEST_MS = 12000;
 const MIN_PER_REQUEST_MS = 5000;
 const UPSTREAM_BACKOFF_MS = 250;
-const ALL_RESTING_WAIT_MS = 8000;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
 const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
@@ -128,7 +127,6 @@ export default async function handler(req, res) {
     const skipRefusedKey = (apiKey) => {
       triedThisCall.add(apiKey);
       authRefusedKeys.add(apiKey);
-      markGeminiKeyExhausted(apiKey);
     };
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -142,10 +140,6 @@ export default async function handler(req, res) {
       if (pick.allResting) {
         if (authRefusedKeys.size < chavesUnicas.length) {
           lastError = geminiKeysAllRestingError(pick.retryAfterSec);
-        }
-        if (pick.waitMs > 0 && pick.waitMs < ALL_RESTING_WAIT_MS && remaining > pick.waitMs + 1500 && attempt < maxAttempts - 1) {
-          await wait(pick.waitMs);
-          continue;
         }
         break;
       }

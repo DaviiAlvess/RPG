@@ -73,8 +73,10 @@ Referências de escrita e narrativa interativa:
 ## Diagnóstico de erros da IA
 
 A resposta distingue RATE_LIMIT, API_AUTH, MODEL_UNAVAILABLE, TIMEOUT,
-UPSTREAM_RESPONSE, UPSTREAM_UNAVAILABLE, CONTENT_BLOCKED e EMPTY_RESPONSE.
-HTTP 429 informa Retry-After; o cliente preserva a ação e aguarda esse intervalo.
-Falhas 500/502/503 com JSON permitem uma repetição limitada. Timeout e falha de
-rede não são repetidos automaticamente, pois a chamada pode ter consumido tokens.
+UPSTREAM_RESPONSE, UPSTREAM_UNAVAILABLE, CONTENT_BLOCKED, EMPTY_RESPONSE e NO_API_KEY.
+HTTP 429 informa Retry-After; o servidor troca de chave (todas as chaves únicas, até 7 no prazo)
+e o cliente espera um intervalo curto e repete o pedido uma vez.
+Falhas 500/502/503, resposta vazia e modelo 404 também são repetidos de forma limitada.
+Timeout numa única chave não é repetido (a chamada pode ter consumido tokens);
+com várias chaves, tenta a seguinte se ainda houver prazo.
 Guia do provedor: https://ai.google.dev/gemini-api/docs/troubleshooting

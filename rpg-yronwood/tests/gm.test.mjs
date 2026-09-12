@@ -4,10 +4,12 @@ import { readFile } from 'node:fs/promises';
 
 const source = await readFile(new URL('../pages/api/gm.js', import.meta.url), 'utf8');
 const { default: handler } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 
 test('Mestre: validação, respostas completas e indisponibilidade', async () => {
   const originalFetch = globalThis.fetch;
-  const originalKey = process.env.GEMINI_API_KEY;
+  const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));
+  for (const name of KEY_VARS) delete process.env[name];
   process.env.GEMINI_API_KEY = 'test-key';
   const call = async (body, method = 'POST') => {
     const res = { setHeader() {}, status(code) { this.code = code; return this; },
@@ -36,7 +38,9 @@ test('Mestre: validação, respostas completas e indisponibilidade', async () =>
     assert.equal((await call(valid)).code, 504);
   } finally {
     globalThis.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
-    else process.env.GEMINI_API_KEY = originalKey;
+    for (const name of KEY_VARS) {
+      if (previousKeys[name] === undefined) delete process.env[name];
+      else process.env[name] = previousKeys[name];
+    }
   }
 });

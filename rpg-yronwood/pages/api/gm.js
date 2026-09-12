@@ -1,9 +1,21 @@
 // pages/api/gm.js
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
+const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+const GM_DEADLINE_MS = 45000;
+const MAX_DEADLINE_MS = 55000;
+const MIN_ATTEMPTS = 1;
+const MAX_ATTEMPTS_CAP = 7;
+const PER_REQUEST_MS = 12000;
+const MIN_PER_REQUEST_MS = 5000;
+const RATE_LIMIT_BACKOFF_MS = 400;
+const UPSTREAM_BACKOFF_MS = 250;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
 const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   const MODELO_GM = modelName(process.env.GEMINI_MODEL);
@@ -57,24 +69,33 @@ export default async function handler(req, res) {
   const chavesUnicas = [...new Set(API_KEYS)];
 
   if (chavesUnicas.length === 0) {
-    return res.status(500).json({ error: "Nenhuma GEMINI_API_KEY configurada no servidor." });
+    return res.status(500).json({
+      error: "O servidor está sem chave de IA (GEMINI_API_KEY). Configure a chave e publique novamente o site.",
+      code: "NO_API_KEY",
+    });
   }
 
   const chamarGemini = async (body, modelo) => {
     const shuffled = [...chavesUnicas].sort(() => Math.random() - 0.5);
+    const maxAttempts = Math.min(Math.max(shuffled.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
+    const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS + Math.max(0, maxAttempts - 5) * 2500);
+    const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, Math.floor((deadlineMs - 2000) / maxAttempts)));
+    const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
+    let modelIdx = 0;
     let lastError = null;
-    const deadline = Date.now() + 25000;
+    let emptyRetries = 0;
+    const deadline = Date.now() + deadlineMs;
 
-    // Bound attempts and give a single request enough time to finish.
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
       const apiKey = shuffled[attempt % shuffled.length];
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
+      const modeloAtual = models[modelIdx];
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), remaining);
+      const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
       try {
         const geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${apiKey}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${apiKey}`,
           {
             method: "POST",
             signal: controller.signal,
@@ -85,33 +106,61 @@ export default async function handler(req, res) {
 
         let data;
         try { data = await geminiRes.json(); }
-        catch { const error = new Error("O serviço de IA retornou uma resposta inválida. Tente novamente em instantes."); error.status = 502; error.code = "UPSTREAM_RESPONSE"; error.fatal = true; throw error; }
+        catch {
+          lastError = new Error("O serviço de IA retornou uma resposta inválida. Tente novamente em instantes.");
+          lastError.status = 502;
+          lastError.code = "UPSTREAM_RESPONSE";
+          if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
+          continue;
+        }
 
         if (geminiRes.status === 429) {
-          const error = new Error("O limite de uso da IA foi atingido. Aguarde antes de tentar novamente; se persistir, confira a cota do projeto no Google AI Studio.");
-          error.status = 429; error.code = "RATE_LIMIT"; error.fatal = true;
-          error.retryAfter = Math.min(300, Math.max(1, Number(geminiRes.headers?.get?.("retry-after")) || 30));
-          throw error;
+          lastError = new Error("A cota da IA esgotou (limite de uso). Aguarde o intervalo indicado e tente de novo; se persistir, confira a cota do projeto no Google AI Studio.");
+          lastError.status = 429;
+          lastError.code = "RATE_LIMIT";
+          lastError.retryAfter = Math.min(300, Math.max(1, Number(geminiRes.headers?.get?.("retry-after")) || 30));
+          const nextKey = shuffled[(attempt + 1) % shuffled.length];
+          const waitMs = nextKey === apiKey
+            ? Math.min(RATE_LIMIT_BACKOFF_MS, Math.max(0, deadline - Date.now() - 1500))
+            : 0;
+          if (waitMs > 0 && attempt < maxAttempts - 1) await wait(waitMs);
+          continue;
         }
         if (geminiRes.status === 500 || geminiRes.status === 502 || geminiRes.status === 503) {
           lastError = new Error("O serviço de IA está temporariamente indisponível. Tente novamente em instantes.");
           lastError.status = geminiRes.status;
           lastError.code = "UPSTREAM_UNAVAILABLE";
-          if (attempt === 0 && deadline - Date.now() > 1000) await new Promise(resolve => setTimeout(resolve, 500));
+          if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
           continue;
         }
 
         if (!geminiRes.ok) {
-          const unavailable = geminiRes.status === 404 || /no longer available|deprecated|not available to new users/i.test(data?.error?.message || "");
-          const authError = geminiRes.status === 401 || geminiRes.status === 403 || /api key not valid|api_key_invalid/i.test(data?.error?.message || "");
-          const err = new Error(unavailable
+          const message = data?.error?.message || "";
+          const unavailable = geminiRes.status === 404 || /no longer available|deprecated|not available to new users/i.test(message);
+          const quotaHint = /quota|rate.?limit|resource.?exhausted/i.test(message);
+          const authError = geminiRes.status === 401 || geminiRes.status === 403 || /api key not valid|api_key_invalid/i.test(message);
+          if (unavailable && modelIdx < models.length - 1) {
+            modelIdx += 1;
+            attempt -= 1;
+            continue;
+          }
+          if (quotaHint && !unavailable) {
+            lastError = new Error("A cota da IA esgotou (limite de uso). Aguarde o intervalo indicado e tente de novo; se persistir, confira a cota do projeto no Google AI Studio.");
+            lastError.status = 429;
+            lastError.code = "RATE_LIMIT";
+            lastError.retryAfter = 30;
+            continue;
+          }
+          lastError = new Error(unavailable
             ? "O modelo do Mestre não está disponível. Atualize GEMINI_MODEL no servidor e publique novamente o site. Sua ação foi preservada."
             : authError ? "A chave de IA foi recusada ou não tem permissão. Confira a GEMINI_API_KEY e o projeto no servidor."
             : "A solicitação foi recusada pela IA. Confira o modelo e a configuração da API no servidor.");
-          err.status = unavailable ? 503 : 502;
-          err.code = unavailable ? "MODEL_UNAVAILABLE" : authError ? "API_AUTH" : "API_REQUEST";
-          err.fatal = true;
-          throw err;
+          lastError.status = unavailable ? 503 : 502;
+          lastError.code = unavailable ? "MODEL_UNAVAILABLE" : authError ? "API_AUTH" : "API_REQUEST";
+          if (unavailable) break;
+          if (authError && attempt < maxAttempts - 1) continue;
+          lastError.fatal = true;
+          throw lastError;
         }
 
         const text = data?.candidates?.[0]?.content?.parts
@@ -119,23 +168,30 @@ export default async function handler(req, res) {
           .map((part) => part.text).join("");
         if (!text) {
           const blocked = Boolean(data?.promptFeedback?.blockReason) || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(data?.candidates?.[0]?.finishReason);
-          const err = new Error(blocked ? "A IA não respondeu a esse conteúdo. Reformule sua ação e tente novamente." : "O Mestre retornou uma resposta vazia. Sua ação foi preservada; tente novamente.");
-          err.code = blocked ? "CONTENT_BLOCKED" : "EMPTY_RESPONSE";
-          err.status = blocked ? 422 : 502;
-          err.fatal = true;
-          throw err;
+          lastError = new Error(blocked ? "A IA não respondeu a esse conteúdo. Reformule sua ação e tente novamente." : "O Mestre retornou uma resposta vazia. Sua ação foi preservada; tente novamente.");
+          lastError.code = blocked ? "CONTENT_BLOCKED" : "EMPTY_RESPONSE";
+          lastError.status = blocked ? 422 : 502;
+          if (blocked) { lastError.fatal = true; throw lastError; }
+          if (emptyRetries < 1 && attempt < maxAttempts - 1) {
+            emptyRetries += 1;
+            continue;
+          }
+          lastError.fatal = true;
+          throw lastError;
         }
 
         return text;
       } catch (err) {
         if (err.fatal) throw err;
-        lastError = new Error(err.name === "AbortError"
+        const timedOut = err.name === "AbortError";
+        lastError = new Error(timedOut
           ? "O Mestre demorou para responder. Tente novamente."
           : "Não foi possível conectar ao Mestre. Tente novamente.");
-        lastError.status = err.name === "AbortError" ? 504 : 502;
-        lastError.code = err.name === "AbortError" ? "TIMEOUT" : "NETWORK";
-        // A timeout or broken connection may already have consumed tokens.
-        break;
+        lastError.status = timedOut ? 504 : 502;
+        lastError.code = timedOut ? "TIMEOUT" : "NETWORK";
+        const nextKey = shuffled[(attempt + 1) % shuffled.length];
+        if (timedOut && nextKey === apiKey) break;
+        if (deadline - Date.now() < 2000) break;
       } finally {
         clearTimeout(timeout);
       }

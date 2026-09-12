@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 const source = await readFile(new URL('../pages/api/gm.js', import.meta.url), 'utf8');
 const { default: handler } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 test('Modelo atual, configuração e aviso de modelo indisponível', async () => {
   const originalFetch = globalThis.fetch;
-  const names = ['GEMINI_API_KEY', 'GEMINI_MODEL', 'GEMINI_LORE_MODEL'];
+  const names = [...KEY_VARS, 'GEMINI_MODEL', 'GEMINI_LORE_MODEL'];
   const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   const call = async body => {
     const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(data) { this.data = data; return this; } };
@@ -13,6 +14,7 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
   };
   const body = { messages: [{ role: 'user', content: 'Olá' }], systemPrompt: 'Narre.' };
   try {
+    for (const name of KEY_VARS) delete process.env[name];
     process.env.GEMINI_API_KEY = 'test'; delete process.env.GEMINI_MODEL; delete process.env.GEMINI_LORE_MODEL;
     let calledUrl;
     globalThis.fetch = async url => { calledUrl = url; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) }; };
@@ -44,6 +46,18 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     assert.deepEqual(gmBody.tools, [{ google_search: {} }]);
     await call(body);
     assert.equal(gmBody.tools, undefined);
+    delete process.env.GEMINI_MODEL;
+    const urls = [];
+    globalThis.fetch = async url => {
+      urls.push(String(url));
+      if (String(url).includes('/models/gemini-3.5-flash-lite:generateContent')) {
+        return { ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) };
+    };
+    const recovered = await call(body);
+    assert.equal(recovered.code, 200);
+    assert.ok(urls.some(url => url.includes('/models/gemini-2.5-flash:generateContent')));
     globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) });
     const result = await call(body); assert.equal(result.code, 503); assert.ok(result.data.error.includes('GEMINI_MODEL'));
   } finally {

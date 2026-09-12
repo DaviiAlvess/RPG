@@ -21,7 +21,29 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     process.env.GEMINI_MODEL = 'models/configured-test';
     await call(body); assert.ok(calledUrl.includes('/models/configured-test:generateContent'));
     process.env.GEMINI_LORE_MODEL = 'lore-test';
+    let loreBody;
+    globalThis.fetch = async (url, options) => {
+      calledUrl = url;
+      loreBody = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) };
+    };
     await call({ useLoreSearch: true, world: 'Teste' }); assert.ok(calledUrl.includes('/models/lore-test:generateContent'));
+    const lorePrompt = `${loreBody.system_instruction.parts[0].text} ${loreBody.contents[0].parts[0].text}`;
+    assert.match(lorePrompt, /BRIEFING CANÔNICO/);
+    assert.match(lorePrompt, /FACÇÕES/i);
+    assert.match(lorePrompt, /ERA/);
+    assert.match(lorePrompt, /PODER|FÍSICA/);
+    assert.match(lorePrompt, /NÃO INVENTAR/i);
+    assert.deepEqual(loreBody.tools, [{ google_search: {} }]);
+    let gmBody;
+    globalThis.fetch = async (_url, options) => {
+      gmBody = JSON.parse(options.body);
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) };
+    };
+    await call({ ...body, useGrounding: true });
+    assert.deepEqual(gmBody.tools, [{ google_search: {} }]);
+    await call(body);
+    assert.equal(gmBody.tools, undefined);
     globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) });
     const result = await call(body); assert.equal(result.code, 503); assert.ok(result.data.error.includes('GEMINI_MODEL'));
   } finally {

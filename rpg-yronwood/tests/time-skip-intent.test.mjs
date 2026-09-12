@@ -8,8 +8,13 @@ test('Salto preserva foco e intenção e limita valores inválidos', () => {
   assert.ok(prompt.includes('Treinar'));
   assert.ok(prompt.includes('Intenção não é resultado garantido'));
   assert.ok(prompt.includes('após sua resposta'));
-  assert.ok(prompt.includes('momentos vividos'));
+  assert.ok(prompt.includes('desenvolvimento'));
+  assert.ok(prompt.includes('visão do jogador'));
+  assert.ok(prompt.includes('2 a 4 cenas'));
+  assert.ok(prompt.includes('**Balanço do período**'));
+  assert.ok(prompt.includes('posfácio'));
   assert.ok(!prompt.includes('2 ou 3 momentos'));
+  assert.ok(!prompt.includes('momentos vividos'));
   assert.equal(normalizeSkipIntent({ unit: 'anos', amount: 999 }).amount, 100);
   assert.equal(normalizeSkipIntent({ unit: 'inválido', amount: -1 }).unit, 'dias');
   assert.ok(buildSkipMessage({}, 'um dia').includes('sem assumir compromissos novos'));
@@ -31,7 +36,13 @@ test('Sem título esperado, preserva a narrativa sem inventar conquistas', () =>
   const record = createSkipEvent({ id: 'skip-2', intent: {}, startGameTime: { totalDaysElapsed: 0 }, separator: { text: 'Um dia depois' } }, 'A tentativa não deu resultado.', { totalDaysElapsed: 1 });
   assert.equal(record.balance, '');
   assert.equal(record.narrative, 'A tentativa não deu resultado.');
-  assert.ok(buildSkipMessage({}, 'um dia').includes('**Balanço do período**'));
+  const prompt = buildSkipMessage({}, 'um dia');
+  assert.ok(prompt.includes('**Balanço do período**'));
+  assert.ok(prompt.includes('**O que fez**'));
+  assert.ok(prompt.includes('**Conquistas e progresso**'));
+  assert.ok(prompt.includes('**Mudanças e consequências**'));
+  assert.ok(prompt.includes('**Pendências**'));
+  assert.ok(prompt.includes('não substitua o desenvolvimento pelo balanço'));
 });
 
 test('Desistência no salto é explícita, preserva o plano e não concede sucesso', () => {

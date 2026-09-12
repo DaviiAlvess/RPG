@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NARRATION_STYLES, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
+import { NARRATION_STYLES, NARRATION_VISION_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
 test('Campanhas antigas recebem preferências válidas', () => {
   assert.deepEqual(normalizeNarration(null), { style: 'cinematic', length: 'balanced', pace: 'balanced' });
   assert.equal(normalizeNarration({ style: 'toString', pace: 'invalid' }).style, 'cinematic');
@@ -76,6 +76,7 @@ test('POV ancora no jogador e proíbe câmera em NPC', () => {
   assert.match(prompt, /câmera é o jogador/i);
   assert.ok(prompt.includes('segunda pessoa'));
   assert.ok(prompt.includes('"você"'));
+  assert.ok(prompt.includes(NARRATION_VISION_LOCK));
   assert.ok(prompt.includes('transeunte'));
   assert.ok(prompt.includes('figura encapuzada'));
   assert.ok(prompt.includes('a partir de você'));
@@ -87,6 +88,7 @@ test('POV ancora no jogador e proíbe câmera em NPC', () => {
   const start = buildStartPrompt({ charName: 'Edric', world: 'Dorne' });
   assert.match(start, /câmera é o jogador/i);
   assert.ok(start.includes('"você"'));
+  assert.ok(start.includes(NARRATION_VISION_LOCK));
   assert.ok(start.includes('transeunte'));
   assert.ok(start.includes('figura encapuzada'));
   assert.ok(start.includes('a partir de você'));
@@ -114,4 +116,27 @@ test('Campanha tipo Edric inclui o storyStartPoint no prompt de início', () => 
   assert.ok(prompt.includes(storyStartPoint));
   assert.equal(prompt.includes('3 elementos'), false);
   assert.equal(prompt.includes('dois sentidos'), false);
+});
+test('IP conhecido abre em lugar/era do mundo, não numa estrada genérica, e preserva pessoa comum', () => {
+  const original = buildStartPrompt({
+    charName: 'Ren Aoki',
+    world: 'Naruto',
+    isExistingChar: false,
+    isKnownIP: true,
+    ordinaryCharacter: true,
+  });
+  assert.match(original, /lugar e era plausíveis/i);
+  assert.match(original, /estrada de terra genérica/i);
+  assert.ok(original.includes('Naruto'));
+  assert.match(original, /pessoa comum/);
+  assert.match(original, /sem profecia/);
+  assert.match(original, /câmera é o jogador/i);
+  assert.ok(original.includes('"você"'));
+  const originalWorld = buildStartPrompt({
+    charName: 'Kael',
+    world: 'Vale de Cinzas',
+    isKnownIP: false,
+  });
+  assert.equal(originalWorld.includes('estrada de terra genérica'), false);
+  assert.equal(originalWorld.includes('lugar e era plausíveis'), false);
 });

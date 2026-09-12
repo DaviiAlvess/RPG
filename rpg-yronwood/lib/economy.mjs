@@ -2,6 +2,7 @@ import { specialAbilityDirection } from "./special-ability.mjs";
 import { masterGuidance } from './master-chat.mjs';
 import { buildNarrationDirection } from './narration.mjs';
 import { buildCharacterNamingDirection } from './character-names.mjs';
+import { knownIpFidelityRule } from './canon.mjs';
 
 export function memoryCutoff(messages, memoryUntil = 0, economy = false) {
   const start = Math.max(0, Math.min(Number(memoryUntil) || 0, messages.length));
@@ -18,10 +19,12 @@ export function memoryCutoff(messages, memoryUntil = 0, economy = false) {
 }
 
 export function economyPrompt(c, lore, calendar) {
+  const worldBlock = [lore, c.worldBg].map(value => String(value || '').trim()).filter(Boolean).join('\n');
   return [
     `Mestre de RPG em ${c.world}. Narre em português, segunda pessoa. Estilo de jogo: ${c.gameStyle || 'aventura'}.`,
+    c.isKnownIP ? knownIpFidelityRule(c.world) : '',
     `PERSONAGEM: ${JSON.stringify({ name: c.charName, title: c.charTitle, age: c.charAge, background: c.charBg, personality: c.charPersonality, abilities: c.charSkills, appearance: c.charAppearanceNote || c.appearance })}`,
-    `MUNDO: ${lore || c.worldBg || ''}\nCONTEXTO DO PERSONAGEM: ${c.charLore || ''}`,
+    `MUNDO: ${worldBlock}\nCONTEXTO DO PERSONAGEM: ${c.charLore || ''}`,
     `INÍCIO: ${c.storyStartPoint || ''}\nELENCO: ${c.supportingCast || ''}`,
     `MEMÓRIA: ${c.memory || ''}\nDATA: ${calendar}`,
     `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,

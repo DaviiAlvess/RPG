@@ -2,6 +2,8 @@
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
+const GOOGLE_SEARCH_TOOL = { google_search: {} };
+const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
 
 export default async function handler(req, res) {
   const MODELO_GM = modelName(process.env.GEMINI_MODEL);
@@ -18,7 +20,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
 
-  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, world, charName } = req.body ?? {};
+  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, useGrounding, world, charName } = req.body ?? {};
 
   const parseJsonFromText = (text) => {
     const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "").trim();
@@ -142,6 +144,15 @@ export default async function handler(req, res) {
     throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
   };
 
+  const chamarGeminiComBusca = async (body, modelo) => {
+    try {
+      return await chamarGemini(withGoogleSearch(body), modelo);
+    } catch (error) {
+      if (error.code === "API_REQUEST") return chamarGemini(body, modelo);
+      throw error;
+    }
+  };
+
   // ── Modo: busca de personagem canônico ─────────────────────────────
   if (useCharacterSearch) {
     if (!world || !charName) {
@@ -219,17 +230,29 @@ export default async function handler(req, res) {
       const loreBody = {
         system_instruction: {
           parts: [{
-            text: "Você é um pesquisador especialista em lore. Resuma APENAS fatos canônicos e estabelecidos do universo solicitado para RPG. Não invente eventos, personagens ou regras. Responda APENAS com o resumo em português brasileiro.",
+            text: [
+              "Você é um pesquisador especialista em lore de obras de ficção.",
+              "Use busca para ancorar o briefing em fatos canônicos estabelecidos.",
+              "Produza um BRIEFING CANÔNICO PARA RPG em português brasileiro, com estas seções:",
+              "1) ERA / RECORTE TEMPORAL típico;",
+              "2) LUGARES NOMEADOS essenciais;",
+              "3) FACÇÕES e poderes políticos ou sociais;",
+              "4) REGRAS DE MAGIA / PODER / FÍSICA (o que existe, o que é raro, o que NÃO existe);",
+              "5) TOM e vida cotidiana de pessoas comuns;",
+              "6) O QUE NÃO INVENTAR (destinos de protagonistas, eventos-chave, poderes fora do sistema).",
+              "Não invente eventos, personagens ou regras. Se um fato for incerto, omita-o ou marque como incerto.",
+              "Não escreva uma aventura nem coloque o jogador como protagonista da obra — só o contexto fiel para um Mestre.",
+            ].join(" "),
           }],
         },
         contents: [{
           role: "user",
-          parts: [{ text: `Pesquise e resuma o lore completo do universo "${world}".` }],
+          parts: [{ text: `Pesquise o universo "${world}" e entregue o briefing canônico acima. Não invente canon.` }],
         }],
         generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
       };
 
-      const lore = await chamarGemini(loreBody, MODELO_LORE);
+      const lore = await chamarGeminiComBusca(loreBody, MODELO_LORE);
       return res.status(200).json({ lore });
     } catch (e) {
       console.error("Erro no lore search:", e.message);
@@ -310,7 +333,9 @@ export default async function handler(req, res) {
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
 
-    const text = await chamarGemini(body, MODELO_GM);
+    const text = useGrounding
+      ? await chamarGeminiComBusca(body, MODELO_GM)
+      : await chamarGemini(body, MODELO_GM);
     return res.status(200).json({ text });
   } catch (e) {
     console.error("Todas as chaves Gemini falharam. Último erro:", e.message);

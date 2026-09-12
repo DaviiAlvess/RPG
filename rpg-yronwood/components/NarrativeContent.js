@@ -1,4 +1,11 @@
-import { parseNarrativeBlocks } from "../lib/dialogueFormat";
+import { parseNarrativeBlocks, speakerToneIndex } from "../lib/dialogueFormat";
+
+function isPlayerSpeaker(speaker, playerName) {
+  const name = String(speaker || "").trim();
+  if (!name) return false;
+  if (/^você$/i.test(name)) return true;
+  return Boolean(playerName) && name.toLowerCase() === String(playerName).toLowerCase();
+}
 
 export default function NarrativeContent({ text, playerName }) {
   const blocks = parseNarrativeBlocks(text);
@@ -14,13 +21,16 @@ export default function NarrativeContent({ text, playerName }) {
     <div className="narrative-content">
       {blocks.map((block, index) => {
         if (block.type === "dialogue") {
-          const isPlayer =
-            playerName &&
-            block.speaker.toLowerCase() === playerName.toLowerCase();
+          const isPlayer = isPlayerSpeaker(block.speaker, playerName);
+          const tone = isPlayer ? null : speakerToneIndex(block.speaker);
+          const className = isPlayer
+            ? "dialogue-line dialogue-line-player"
+            : `dialogue-line dialogue-tone-${tone}`;
           return (
             <div
               key={`dlg-${index}`}
-              className={`dialogue-line${isPlayer ? " dialogue-line-player" : ""}`}
+              className={className}
+              data-speaker={block.speaker}
             >
               <span className="dialogue-speaker">{block.speaker}</span>
               <span className="dialogue-text">&ldquo;{block.text}&rdquo;</span>

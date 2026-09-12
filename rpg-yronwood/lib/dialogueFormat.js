@@ -158,3 +158,15 @@ export function parseNarrativeBlocks(text) {
 export function hasDialogueBlocks(text) {
   return parseNarrativeBlocks(text).some((block) => block.type === "dialogue");
 }
+
+export const DIALOGUE_TONE_COUNT = 6;
+
+/** Stable 0–5 index from the speaker name (case-insensitive). */
+export function speakerToneIndex(name, count = DIALOGUE_TONE_COUNT) {
+  const key = String(name || "").trim().toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % count;
+}

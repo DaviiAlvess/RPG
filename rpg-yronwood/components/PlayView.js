@@ -1,5 +1,6 @@
 import SpecialAbilitySettings from "./SpecialAbilitySettings";
 import MasterChat from "./MasterChat";
+import { listMasterAgreements } from "../lib/master-chat.mjs";
 import { TIME_SKIP_FOCUSES } from "../lib/time-skip-intent.mjs";
 import { resolveTest } from "../lib/gameplay.mjs";
 import { xpProgress, canLevelUp, skillForAttribute } from "../lib/progression.mjs";
@@ -226,6 +227,7 @@ export default function PlayView(props) {
   } = props;
 
   const c = active || {};
+  const agreementCount = listMasterAgreements(c).length;
   const [abilityDraft, setAbilityDraft] = useState(c.specialAbility || {});
   useEffect(() => { setAbilityDraft(c.specialAbility || {}); }, [c.id, c.specialAbility]);
   const lastScene = [...(disp || [])].reverse().find(m => m.type === "gm");
@@ -488,7 +490,11 @@ export default function PlayView(props) {
               </div>
 
               <div className="ability-shortcut">
-                <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)}>Conversar com o Mestre</button>
+                <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)} aria-haspopup="dialog" aria-label={agreementCount ? `Falar com o Mestre. ${agreementCount} acordos da mesa` : 'Falar com o Mestre. Acordos da mesa'}>
+                  <span aria-hidden="true">✦</span>
+                  <span>Falar com o Mestre</span>
+                  <span>Acordos da mesa{agreementCount ? ` (${agreementCount})` : ''}</span>
+                </button>
                 <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
                   <span aria-hidden="true">✦</span><span>Habilidade</span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
                 </button>
@@ -1108,7 +1114,7 @@ export default function PlayView(props) {
         </nav>
       </div>
 
-      {masterChatOpen ? <MasterChat key={c.id} campaign={c} busy={props.masterBusy} onAsk={props.onAskMaster} onSaveGuidance={props.onSaveMasterGuidance} onClose={() => setMasterChatOpen(false)} /> : null}
+      {masterChatOpen ? <MasterChat key={c.id} campaign={c} busy={props.masterBusy} onAsk={props.onAskMaster} onSaveAgreements={props.onSaveMasterAgreements} onClose={() => setMasterChatOpen(false)} /> : null}
       {showTimeSkipModal ? (
         <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
           <div className="modal-content" onClick={(event) => event.stopPropagation()}>
@@ -1178,9 +1184,9 @@ export default function PlayView(props) {
                 <select id="skip-focus" className="time-select" value={timeSkipConfig.focus || 'Livre'} onChange={event => setTimeSkipConfig(previous => ({ ...previous, focus: event.target.value }))}>{TIME_SKIP_FOCUSES.map(focus => <option key={focus}>{focus}</option>)}</select>
               </div>
               <div className="time-config-section">
-                <label htmlFor="skip-intention">O que você vai tentar fazer nesse tempo?</label>
-                <textarea id="skip-intention" className="time-textarea" rows={4} maxLength={2000} value={timeSkipConfig.intention || ''} onChange={event => setTimeSkipConfig(previous => ({ ...previous, intention: event.target.value }))} placeholder="Ex.: durante essas duas semanas, treino espada pela manhã e trabalho na estalagem à noite para juntar dinheiro. Quero manter o treino em segredo." />
-                <p className="settings-hint">Descreva a rotina, seu objetivo e os cuidados que quer tomar. O Mestre narrará o progresso possível, sem garantir sucesso.</p>
+                <label htmlFor="skip-intention">O que você faz nesse tempo</label>
+                <textarea id="skip-intention" className="time-textarea skip-intention" rows={7} maxLength={2000} value={timeSkipConfig.intention || ''} onChange={event => setTimeSkipConfig(previous => ({ ...previous, intention: event.target.value }))} placeholder="Ex.: nessas duas semanas treino espada de manhã e trabalho na estalagem à noite para juntar dinheiro. Quero manter o treino em segredo." />
+                <p className="settings-hint">Diga a rotina, o objetivo e os cuidados. O Mestre vai narrar esse trecho — o esforço, o que muda e uma cena para retomar — não pular tudo numa frase. Intenção não garante sucesso.</p>
               </div>
               <div className="time-preview">
                 <h4>Resumo</h4>

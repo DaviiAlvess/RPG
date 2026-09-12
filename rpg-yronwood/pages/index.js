@@ -4,8 +4,9 @@ import SpecialAbilitySettings from "../components/SpecialAbilitySettings";
 import { normalizeSpecialAbility, specialAbilityDirection } from "../lib/special-ability.mjs";
 import { requestJson } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
-import { masterChatPrompt, masterGuidance } from "../lib/master-chat.mjs";
+import { applyMasterAgreements, listMasterAgreements, masterChatPrompt, masterGuidance, mergeMasterAgreements, parseAcordoTags, stripAcordoTags } from "../lib/master-chat.mjs";
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
+import { knownIpFidelityRule, shouldGroundGmTurn } from "../lib/canon.mjs";
 import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseCompletedMissions, missionXp } from "../lib/progression.mjs";
 import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
@@ -51,7 +52,7 @@ const cleanText = (t) =>
   normalizeDialogueText(
     stripTimeSkipTags(
       t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
-       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP):([^\]]+)\]/gi, "")
+       .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO):([^\]]+)\]/gi, "")
     )
   ).trim();
 const generateImage = (prompt, world) => {
@@ -167,8 +168,12 @@ const buildPrompt = (c, loreExtra, gameTime) => {
   const gt = normalizeGameTime(gameTime);
   if (c.economyMode) return economyPrompt(c, loreExtra, formatGameTimeLong(gt));
   const style = GAME_STYLES[c.gameStyle] ? c.gameStyle : "aventura";
+  const universeContext = loreExtra
+    ? `CONTEXTO DO UNIVERSO (gerado por IA e sujeito a revisão):\n${loreExtra}${c.worldBg ? `\nNOTA DO MUNDO: ${c.worldBg}` : ""}`
+    : `CONTEXTO DO MUNDO: ${c.worldBg}`;
   const lines = [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
+    c.isKnownIP ? knownIpFidelityRule(c.world) : "",
     c.ordinaryCharacter ? `PERSONAGEM COADJUVANTE ORIGINAL: começa como pessoa comum. Sem profecia, linhagem secreta, poderes exclusivos ou intimidade gratuita com protagonistas. Conquistas e influência devem surgir das escolhas do jogador. Eventos e personagens desta aventura são ficção original dentro do cenário, não canon oficial. Esta regra prevalece sobre a regra de exceção de poderes.` : "",
     c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
     c.storyStartPoint ? `PREMISSA ESCOLHIDA: ${c.storyStartPoint}` : "",
@@ -176,9 +181,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
-    loreExtra
-      ? `CONTEXTO DO UNIVERSO (gerado por IA e sujeito a revisão):\n${loreExtra}`
-      : `CONTEXTO DO MUNDO: ${c.worldBg}`,
+    universeContext,
     c.charLore
       ? `\nCONTEXTO DO PERSONAGEM (gerado por IA e sujeito a revisão):\n${c.charLore}`
       : "",
@@ -208,10 +211,12 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     lines.push(
       `REGRA 0B — FIDELIDADE AO CANON (UNIVERSO EXISTENTE).`,
       `Este é um universo com lore oficial. Você DEVE:`,
+      `- Permanecer na física, nos lugares nomeados e no sistema de poder/magia de "${c.world}".`,
       `- Respeitar personagens, poderes, facções e eventos já estabelecidos no lore acima.`,
+      `- Inventar só extras locais (NPCs menores, vielas, tavernas). Nunca reescrever o destino canônico dos protagonistas.`,
       `- NÃO inventar personagens famosos mortos/vivos fora da época, nem mudar o destino de figuras canônicas sem o jogador causar isso.`,
       `- NINGUÉM no mundo — NPCs, vilões, aliados — pode usar poderes, magias ou habilidades que não existem no canon original.`,
-      `- Se não souber algo do canon, improvise NPCs genéricos locais — nunca canon inventado.`,
+      `- Se não souber algo do canon, fique no genérico-local — nunca invente canon falso.`,
       `- Manter o tom e a lógica do universo "${c.world}".`,
       ``,
     );
@@ -684,6 +689,8 @@ export default function RPG() {
       level: overrides.level ?? camp.level ?? level,
       attributes: overrides.attributes ?? camp.attributes ?? attributes,
       skills: overrides.skills ?? camp.skills ?? skills,
+      masterChat: overrides.masterChat ?? camp.masterChat ?? [],
+      ...applyMasterAgreements(overrides.masterAgreements ?? listMasterAgreements({ ...camp, ...overrides })),
       updatedAt: new Date().toISOString(),
     };
   }, [active, msgs, disp, hp, missions, sceneImg, campLore, charInitialAge, gameTime, temporalEffects, timelineEvents, experience, level, attributes, skills]);
@@ -920,7 +927,7 @@ export default function RPG() {
       narration: normalizeNarration(save.narration),
       memory: save.memory || "", memoryUntil: save.memoryUntil || 0,
       worldState: save.worldState || {},
-      masterChat: save.masterChat || [], masterGuidance: save.masterGuidance || '',
+      masterChat: save.masterChat || [], ...applyMasterAgreements(listMasterAgreements(save)),
       level: save.level ?? 1, experience: save.experience ?? 0,
       attributes: save.attributes || { ...DEFAULT_ATTRIBUTES }, skills: save.skills || { ...DEFAULT_SKILLS },
       gameTime: normalizeGameTime(save.gameTime), temporalEffects: save.temporalEffects || [], timelineEvents: save.timelineEvents || [],
@@ -1240,6 +1247,9 @@ export default function RPG() {
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
       createdAt: Date.now(),
+      masterChat: [],
+      masterGuidance: "",
+      masterAgreements: [],
     };
     const summary = { id, world: form.world, charName: form.charName, createdAt: Date.now(), updatedAt: Date.now() };
     const next = [summary, ...idx];
@@ -1342,7 +1352,12 @@ export default function RPG() {
       pendingLevelNoteRef.current = "";
       const res = await apiFetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ economyMode: Boolean(camp.economyMode), messages: newMsgs.slice(memoryUntil), systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current) }),
+        body: JSON.stringify({
+          economyMode: Boolean(camp.economyMode),
+          useGrounding: shouldGroundGmTurn(camp, baseMsgs.length),
+          messages: newMsgs.slice(memoryUntil),
+          systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error || typeof data.text !== "string") {
@@ -1725,6 +1740,13 @@ export default function RPG() {
   }, [parseMessageForAutoDetection, addItem, showNotification]);
 
   // ─── Time-Skip ─────────────────────────────────────────────────────
+  const persistMasterAgreements = (campaign, agreements) => {
+    const updated = { ...campaign, ...applyMasterAgreements(agreements), updatedAt: Date.now() };
+    setActive(updated);
+    saveCamp(campaign.id, updated);
+    return updated;
+  };
+
   const askMaster = async (question) => {
     if (!active || sending.current || autoRef.current) throw new Error("Aguarde o turno atual terminar antes de conversar.");
     sending.current = true; setMasterBusy(true);
@@ -1738,8 +1760,18 @@ export default function RPG() {
         const error = new Error(result.error || 'O Mestre não conseguiu responder. Sua mensagem foi mantida.');
         error.retryAfter = result.retryAfter; throw error;
       }
-      const updated = { ...active, masterChat: [...history, { role: 'assistant', content: result.text }], updatedAt: Date.now() };
+      const extracted = parseAcordoTags(result.text);
+      const visible = stripAcordoTags(result.text) || result.text.trim();
+      const merged = extracted.length ? mergeMasterAgreements(active, extracted) : { list: listMasterAgreements(active), added: [] };
+      const updated = {
+        ...active,
+        ...applyMasterAgreements(merged.list),
+        masterChat: [...history, { role: 'assistant', content: visible }],
+        updatedAt: Date.now(),
+      };
       setActive(updated); saveCamp(active.id, updated);
+      if (merged.added.length) showNotification("Acordo salvo", "success");
+      return merged.added.length;
     } finally { sending.current = false; setMasterBusy(false); }
   };
 
@@ -1944,11 +1976,11 @@ export default function RPG() {
 
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
-            desc={form.isKnownIP ? "A IA prepara um contexto inicial. Revise os fatos importantes antes de jogar." : "✨ Mundo original — você define o contexto abaixo"}
+            desc={form.isKnownIP ? "A IA pesquisa um briefing canônico (era, facções, regras de poder). Revise os fatos importantes antes de jogar." : "✨ Mundo original — você define o contexto abaixo"}
             value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, storyStartPoint: "" }))} />
           {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
           {form.isKnownIP && form.world.trim() && (
-            <div className="ip-hint">A IA vai sugerir um contexto para <strong>{form.world}</strong>: personagens, poderes, facções e eventos.</div>
+            <div className="ip-hint">A IA vai pesquisar um briefing fiel de <strong>{form.world}</strong>: era, lugares, facções, regras de poder e o que não inventar.</div>
           )}
           <Toggle title="Gerar imagens de cena?"
             desc={form.useImages ? "🖼️ Uma imagem por cena — mais imersivo, mais lento" : "⚡ Sem imagens — mais rápido e barato"}
@@ -2103,10 +2135,9 @@ export default function RPG() {
     <PlayView
         masterBusy={masterBusy}
         onAskMaster={askMaster}
-        onSaveMasterGuidance={value => {
+        onSaveMasterAgreements={agreements => {
           if (!active || sending.current) return;
-          const updated = { ...active, masterGuidance: value.slice(0, 1500), updatedAt: Date.now() };
-          setActive(updated); saveCamp(active.id, updated);
+          persistMasterAgreements(active, agreements);
         }}
         saveStatus={saveStatus}
         failedAction={failedAction}

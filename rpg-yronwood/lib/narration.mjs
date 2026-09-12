@@ -1,4 +1,5 @@
-const NARRATION_POV_LOCK = 'Narre em segunda pessoa ("você"); a câmera é o corpo do jogador. NPCs entram a partir de você ("À sua frente…"). Nunca abra com "o transeunte" ou "a figura encapuzada" como herói do parágrafo.';
+export const NARRATION_VISION_LOCK = 'A narração é SEMPRE a visão do personagem do jogador — o que ele vê, ouve, tem na frente. NPCs falam no formato Nome: "fala".';
+const NARRATION_POV_LOCK = `Narre em segunda pessoa ("você"); a câmera é o corpo do jogador. NPCs entram a partir de você ("À sua frente…"). Nunca abra com "o transeunte" ou "a figura encapuzada" como herói do parágrafo. ${NARRATION_VISION_LOCK}`;
 export const NARRATION_STYLES = {
   "cinematic": {
     "label": "Cinematográfico",
@@ -50,6 +51,7 @@ export function normalizeNarration(value = {}) {
 }
 export const NARRATION_PRESENCE = [
   'POV — A CÂMERA É O JOGADOR. Narre em segunda pessoa ("você").',
+  NARRATION_VISION_LOCK,
   'O primeiro sujeito visível da resposta deve ser o corpo do jogador ou o que está colado nele (mão, carroça, pacote no colo) — nunca um desconhecido como protagonista do parágrafo.',
   'NPCs aparecem a partir de você: "À sua esquerda, um homem…", "Você ouve a bota no cascalho." Proibido: "O transeunte desfila…", "A figura encapuzada…" como abertura sem âncora em você.',
   'PRESENÇA — o jogador está dentro da cena.',
@@ -103,6 +105,7 @@ export function buildStartPrompt(camp = {}) {
   } else if (camp.isKnownIP && !camp.isExistingChar) {
     parts.push(
       `A aventura começa no primeiro instante vivido de ${name} no universo de "${world}" — personagem original, fora do elenco da obra.`,
+      `Abra num lugar e era plausíveis DESTE mundo (vilas, cidades, rotas, instituições e física reconhecíveis de "${world}") — nunca uma estrada de terra genérica que serviria a qualquer fantasia.`,
       'Caia num primeiro batimento concreto deste mundo; não descreva o cenário de fora.'
     );
   } else {
@@ -112,11 +115,18 @@ export function buildStartPrompt(camp = {}) {
     );
   }
 
+  if (camp.isKnownIP) {
+    parts.push(
+      `Permaneça na física, nos lugares nomeados e no sistema de poder de "${world}". Inventar só extras locais; se não souber um fato canônico, fique no genérico-local.`
+    );
+  }
+
   if (camp.ordinaryCharacter) {
     parts.push('O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes não estabelecidos.');
   }
 
   parts.push(
+    NARRATION_VISION_LOCK,
     'A câmera é o jogador. Narre em segunda pessoa ("você"). O primeiro sujeito visível deve ser o corpo do jogador ou o que está colado nele (mão, carroça, pacote no colo) — nunca um desconhecido como protagonista.',
     'NPCs aparecem a partir de você. Proibido abrir com "O transeunte desfila…" ou "A figura encapuzada…" sem âncora no jogador.',
     'Narre a partir do corpo: o que chega aos olhos, ouvidos, pele ou olfato de onde o personagem está.',

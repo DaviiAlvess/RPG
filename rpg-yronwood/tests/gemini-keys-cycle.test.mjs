@@ -137,3 +137,19 @@ test('nextGeminiKey does not require waiting when another key was never used', (
   assert.equal(afterHeavy.allResting, false);
   assert.equal(afterHeavy.retryAfterSec, 0);
 });
+
+test('cooldown de 429 não passa de 60s; pool vazio não é allResting', () => {
+  markGeminiKeyExhausted(KEY_A, 900, NOW);
+  const rec = getGeminiKeyRecord(KEY_A, NOW);
+  assert.ok(rec.cooldownUntil - NOW <= 60_000, 'cooldown persistido/em memória deve capar em 60s');
+  assert.ok(rec.cooldownUntil > NOW);
+
+  const empty = nextGeminiKey([], NOW);
+  assert.equal(empty.key, null);
+  assert.equal(empty.allResting, false);
+
+  markGeminiKeyExhausted(KEY_B, 60, NOW);
+  const both = nextGeminiKey([KEY_A, KEY_B], NOW);
+  assert.equal(both.allResting, true);
+  assert.ok(both.key, 'mesmo com allResting deve devolver uma chave para tentar nesta requisição');
+});

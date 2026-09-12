@@ -2,7 +2,6 @@
 import {
   collectGeminiKeys,
   geminiKeysAllRestingError,
-  isGeminiKeyHealthy,
   markGeminiKeyExhausted,
   nextGeminiKey,
   parseUsageTokens,
@@ -90,11 +89,6 @@ export default async function handler(req, res) {
     return error;
   };
 
-  const failIfAllResting = () => {
-    const pick = nextGeminiKey(chavesUnicas);
-    if (pick.allResting) throw geminiKeysAllRestingError(pick.retryAfterSec);
-  };
-
   const recusarChave = () => {
     const error = new Error("A chave de IA foi recusada ou não tem permissão. Confira a GEMINI_API_KEY e o projeto no servidor.");
     error.status = 502;
@@ -113,6 +107,7 @@ export default async function handler(req, res) {
     const deadline = Date.now() + deadlineMs;
     const triedThisCall = new Set();
     const authRefusedKeys = new Set();
+    const rateLimitedKeys = new Set();
 
     const postGemini = (apiKey, modeloAtual, requestBody, signal) => fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${apiKey}`,
@@ -137,14 +132,8 @@ export default async function handler(req, res) {
       if (!pool.length) break;
 
       const pick = nextGeminiKey(pool);
-      if (pick.allResting) {
-        if (authRefusedKeys.size < chavesUnicas.length) {
-          lastError = geminiKeysAllRestingError(pick.retryAfterSec);
-        }
-        break;
-      }
-
       const apiKey = pick.key;
+      if (!apiKey) break;
       const modeloAtual = models[modelIdx];
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
@@ -166,6 +155,7 @@ export default async function handler(req, res) {
           const headerRetry = geminiRes.headers?.get?.("retry-after");
           markGeminiKeyExhausted(apiKey, headerRetry);
           triedThisCall.add(apiKey);
+          rateLimitedKeys.add(apiKey);
           lastError = quotaError(headerRetry);
           continue;
         }
@@ -188,8 +178,7 @@ export default async function handler(req, res) {
             attempt -= 1;
             continue;
           }
-          if (quotaHint && !unavailable) {
-            markGeminiKeyExhausted(apiKey);
+          if (quotaHint && !unavailable && !authError) {
             triedThisCall.add(apiKey);
             lastError = quotaError(90);
             continue;
@@ -210,6 +199,7 @@ export default async function handler(req, res) {
                 const headerRetry = retryRes.headers?.get?.("retry-after");
                 markGeminiKeyExhausted(apiKey, headerRetry);
                 triedThisCall.add(apiKey);
+                rateLimitedKeys.add(apiKey);
                 lastError = quotaError(headerRetry);
                 continue;
               }
@@ -254,8 +244,8 @@ export default async function handler(req, res) {
           : "Não foi possível conectar ao Mestre. Tente novamente.");
         lastError.status = timedOut ? 504 : 502;
         lastError.code = timedOut ? "TIMEOUT" : "NETWORK";
-        const healthyLeft = chavesUnicas.filter(key => !triedThisCall.has(key) && isGeminiKeyHealthy(key));
-        if (timedOut && healthyLeft.length <= 1) break;
+        const untried = chavesUnicas.filter(key => !triedThisCall.has(key));
+        if (timedOut && untried.length <= 1) break;
         if (deadline - Date.now() < 2000) break;
       } finally {
         clearTimeout(timeout);
@@ -263,7 +253,10 @@ export default async function handler(req, res) {
     }
 
     if (authRefusedKeys.size >= chavesUnicas.length) throw lastError?.code === "API_AUTH" ? lastError : recusarChave();
-    if (lastError?.code === "RATE_LIMIT") failIfAllResting();
+    if (rateLimitedKeys.size >= chavesUnicas.length) {
+      const resting = nextGeminiKey(chavesUnicas);
+      throw geminiKeysAllRestingError(resting.retryAfterSec);
+    }
     throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
   };
 

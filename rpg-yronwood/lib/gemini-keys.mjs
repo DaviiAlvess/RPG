@@ -23,8 +23,8 @@ const KEY_ENV_NAMES = [
 ];
 
 const DEFAULT_DAILY_BUDGET = 250_000;
-const DEFAULT_COOLDOWN_MS = 90_000;
-const MAX_COOLDOWN_MS = 15 * 60 * 1000;
+const DEFAULT_COOLDOWN_MS = 60_000;
+const MAX_COOLDOWN_MS = 60_000;
 const STATE_FILE = join(tmpdir(), `rpg-gemini-keys-${process.pid}.json`);
 
 let records = new Map();
@@ -58,8 +58,8 @@ function loadFile() {
       records.set(id, {
         tokensUsed: Math.max(0, Math.floor(Number(rec.tokensUsed) || 0)),
         day: typeof rec.day === "string" ? rec.day : utcDay(),
-        last429At: Number(rec.last429At) || 0,
-        cooldownUntil: Number(rec.cooldownUntil) || 0,
+        last429At: 0,
+        cooldownUntil: 0,
         requestCount: Math.max(0, Math.floor(Number(rec.requestCount) || 0)),
         lastUsedAt: Number(rec.lastUsedAt) || 0,
       });
@@ -70,7 +70,14 @@ function loadFile() {
 function persist() {
   try {
     const keys = {};
-    for (const [id, rec] of records) keys[id] = rec;
+    for (const [id, rec] of records) {
+      keys[id] = {
+        tokensUsed: rec.tokensUsed,
+        day: rec.day,
+        requestCount: rec.requestCount,
+        lastUsedAt: rec.lastUsedAt,
+      };
+    }
     writeFileSync(STATE_FILE, JSON.stringify({ keys }));
   } catch {}
 }
@@ -156,7 +163,7 @@ export function isGeminiKeyHealthy(key, now = Date.now()) {
 export function nextGeminiKey(keys, now = Date.now()) {
   const list = Array.isArray(keys) ? keys.filter(Boolean) : [];
   if (!list.length) {
-    return { key: null, waitMs: 0, allResting: true, retryAfterSec: 1 };
+    return { key: null, waitMs: 0, allResting: false, retryAfterSec: 0 };
   }
 
   const healthy = list.filter(key => isGeminiKeyHealthy(key, now));

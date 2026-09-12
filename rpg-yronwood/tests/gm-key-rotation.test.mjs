@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
+import { markGeminiKeyExhausted, resetGeminiKeyState } from '../lib/gemini-keys.mjs';
 import { loadGmHandler } from './load-gm.mjs';
 
 const { default: handler } = await loadGmHandler();
@@ -113,5 +113,111 @@ test('Criar aventura: primeira chave 429, segunda 200 retorna lore', { timeout: 
     const startedAt = Date.now();
     const res = await callHandler(createBody);
     assertFastSuccess(res, { text: CREATED, used, startedAt });
+  });
+});
+
+const SEVEN_KEYS = Array.from({ length: 7 }, (_, i) => `key-${i + 1}`);
+
+async function withSevenKeys(run) {
+  const previousFetch = globalThis.fetch;
+  const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));
+  for (const name of KEY_VARS) delete process.env[name];
+  SEVEN_KEYS.forEach((key, i) => { process.env[`GEMINI_API_KEY_${i + 1}`] = key; });
+  try {
+    resetGeminiKeyState();
+    await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetGeminiKeyState();
+    for (const name of KEY_VARS) {
+      if (previousKeys[name] === undefined) delete process.env[name];
+      else process.env[name] = previousKeys[name];
+    }
+  }
+}
+
+const failQuota403 = () => ({
+  ok: false,
+  status: 403,
+  json: async () => ({ error: { message: 'You exceeded your current quota, please check your plan and billing details.' } }),
+});
+
+test('Narrar: 403 em 6 chaves e 200 na 7ª continua o jogo', { timeout: 4000 }, async () => {
+  await withSevenKeys(async () => {
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === SEVEN_KEYS[6]) return okText(NARRATED);
+      return failRes(403);
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, NARRATED);
+    assert.notEqual(res.data?.code, 'RATE_LIMIT');
+    assert.notEqual(res.data?.code, 'API_AUTH');
+    assert.ok(!/Todas as chaves Gemini estão no limite/i.test(res.data?.error || ''));
+    assert.equal(used.at(-1), SEVEN_KEYS[6]);
+    assert.ok(used.length >= 7);
+  });
+});
+
+test('Narrar: 429 em todas as 7 chaves retorna RATE_LIMIT', { timeout: 4000 }, async () => {
+  await withSevenKeys(async () => {
+    const used = new Set();
+    globalThis.fetch = async url => {
+      used.add(String(url).split('key=')[1]);
+      return failRes(429);
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 429);
+    assert.equal(res.data.code, 'RATE_LIMIT');
+    assert.match(res.data.error, /Todas as chaves Gemini estão no limite agora\. Tente em \d+ segundos\./);
+    assert.equal(used.size, 7);
+  });
+});
+
+test('Narrar: 403 em todas as 7 chaves é API_AUTH, não "todas no limite"', { timeout: 4000 }, async () => {
+  await withSevenKeys(async () => {
+    globalThis.fetch = async () => failRes(403);
+    const res = await callHandler(narrateBody);
+    assert.equal(res.data.code, 'API_AUTH');
+    assert.notEqual(res.data.code, 'RATE_LIMIT');
+    assert.ok(!/Todas as chaves Gemini estão no limite/i.test(res.data.error || ''));
+  });
+});
+
+test('Narrar: 403 com texto de cota em 6 chaves e 200 na 7ª não trava o pool', { timeout: 4000 }, async () => {
+  await withSevenKeys(async () => {
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === SEVEN_KEYS[6]) return okText(NARRATED);
+      return failQuota403();
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, NARRATED);
+    assert.notEqual(res.data?.code, 'RATE_LIMIT');
+    assert.ok(used.includes(SEVEN_KEYS[6]));
+  });
+});
+
+test('Cooldown residual em todas as 7 não aborta: a 7ª 200 continua o jogo', { timeout: 4000 }, async () => {
+  await withSevenKeys(async () => {
+    for (const key of SEVEN_KEYS) markGeminiKeyExhausted(key, 90);
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === SEVEN_KEYS[6]) return okText(NARRATED);
+      return failRes(429);
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, NARRATED);
+    assert.ok(used.includes(SEVEN_KEYS[6]));
+    assert.ok(used.length >= 1);
   });
 });

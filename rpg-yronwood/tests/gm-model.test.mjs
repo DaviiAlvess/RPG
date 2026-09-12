@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-const source = await readFile(new URL('../pages/api/gm.js', import.meta.url), 'utf8');
-const { default: handler } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
+import { loadGmHandler } from './load-gm.mjs';
+
+const { default: handler } = await loadGmHandler();
 const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 test('Modelo atual, configuração e aviso de modelo indisponível', async () => {
   const originalFetch = globalThis.fetch;
@@ -14,6 +15,7 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
   };
   const body = { messages: [{ role: 'user', content: 'Olá' }], systemPrompt: 'Narre.' };
   try {
+    resetGeminiKeyState();
     for (const name of KEY_VARS) delete process.env[name];
     process.env.GEMINI_API_KEY = 'test'; delete process.env.GEMINI_MODEL; delete process.env.GEMINI_LORE_MODEL;
     let calledUrl;
@@ -62,6 +64,7 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     const result = await call(body); assert.equal(result.code, 503); assert.ok(result.data.error.includes('GEMINI_MODEL'));
   } finally {
     globalThis.fetch = originalFetch;
+    resetGeminiKeyState();
     for (const name of names) { if (previous[name] === undefined) delete process.env[name]; else process.env[name] = previous[name]; }
   }
 });

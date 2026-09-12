@@ -1,4 +1,13 @@
 // pages/api/gm.js
+import {
+  collectGeminiKeys,
+  geminiKeysAllRestingError,
+  isGeminiKeyHealthy,
+  markGeminiKeyExhausted,
+  nextGeminiKey,
+  parseUsageTokens,
+  recordKeyUsage,
+} from "../../lib/gemini-keys.mjs";
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
@@ -8,8 +17,8 @@ const MIN_ATTEMPTS = 1;
 const MAX_ATTEMPTS_CAP = 7;
 const PER_REQUEST_MS = 12000;
 const MIN_PER_REQUEST_MS = 5000;
-const RATE_LIMIT_BACKOFF_MS = 400;
 const UPSTREAM_BACKOFF_MS = 250;
+const ALL_RESTING_WAIT_MS = 8000;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
 const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
@@ -47,26 +56,7 @@ export default async function handler(req, res) {
     }
   };
 
-  const API_KEYS = [
-    process.env.GEMINI_API_KEY_1,
-    process.env.GEMINI_API_KEY_2,
-    process.env.GEMINI_API_KEY_3,
-    process.env.GEMINI_API_KEY_4,
-    process.env.GEMINI_API_KEY_5,
-    process.env.GEMINI_API_KEY_6,
-    process.env.GEMINI_API_KEY_7,
-    process.env.GEMINI_API_KEY,
-    process.env.GEMINI_KEY_1,
-    process.env.GEMINI_KEY_2,
-    process.env.GEMINI_KEY_3,
-    process.env.GEMINI_KEY_4,
-    process.env.GEMINI_KEY_5,
-    process.env.GEMINI_KEY_6,
-    process.env.GEMINI_KEY_7,
-    process.env.GEMINI_KEY,
-  ].filter(Boolean);
-
-  const chavesUnicas = [...new Set(API_KEYS)];
+  const chavesUnicas = collectGeminiKeys();
 
   if (chavesUnicas.length === 0) {
     return res.status(500).json({
@@ -75,9 +65,21 @@ export default async function handler(req, res) {
     });
   }
 
+  const quotaError = (retryAfter) => {
+    const error = new Error("A cota da IA esgotou (limite de uso). Aguarde o intervalo indicado e tente de novo; se persistir, confira a cota do projeto no Google AI Studio.");
+    error.status = 429;
+    error.code = "RATE_LIMIT";
+    error.retryAfter = Math.min(900, Math.max(1, Number(retryAfter) || 90));
+    return error;
+  };
+
+  const failIfAllResting = () => {
+    const pick = nextGeminiKey(chavesUnicas);
+    if (pick.allResting) throw geminiKeysAllRestingError(pick.retryAfterSec);
+  };
+
   const chamarGemini = async (body, modelo) => {
-    const shuffled = [...chavesUnicas].sort(() => Math.random() - 0.5);
-    const maxAttempts = Math.min(Math.max(shuffled.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
+    const maxAttempts = Math.min(Math.max(chavesUnicas.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
     const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS + Math.max(0, maxAttempts - 5) * 2500);
     const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, Math.floor((deadlineMs - 2000) / maxAttempts)));
     const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
@@ -87,9 +89,20 @@ export default async function handler(req, res) {
     const deadline = Date.now() + deadlineMs;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const apiKey = shuffled[attempt % shuffled.length];
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
+
+      const pick = nextGeminiKey(chavesUnicas);
+      if (pick.allResting) {
+        lastError = geminiKeysAllRestingError(pick.retryAfterSec);
+        if (pick.waitMs > 0 && pick.waitMs < ALL_RESTING_WAIT_MS && remaining > pick.waitMs + 1500 && attempt < maxAttempts - 1) {
+          await wait(pick.waitMs);
+          continue;
+        }
+        break;
+      }
+
+      const apiKey = pick.key;
       const modeloAtual = models[modelIdx];
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
@@ -115,15 +128,9 @@ export default async function handler(req, res) {
         }
 
         if (geminiRes.status === 429) {
-          lastError = new Error("A cota da IA esgotou (limite de uso). Aguarde o intervalo indicado e tente de novo; se persistir, confira a cota do projeto no Google AI Studio.");
-          lastError.status = 429;
-          lastError.code = "RATE_LIMIT";
-          lastError.retryAfter = Math.min(300, Math.max(1, Number(geminiRes.headers?.get?.("retry-after")) || 30));
-          const nextKey = shuffled[(attempt + 1) % shuffled.length];
-          const waitMs = nextKey === apiKey
-            ? Math.min(RATE_LIMIT_BACKOFF_MS, Math.max(0, deadline - Date.now() - 1500))
-            : 0;
-          if (waitMs > 0 && attempt < maxAttempts - 1) await wait(waitMs);
+          const headerRetry = geminiRes.headers?.get?.("retry-after");
+          markGeminiKeyExhausted(apiKey, headerRetry);
+          lastError = quotaError(headerRetry);
           continue;
         }
         if (geminiRes.status === 500 || geminiRes.status === 502 || geminiRes.status === 503) {
@@ -145,10 +152,8 @@ export default async function handler(req, res) {
             continue;
           }
           if (quotaHint && !unavailable) {
-            lastError = new Error("A cota da IA esgotou (limite de uso). Aguarde o intervalo indicado e tente de novo; se persistir, confira a cota do projeto no Google AI Studio.");
-            lastError.status = 429;
-            lastError.code = "RATE_LIMIT";
-            lastError.retryAfter = 30;
+            markGeminiKeyExhausted(apiKey);
+            lastError = quotaError(90);
             continue;
           }
           lastError = new Error(unavailable
@@ -180,6 +185,7 @@ export default async function handler(req, res) {
           throw lastError;
         }
 
+        recordKeyUsage(apiKey, parseUsageTokens(data));
         return text;
       } catch (err) {
         if (err.fatal) throw err;
@@ -189,14 +195,15 @@ export default async function handler(req, res) {
           : "Não foi possível conectar ao Mestre. Tente novamente.");
         lastError.status = timedOut ? 504 : 502;
         lastError.code = timedOut ? "TIMEOUT" : "NETWORK";
-        const nextKey = shuffled[(attempt + 1) % shuffled.length];
-        if (timedOut && nextKey === apiKey) break;
+        const healthyLeft = chavesUnicas.filter(key => isGeminiKeyHealthy(key));
+        if (timedOut && healthyLeft.length <= 1) break;
         if (deadline - Date.now() < 2000) break;
       } finally {
         clearTimeout(timeout);
       }
     }
 
+    if (lastError?.code === "RATE_LIMIT") failIfAllResting();
     throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
   };
 

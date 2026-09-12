@@ -1,8 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { economyPrompt, memoryCutoff } from '../lib/economy.mjs';
-const load = async path => import(`data:text/javascript;base64,${Buffer.from(await readFile(new URL(path, import.meta.url), 'utf8')).toString('base64')}`);
+import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
+const load = async path => {
+  let source = await readFile(new URL(path, import.meta.url), 'utf8');
+  if (source.includes('gemini-keys.mjs')) {
+    const keysHref = pathToFileURL(fileURLToPath(new URL('../lib/gemini-keys.mjs', import.meta.url))).href;
+    source = source.replaceAll('../../lib/gemini-keys.mjs', keysHref);
+  }
+  return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
+};
 test('Economia preserva regras, ficha e segredos e força respostas curtas', () => {
   const prompt = economyPrompt({ world: 'Teste', charName: 'Mara', items: ['Chave de bronze'], memory: 'A carta está no forro da capa.', worldState: { secrets: ['Somente Mara sabe da carta'] }, narration: { style: 'dark', length: 'rich' } }, 'Contexto importante', 'Dia 2');
   for (const value of ['Teste', 'Mara', 'A carta está no forro da capa', 'Chave de bronze', 'Somente Mara sabe da carta', 'Contexto importante', '80–140', '[TESTE:Força|DC:12]', '[XP:n]', '[HP:+n]', '[RELAÇÃO:Nome|Atitude]', '"experience"', '"skills"', 'suspense', 'comece na ação do jogador', 'detalhe sensorial revelador', 'nunca fale ou sinta pelo jogador']) assert.ok(prompt.includes(value));
@@ -24,6 +33,7 @@ test('Limite de saída menor só quando economia é explicitamente ativada', asy
   const { default: handler } = await load('../pages/api/gm.js');
   const originalFetch = globalThis.fetch, originalKey = process.env.GEMINI_API_KEY;
   process.env.GEMINI_API_KEY = 'test';
+  resetGeminiKeyState();
   try {
     let limit;
     globalThis.fetch = async (_url, options) => { limit = JSON.parse(options.body).generationConfig.maxOutputTokens; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena' }] } }] }) }; };
@@ -34,6 +44,7 @@ test('Limite de saída menor só quando economia é explicitamente ativada', asy
     }
   } finally {
     globalThis.fetch = originalFetch;
+    resetGeminiKeyState();
     if (originalKey === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = originalKey;
   }
 });

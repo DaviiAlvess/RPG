@@ -54,4 +54,6 @@ test('Create flow busca lore e liga grounding nos primeiros turnos de IP conheci
   assert.ok(source.includes('useGrounding:'));
   assert.ok(source.includes('knownIpFidelityRule'));
   assert.ok(source.includes('PERSONAGEM COADJUVANTE ORIGINAL'));
+  assert.ok(source.includes('A aventura segue sem o briefing da busca.'));
+  assert.equal(source.includes('setView("create"); showNotification(error.message, "error"); return;'), false);
 });

@@ -216,6 +216,48 @@ test('Uso de tokens: a próxima escolha prefere a chave com menos tokens; 429 de
   }
 });
 
+test('Lore/grounding: 403 ou recusa da busca gera de novo sem google_search', async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));
+  for (const name of KEY_VARS) delete process.env[name];
+  process.env.GEMINI_API_KEY = 'live';
+  try {
+    resetGeminiKeyState();
+    const bodies = [];
+    globalThis.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      bodies.push(body);
+      if (body.tools) {
+        return { ok: false, status: 403, json: async () => ({ error: { message: 'Requests to this API google_search are not allowed' } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Briefing sem busca.' }] } }] }) };
+    };
+    const lore = await callHandler({ useLoreSearch: true, world: 'Westeros' });
+    assert.equal(lore.code, 200);
+    assert.equal(lore.data.lore, 'Briefing sem busca.');
+    assert.deepEqual(bodies[0].tools, [{ google_search: {} }]);
+    assert.equal(bodies.at(-1).tools, undefined);
+
+    bodies.length = 0;
+    const grounded = await callHandler({
+      messages: [{ role: 'user', content: 'Começar' }],
+      systemPrompt: 'Narre.',
+      useGrounding: true,
+    });
+    assert.equal(grounded.code, 200);
+    assert.equal(grounded.data.text, 'Briefing sem busca.');
+    assert.deepEqual(bodies[0].tools, [{ google_search: {} }]);
+    assert.equal(bodies.at(-1).tools, undefined);
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetGeminiKeyState();
+    for (const name of KEY_VARS) {
+      if (previousKeys[name] === undefined) delete process.env[name];
+      else process.env[name] = previousKeys[name];
+    }
+  }
+});
+
 test('Criar aventura (lore) usa o mesmo pool e pula chave em descanso', async () => {
   const previousFetch = globalThis.fetch;
   const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));

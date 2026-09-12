@@ -1225,7 +1225,10 @@ export default function RPG() {
     try {
       if (form.isKnownIP) { setStatus("Preparando o contexto de " + form.world + "..."); lore = await fetchLore(form.world); }
       else { setStatus("Preparando mundo..."); }
-    } catch (error) { setLoading(false); setStatus(""); setView("create"); showNotification(error.message, "error"); return; }
+    } catch (error) {
+      lore = "";
+      showNotification(`${error.message} A aventura segue sem o briefing da busca.`, "warning");
+    }
     const id = uid();
     const camp = {
       id,

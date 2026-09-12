@@ -22,6 +22,16 @@ const ALL_RESTING_WAIT_MS = 8000;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
 const withGoogleSearch = body => ({ ...body, tools: [GOOGLE_SEARCH_TOOL] });
+const SEARCH_FALLBACK_CODES = new Set([
+  "API_REQUEST",
+  "API_AUTH",
+  "EMPTY_RESPONSE",
+  "CONTENT_BLOCKED",
+  "TIMEOUT",
+  "NETWORK",
+  "UPSTREAM_RESPONSE",
+  "UPSTREAM_UNAVAILABLE",
+]);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export const config = { maxDuration: 60 };
@@ -211,7 +221,7 @@ export default async function handler(req, res) {
     try {
       return await chamarGemini(withGoogleSearch(body), modelo);
     } catch (error) {
-      if (error.code === "API_REQUEST") return chamarGemini(body, modelo);
+      if (SEARCH_FALLBACK_CODES.has(error.code)) return chamarGemini(body, modelo);
       throw error;
     }
   };

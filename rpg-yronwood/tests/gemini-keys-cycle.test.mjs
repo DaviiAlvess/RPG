@@ -14,6 +14,7 @@
 import { afterEach, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  collectGeminiKeys,
   getGeminiKeyRecord,
   isGeminiKeyHealthy,
   markGeminiKeyExhausted,
@@ -41,8 +42,8 @@ afterEach(() => {
 });
 
 test('resetGeminiKeyState clears exhaustion and usage so tests cannot inherit a freeze', () => {
-  markGeminiKeyExhausted(KEY_A, 120, NOW);
   recordKeyUsage(KEY_A, 300_000, NOW);
+  markGeminiKeyExhausted(KEY_A, 120, NOW);
   assert.equal(isGeminiKeyHealthy(KEY_A, NOW), false);
 
   resetGeminiKeyState();
@@ -152,4 +153,22 @@ test('cooldown de 429 não passa de 60s; pool vazio não é allResting', () => {
   const both = nextGeminiKey([KEY_A, KEY_B], NOW);
   assert.equal(both.allResting, true);
   assert.ok(both.key, 'mesmo com allResting deve devolver uma chave para tentar nesta requisição');
+});
+
+test('recordKeyUsage após 429 zera o cooldown para a chave não ficar presa', () => {
+  markGeminiKeyExhausted(KEY_A, 60, NOW);
+  assert.equal(isGeminiKeyHealthy(KEY_A, NOW), false);
+  recordKeyUsage(KEY_A, 20, NOW);
+  assert.equal(isGeminiKeyHealthy(KEY_A, NOW), true);
+  assert.equal(getGeminiKeyRecord(KEY_A, NOW).cooldownUntil, 0);
+});
+
+test('collectGeminiKeys inclui GEMINI_API_KEY e os slots 8–10', () => {
+  const keys = collectGeminiKeys({
+    GEMINI_API_KEY: 'base-key',
+    GEMINI_API_KEY_8: 'key-eight',
+    GEMINI_API_KEY_9: 'key-nine',
+    GEMINI_API_KEY_10: 'key-ten',
+  });
+  assert.deepEqual([...keys].sort(), ['base-key', 'key-eight', 'key-nine', 'key-ten'].sort());
 });

@@ -4,7 +4,7 @@ import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
 import { loadGmHandler } from './load-gm.mjs';
 
 const { default: handler } = await loadGmHandler();
-const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 
 test('Mestre: validação, respostas completas e indisponibilidade', async () => {
   const originalFetch = globalThis.fetch;

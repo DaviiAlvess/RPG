@@ -4,7 +4,7 @@ import { markGeminiKeyExhausted, resetGeminiKeyState } from '../lib/gemini-keys.
 import { loadGmHandler } from './load-gm.mjs';
 
 const { default: handler } = await loadGmHandler();
-const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 const FIRST_KEY = 'key-one';
 const SECOND_KEY = 'key-two';
 const NARRATED = 'Narração da segunda chave.';
@@ -219,5 +219,81 @@ test('Cooldown residual em todas as 7 não aborta: a 7ª 200 continua o jogo', {
     assert.equal(res.data.text, NARRATED);
     assert.ok(used.includes(SEVEN_KEYS[6]));
     assert.ok(used.length >= 1);
+  });
+});
+
+const TEN_KEYS = Array.from({ length: 10 }, (_, i) => `key-${i + 1}`);
+
+async function withTenKeys(run) {
+  const previousFetch = globalThis.fetch;
+  const previousKeys = Object.fromEntries(KEY_VARS.map(name => [name, process.env[name]]));
+  for (const name of KEY_VARS) delete process.env[name];
+  TEN_KEYS.forEach((key, i) => { process.env[`GEMINI_API_KEY_${i + 1}`] = key; });
+  try {
+    resetGeminiKeyState();
+    await run();
+  } finally {
+    globalThis.fetch = previousFetch;
+    resetGeminiKeyState();
+    for (const name of KEY_VARS) {
+      if (previousKeys[name] === undefined) delete process.env[name];
+      else process.env[name] = previousKeys[name];
+    }
+  }
+}
+
+test('Narrar: 429 nas 9 primeiras e 200 na 10ª (GEMINI_API_KEY_10) continua o jogo', { timeout: 8000 }, async () => {
+  await withTenKeys(async () => {
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === TEN_KEYS[9]) return okText(NARRATED);
+      return failRes(429);
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, NARRATED);
+    assert.notEqual(res.data?.code, 'RATE_LIMIT');
+    assert.ok(!/A cota da IA esgotou/i.test(res.data?.error || ''));
+    assert.ok(used.includes(TEN_KEYS[9]));
+    assert.ok(used.length >= 10);
+  });
+});
+
+test('Narrar: mistura 429 e 403 não devolve RATE_LIMIT nem a string longa de cota', { timeout: 4000 }, async () => {
+  await withTwoKeys(async () => {
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      if (key === FIRST_KEY) return failRes(429);
+      return failRes(403);
+    };
+    const res = await callHandler(narrateBody);
+    assert.notEqual(res.data?.code, 'RATE_LIMIT');
+    assert.ok(!/A cota da IA esgotou/i.test(res.data?.error || ''));
+    assert.ok(!/Google AI Studio/i.test(res.data?.error || ''));
+  });
+});
+
+test('Narrar: 400 com texto de cota não é RATE_LIMIT; a outra chave 200 segue o jogo', { timeout: 4000 }, async () => {
+  await withTwoKeys(async () => {
+    const used = [];
+    globalThis.fetch = async url => {
+      const key = String(url).split('key=')[1];
+      used.push(key);
+      if (key === FIRST_KEY) {
+        return {
+          ok: false,
+          status: 400,
+          json: async () => ({ error: { message: 'You exceeded your current quota, please check your plan and billing details.' } }),
+        };
+      }
+      return okText(NARRATED);
+    };
+    const res = await callHandler(narrateBody);
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, NARRATED);
+    assert.notEqual(res.data?.code, 'RATE_LIMIT');
+    assert.ok(used.includes(SECOND_KEY));
   });
 });

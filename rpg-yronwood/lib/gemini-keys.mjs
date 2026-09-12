@@ -3,24 +3,14 @@ import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+const NUMBERED_KEY_MAX = 10;
 const KEY_ENV_NAMES = [
-  "GEMINI_API_KEY_1",
-  "GEMINI_API_KEY_2",
-  "GEMINI_API_KEY_3",
-  "GEMINI_API_KEY_4",
-  "GEMINI_API_KEY_5",
-  "GEMINI_API_KEY_6",
-  "GEMINI_API_KEY_7",
+  ...Array.from({ length: NUMBERED_KEY_MAX }, (_, i) => `GEMINI_API_KEY_${i + 1}`),
   "GEMINI_API_KEY",
-  "GEMINI_KEY_1",
-  "GEMINI_KEY_2",
-  "GEMINI_KEY_3",
-  "GEMINI_KEY_4",
-  "GEMINI_KEY_5",
-  "GEMINI_KEY_6",
-  "GEMINI_KEY_7",
+  ...Array.from({ length: NUMBERED_KEY_MAX }, (_, i) => `GEMINI_KEY_${i + 1}`),
   "GEMINI_KEY",
 ];
+const NUMBERED_KEY_NAME = /^(?:GEMINI_API_KEY|GEMINI_KEY)_\d+$/;
 
 const DEFAULT_DAILY_BUDGET = 250_000;
 const DEFAULT_COOLDOWN_MS = 60_000;
@@ -112,7 +102,11 @@ export function dailyTokenBudget(env = process.env) {
 }
 
 export function collectGeminiKeys(env = process.env) {
-  return [...new Set(KEY_ENV_NAMES.map(name => env[name]).filter(Boolean))];
+  const names = new Set(KEY_ENV_NAMES);
+  for (const name of Object.keys(env)) {
+    if (NUMBERED_KEY_NAME.test(name)) names.add(name);
+  }
+  return [...new Set([...names].map(name => env[name]).filter(Boolean))];
 }
 
 export function parseUsageTokens(data) {
@@ -143,6 +137,8 @@ export function recordKeyUsage(key, tokens, now = Date.now()) {
   rec.tokensUsed += Math.max(0, Math.floor(Number(tokens) || 0));
   rec.requestCount += 1;
   rec.lastUsedAt = now;
+  rec.cooldownUntil = 0;
+  rec.last429At = 0;
   persist();
   return { ...rec };
 }

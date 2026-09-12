@@ -1513,7 +1513,8 @@ export default function RPG() {
       if (pendingLevelNote) pendingLevelNoteRef.current = pendingLevelNote;
       clearAuto(); setAutoMode(false); autoRef.current = false;
       setMsgs(baseMsgs); setDisp(baseDisp); setInput(text);
-      setFailedAction({ text, baseMsgs, baseDisp, camp: retryCamp, lore, skipPlan, errorMessage: error.message, retryAt: Date.now() + Math.min(300, Math.max(0, Number(error.retryAfter) || 0)) * 1000 });
+      const waitSec = baseMsgs.length === 0 ? 0 : Math.min(300, Math.max(0, Number(error.retryAfter) || 0));
+      setFailedAction({ text, baseMsgs, baseDisp, camp: retryCamp, lore, skipPlan, errorMessage: error.message, retryAt: Date.now() + waitSec * 1000 });
       showNotification(error.message || "Erro ao contatar o Mestre. Sua ação foi preservada.", "error");
     }
 

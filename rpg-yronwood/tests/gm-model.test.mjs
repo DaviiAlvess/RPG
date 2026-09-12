@@ -4,7 +4,7 @@ import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
 import { loadGmHandler } from './load-gm.mjs';
 
 const { default: handler } = await loadGmHandler();
-const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 test('Modelo atual, configuração e aviso de modelo indisponível', async () => {
   const originalFetch = globalThis.fetch;
   const names = [...KEY_VARS, 'GEMINI_MODEL', 'GEMINI_LORE_MODEL'];
@@ -60,6 +60,18 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     const recovered = await call(body);
     assert.equal(recovered.code, 200);
     assert.ok(urls.some(url => url.includes('/models/gemini-2.5-flash:generateContent')));
+    const loreUrls = [];
+    globalThis.fetch = async url => {
+      loreUrls.push(String(url));
+      if (String(url).includes('/models/gemini-3.5-flash-lite:generateContent') || String(url).includes('/models/lore-test:generateContent')) {
+        return { ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Briefing.' }] } }] }) };
+    };
+    delete process.env.GEMINI_LORE_MODEL;
+    const loreRecovered = await call({ useLoreSearch: true, world: 'Teste' });
+    assert.equal(loreRecovered.code, 200);
+    assert.ok(loreUrls.some(url => url.includes('/models/gemini-2.5-flash:generateContent')));
     globalThis.fetch = async () => ({ ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) });
     const result = await call(body); assert.equal(result.code, 503); assert.ok(result.data.error.includes('GEMINI_MODEL'));
   } finally {

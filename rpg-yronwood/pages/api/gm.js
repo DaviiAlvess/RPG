@@ -13,7 +13,7 @@ const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
 const GM_DEADLINE_MS = 45000;
 const MAX_DEADLINE_MS = 55000;
 const MIN_ATTEMPTS = 1;
-const MAX_ATTEMPTS_CAP = 7;
+const MAX_ATTEMPTS_CAP = 16;
 const PER_REQUEST_MS = 12000;
 const MIN_PER_REQUEST_MS = 5000;
 const UPSTREAM_BACKOFF_MS = 250;
@@ -29,15 +29,6 @@ const hasGoogleSearch = body => Array.isArray(body?.tools) && body.tools.some(t 
 const geminiText = data => data?.candidates?.[0]?.content?.parts
   ?.filter((part) => !part.thought && typeof part.text === "string")
   .map((part) => part.text).join("");
-const SEARCH_FALLBACK_CODES = new Set([
-  "API_REQUEST",
-  "EMPTY_RESPONSE",
-  "CONTENT_BLOCKED",
-  "TIMEOUT",
-  "NETWORK",
-  "UPSTREAM_RESPONSE",
-  "UPSTREAM_UNAVAILABLE",
-]);
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 export const config = { maxDuration: 60 };
@@ -102,15 +93,27 @@ export default async function handler(req, res) {
     const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, Math.floor((deadlineMs - 2000) / maxAttempts)));
     const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
     let modelIdx = 0;
+    let apiVersion = "v1beta";
     let lastError = null;
+    let lastNonRateLimitError = null;
     let emptyRetries = 0;
     const deadline = Date.now() + deadlineMs;
     const triedThisCall = new Set();
     const authRefusedKeys = new Set();
     const rateLimitedKeys = new Set();
+    const tryAgainError = () => {
+      const error = new Error("O Mestre não respondeu agora. Tente de novo.");
+      error.status = 502;
+      error.code = "UPSTREAM_UNAVAILABLE";
+      return error;
+    };
+    const setLastError = (err) => {
+      lastError = err;
+      if (err && err.code !== "RATE_LIMIT") lastNonRateLimitError = err;
+    };
 
-    const postGemini = (apiKey, modeloAtual, requestBody, signal) => fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modeloAtual}:generateContent?key=${apiKey}`,
+    const postGemini = (apiKey, modeloAtual, requestBody, signal, version = "v1beta") => fetch(
+      `https://generativelanguage.googleapis.com/${version}/models/${modeloAtual}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         signal,
@@ -119,9 +122,19 @@ export default async function handler(req, res) {
       }
     );
 
+    const callGemini = async (apiKey, modeloAtual, requestBody, signal, version) => {
+      const res = await postGemini(apiKey, modeloAtual, requestBody, signal, version);
+      let payload = null;
+      let parsed = true;
+      try { payload = await res.json(); }
+      catch { parsed = false; }
+      return { res, payload, parsed };
+    };
+
     const skipRefusedKey = (apiKey) => {
       triedThisCall.add(apiKey);
       authRefusedKeys.add(apiKey);
+      apiVersion = "v1beta";
     };
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -138,14 +151,20 @@ export default async function handler(req, res) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
       try {
-        const geminiRes = await postGemini(apiKey, modeloAtual, body, controller.signal);
+        let { res: geminiRes, payload: data, parsed } = await callGemini(apiKey, modeloAtual, body, controller.signal, apiVersion);
+        // google_search is optional: a 403/429 on grounding must not be treated as key quota/auth.
+        if (hasGoogleSearch(body) && (!parsed || !geminiRes.ok || !geminiText(data))) {
+          const stripped = await callGemini(apiKey, modeloAtual, withoutGoogleSearch(body), controller.signal, apiVersion);
+          geminiRes = stripped.res;
+          data = stripped.payload;
+          parsed = stripped.parsed;
+        }
 
-        let data;
-        try { data = await geminiRes.json(); }
-        catch {
-          lastError = new Error("O serviço de IA retornou uma resposta inválida. Tente novamente em instantes.");
-          lastError.status = 502;
-          lastError.code = "UPSTREAM_RESPONSE";
+        if (!parsed) {
+          const invalid = new Error("O serviço de IA retornou uma resposta inválida. Tente novamente em instantes.");
+          invalid.status = 502;
+          invalid.code = "UPSTREAM_RESPONSE";
+          setLastError(invalid);
           triedThisCall.add(apiKey);
           if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
           continue;
@@ -156,13 +175,14 @@ export default async function handler(req, res) {
           markGeminiKeyExhausted(apiKey, headerRetry);
           triedThisCall.add(apiKey);
           rateLimitedKeys.add(apiKey);
-          lastError = quotaError(headerRetry);
+          setLastError(quotaError(headerRetry));
           continue;
         }
         if (geminiRes.status === 500 || geminiRes.status === 502 || geminiRes.status === 503) {
-          lastError = new Error("O serviço de IA está temporariamente indisponível. Tente novamente em instantes.");
-          lastError.status = geminiRes.status;
-          lastError.code = "UPSTREAM_UNAVAILABLE";
+          const unavailableUpstream = new Error("O serviço de IA está temporariamente indisponível. Tente novamente em instantes.");
+          unavailableUpstream.status = geminiRes.status;
+          unavailableUpstream.code = "UPSTREAM_UNAVAILABLE";
+          setLastError(unavailableUpstream);
           triedThisCall.add(apiKey);
           if (attempt < maxAttempts - 1 && deadline - Date.now() > 1000) await wait(UPSTREAM_BACKOFF_MS);
           continue;
@@ -170,60 +190,46 @@ export default async function handler(req, res) {
 
         if (!geminiRes.ok) {
           const message = data?.error?.message || "";
-          const unavailable = geminiRes.status === 404 || /no longer available|deprecated|not available to new users/i.test(message);
-          const quotaHint = /quota|rate.?limit|resource.?exhausted/i.test(message);
+          const unavailable = geminiRes.status === 404 || /no longer available|deprecated|not available to new users|not found for API version/i.test(message);
           const authError = geminiRes.status === 401 || geminiRes.status === 403 || /api key not valid|api_key_invalid/i.test(message);
-          if (unavailable && modelIdx < models.length - 1) {
-            modelIdx += 1;
+          if (unavailable && apiVersion === "v1beta") {
+            apiVersion = "v1";
             attempt -= 1;
             continue;
           }
-          if (quotaHint && !unavailable && !authError) {
-            triedThisCall.add(apiKey);
-            lastError = quotaError(90);
+          if (unavailable && modelIdx < models.length - 1) {
+            modelIdx += 1;
+            apiVersion = "v1beta";
+            attempt -= 1;
             continue;
           }
-          lastError = new Error(unavailable
+          const refused = new Error(unavailable
             ? "O modelo do Mestre não está disponível. Atualize GEMINI_MODEL no servidor e publique novamente o site. Sua ação foi preservada."
             : authError ? recusarChave().message
             : "A solicitação foi recusada pela IA. Confira o modelo e a configuração da API no servidor.");
-          lastError.status = unavailable ? 503 : 502;
-          lastError.code = unavailable ? "MODEL_UNAVAILABLE" : authError ? "API_AUTH" : "API_REQUEST";
-          if (unavailable) break;
+          refused.status = unavailable ? 503 : 502;
+          refused.code = unavailable ? "MODEL_UNAVAILABLE" : authError ? "API_AUTH" : "API_REQUEST";
+          setLastError(refused);
+          if (unavailable) {
+            triedThisCall.add(apiKey);
+            apiVersion = "v1beta";
+            continue;
+          }
           if (authError) {
-            if (hasGoogleSearch(body)) {
-              const retryRes = await postGemini(apiKey, modeloAtual, withoutGoogleSearch(body), controller.signal);
-              let retryData = null;
-              try { retryData = await retryRes.json(); } catch { retryData = null; }
-              if (retryRes.status === 429) {
-                const headerRetry = retryRes.headers?.get?.("retry-after");
-                markGeminiKeyExhausted(apiKey, headerRetry);
-                triedThisCall.add(apiKey);
-                rateLimitedKeys.add(apiKey);
-                lastError = quotaError(headerRetry);
-                continue;
-              }
-              if (retryRes.ok) {
-                const retryText = geminiText(retryData);
-                if (retryText) {
-                  recordKeyUsage(apiKey, parseUsageTokens(retryData));
-                  return retryText;
-                }
-              }
-            }
             skipRefusedKey(apiKey);
             continue;
           }
-          lastError.fatal = true;
-          throw lastError;
+          triedThisCall.add(apiKey);
+          continue;
         }
 
         const text = geminiText(data);
         if (!text) {
           const blocked = Boolean(data?.promptFeedback?.blockReason) || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(data?.candidates?.[0]?.finishReason);
-          lastError = new Error(blocked ? "A IA não respondeu a esse conteúdo. Reformule sua ação e tente novamente." : "O Mestre retornou uma resposta vazia. Sua ação foi preservada; tente novamente.");
-          lastError.code = blocked ? "CONTENT_BLOCKED" : "EMPTY_RESPONSE";
-          lastError.status = blocked ? 422 : 502;
+          const empty = new Error(blocked ? "A IA não respondeu a esse conteúdo. Reformule sua ação e tente novamente." : "O Mestre retornou uma resposta vazia. Sua ação foi preservada; tente novamente.");
+          empty.code = blocked ? "CONTENT_BLOCKED" : "EMPTY_RESPONSE";
+          empty.status = blocked ? 422 : 502;
+          setLastError(empty);
           if (blocked) { lastError.fatal = true; throw lastError; }
           if (emptyRetries < 1 && attempt < maxAttempts - 1) {
             emptyRetries += 1;
@@ -239,11 +245,12 @@ export default async function handler(req, res) {
         if (err.fatal) throw err;
         triedThisCall.add(apiKey);
         const timedOut = err.name === "AbortError";
-        lastError = new Error(timedOut
+        const networkErr = new Error(timedOut
           ? "O Mestre demorou para responder. Tente novamente."
           : "Não foi possível conectar ao Mestre. Tente novamente.");
-        lastError.status = timedOut ? 504 : 502;
-        lastError.code = timedOut ? "TIMEOUT" : "NETWORK";
+        networkErr.status = timedOut ? 504 : 502;
+        networkErr.code = timedOut ? "TIMEOUT" : "NETWORK";
+        setLastError(networkErr);
         const untried = chavesUnicas.filter(key => !triedThisCall.has(key));
         if (timedOut && untried.length <= 1) break;
         if (deadline - Date.now() < 2000) break;
@@ -253,19 +260,19 @@ export default async function handler(req, res) {
     }
 
     if (authRefusedKeys.size >= chavesUnicas.length) throw lastError?.code === "API_AUTH" ? lastError : recusarChave();
-    if (rateLimitedKeys.size >= chavesUnicas.length) {
+    if (chavesUnicas.length > 0 && rateLimitedKeys.size >= chavesUnicas.length) {
       const resting = nextGeminiKey(chavesUnicas);
       throw geminiKeysAllRestingError(resting.retryAfterSec);
     }
-    throw lastError || new Error("O Mestre está indisponível. Tente em instantes.");
+    if (lastError?.code === "RATE_LIMIT") throw lastNonRateLimitError || tryAgainError();
+    throw lastError || tryAgainError();
   };
 
   const chamarGeminiComBusca = async (body, modelo) => {
     try {
       return await chamarGemini(withGoogleSearch(body), modelo);
-    } catch (error) {
-      if (SEARCH_FALLBACK_CODES.has(error.code)) return chamarGemini(body, modelo);
-      throw error;
+    } catch {
+      return chamarGemini(body, modelo);
     }
   };
 

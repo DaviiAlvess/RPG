@@ -12,7 +12,7 @@ import {
 import { loadGmHandler } from './load-gm.mjs';
 
 const { default: handler } = await loadGmHandler();
-const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
+const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 const okText = (tokens = 20) => ({
   ok: true,
   status: 200,
@@ -287,6 +287,47 @@ test('Lore/grounding: 403 ou recusa da busca gera de novo sem google_search', as
     });
     assert.equal(grounded.code, 200);
     assert.equal(grounded.data.text, 'Briefing sem busca.');
+    assert.deepEqual(bodies[0].tools, [{ google_search: {} }]);
+    assert.equal(bodies.at(-1).tools, undefined);
+
+    bodies.length = 0;
+    globalThis.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      bodies.push(body);
+      if (body.tools) {
+        return {
+          ok: false,
+          status: 429,
+          headers: { get: () => '30' },
+          json: async () => ({ error: { message: 'RESOURCE_EXHAUSTED: google_search quota' } }),
+        };
+      }
+      return okText();
+    };
+    const searchQuota = await callHandler({
+      messages: [{ role: 'user', content: 'Começar' }],
+      systemPrompt: 'Narre.',
+      useGrounding: true,
+    });
+    assert.equal(searchQuota.code, 200);
+    assert.notEqual(searchQuota.data?.code, 'RATE_LIMIT');
+    assert.deepEqual(bodies[0].tools, [{ google_search: {} }]);
+    assert.equal(bodies.at(-1).tools, undefined);
+    assert.equal(isGeminiKeyHealthy('live'), true);
+
+    bodies.length = 0;
+    globalThis.fetch = async (_url, options) => {
+      const body = JSON.parse(options.body);
+      bodies.push(body);
+      if (body.tools) {
+        return { ok: false, status: 403, json: async () => ({ error: { message: 'You exceeded your current quota, please check your plan and billing details.' } }) };
+      }
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Sem busca.' }] } }] }) };
+    };
+    const quotaText = await callHandler({ useLoreSearch: true, world: 'Westeros' });
+    assert.equal(quotaText.code, 200);
+    assert.equal(quotaText.data.lore, 'Sem busca.');
+    assert.notEqual(quotaText.data?.code, 'RATE_LIMIT');
     assert.deepEqual(bodies[0].tools, [{ google_search: {} }]);
     assert.equal(bodies.at(-1).tools, undefined);
   } finally {

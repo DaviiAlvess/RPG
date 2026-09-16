@@ -79,7 +79,7 @@ function scoreOption(option, preferWords) {
 
 function detectTraits(camp) {
   const blob = normalizeText(
-    [camp?.charPersonality, camp?.charBg, camp?.charSkills, camp?.charTitle].filter(Boolean).join(" ")
+    [camp?.charPersonality, camp?.charBg, camp?.charSkills, camp?.charTitle, camp?.charSituation].filter(Boolean).join(" ")
   );
   const matched = TRAIT_PROFILES.filter((profile) =>
     profile.keywords.some((keyword) => blob.includes(keyword))

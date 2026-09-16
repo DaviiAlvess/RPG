@@ -121,6 +121,60 @@ function LevelUpChoice({ attributes, skills, onConfirm, onCancel }) {
   );
 }
 
+function StoryConditionEditor({ campaign, onSave, disabled }) {
+  const c = campaign || {};
+  const snapshot = () => ({
+    charTitle: c.charTitle || "",
+    charSituation: c.charSituation || "",
+    charSkills: c.charSkills || "",
+    charBg: c.charBg || "",
+    storyStartPoint: c.storyStartPoint || "",
+  });
+  const [form, setForm] = useState(snapshot);
+  useEffect(() => { setForm(snapshot()); }, [c.id, c.charTitle, c.charSituation, c.charSkills, c.charBg, c.storyStartPoint]);
+  const set = (key) => (event) => setForm((prev) => ({ ...prev, [key]: event.target.value }));
+  const save = () => {
+    if (disabled || !onSave) return;
+    onSave(form);
+  };
+  return (
+    <div className="card-box identity-editor">
+      <div className="section-label">Condição atual</div>
+      <p className="panel-sub" style={{ marginTop: 0 }}>
+        O Mestre usa o cargo de agora na cena. Origem e premissa inicial continuam no prompt se você perguntar pelo começo.
+      </p>
+      {c.charOriginTitle && c.charOriginTitle !== (form.charTitle || c.charTitle) ? (
+        <div className="panel-sub">Origem: {c.charOriginTitle}</div>
+      ) : null}
+      <div className="identity-fields">
+        <label>
+          Cargo atual
+          <input className="field-input" value={form.charTitle} onChange={set("charTitle")} placeholder="ex: guarda da porta" disabled={disabled} />
+        </label>
+        <label>
+          Situação atual
+          <textarea className="time-textarea" rows={3} value={form.charSituation} onChange={set("charSituation")} placeholder="Como o mundo te trata agora" disabled={disabled} />
+        </label>
+        <label>
+          Talentos atuais
+          <textarea className="time-textarea" rows={2} value={form.charSkills} onChange={set("charSkills")} placeholder="O que você sabe fazer agora" disabled={disabled} />
+        </label>
+        <label>
+          História de origem
+          <textarea className="time-textarea" rows={3} value={form.charBg} onChange={set("charBg")} placeholder="De onde você veio — o Mestre lembra disso" disabled={disabled} />
+        </label>
+        <label>
+          Premissa inicial
+          <textarea className="time-textarea" rows={2} value={form.storyStartPoint} onChange={set("storyStartPoint")} placeholder="Como a campanha começou" disabled={disabled} />
+        </label>
+      </div>
+      <button className="inventory-add-btn" type="button" onClick={save} disabled={disabled || !onSave}>
+        Salvar no prompt
+      </button>
+    </div>
+  );
+}
+
 function renderMessageTime(message) {
   return fmtTime(message?.ts || message?.time || message?.createdAt || message?.timestamp);
 }
@@ -224,6 +278,7 @@ export default function PlayView(props) {
     insertCmd,
     toggleMission,
     intervene,
+    onUpdateCharacter,
   } = props;
 
   const c = active || {};
@@ -588,6 +643,8 @@ export default function PlayView(props) {
               <div className="panel-sub">{c.charName || "Herói sem nome"}{c.charTitle ? ` · ${c.charTitle}` : ""}</div>
             </div>
 
+            <StoryConditionEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
+
             <div className="card-box game-time-card">
               <div className="section-label">Linha do tempo</div>
               <div className="game-time-display">
@@ -727,18 +784,6 @@ export default function PlayView(props) {
                     <span className="skill-val">{experience || 0}</span>
                   </div>
                 </div>
-                {c.charBg ? (
-                  <div style={{ marginTop: 12 }}>
-                    <div className="section-label">História</div>
-                    <div className="panel-sub" style={{ lineHeight: 1.7, marginTop: 0 }}>{c.charBg}</div>
-                  </div>
-                ) : null}
-                {c.charSkills ? (
-                  <div style={{ marginTop: 12 }}>
-                    <div className="section-label">Talentos narrativos</div>
-                    <div className="panel-sub" style={{ lineHeight: 1.7, marginTop: 0 }}>{c.charSkills}</div>
-                  </div>
-                ) : null}
               </div>
 
               <div className="card-box">

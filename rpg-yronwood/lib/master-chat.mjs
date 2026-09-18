@@ -106,7 +106,7 @@ export function masterGuidance(campaign) {
   if (!items.length) return '';
   return [
     'ACORDOS DA MESA — respeite os acordos da mesa em cada turno de narração.',
-    'São preferências de condução e tom; não são acontecimento, recompensa nem alteração automática da ficha. Preserve as decisões do jogador e os resultados confirmados.',
+    'Pedidos aplicados em Falar com o Mestre são FATO da mesa (atração, cargo, correção de cena, relações). Mostre isso na narração. Isso prevalece sobre a regra de não dar intimidade gratuita com protagonistas quando o jogador pediu na conversa com o Mestre. Não invente XP, itens ou recompensas só por um acordo de tom.',
     items.map(item => `- ${item}`).join('\n'),
   ].join('\n');
 }
@@ -136,7 +136,7 @@ export function describeMasterChatChanges(changes = {}) {
     changes.acordo && 'Acordo salvo',
     changes.cargo && 'Cargo atualizado',
     changes.relacao && 'Relação atualizada',
-    changes.intervencao && 'Intervenção na próxima cena',
+    changes.intervencao && 'Intervenção na cena',
   ].filter(Boolean).join('. ');
 }
 
@@ -144,18 +144,97 @@ export function masterInterventionContext(note, { short = false } = {}) {
   const text = String(note || '').trim();
   if (!text) return '';
   const head = short ? 'CONTEXTO INTERNO' : 'CONTEXTO INTERNO (não é fala do jogador)';
-  return `${head}: INTERVENÇÃO DO MESTRE — aplique AGORA nesta narração (atração de NPC, cargo, retcon ou correção da cena): ${text}`;
+  return `${head}: INTERVENÇÃO DO MESTRE — aplique AGORA nesta narração (atração de NPC, cargo, retcon ou correção da cena). Isso é FATO da mesa e prevalece sobre a regra de não dar intimidade gratuita com protagonistas: ${text}`;
+}
+
+const requestNorm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+export function isMasterChangeRequest(text) {
+  const n = requestNorm(text);
+  const wantsChange = /(quero que|faz (com )?que|faca |peco que|muda|mudar|corrige|corrigir|intervir|interven|aplica)/.test(n);
+  const hasTarget = /(atra[cç]|apaixon|interesse|romance|namor|cargo|situacao|relacao|cena|intimidade|trate|olhe|sinta)/.test(n);
+  return (wantsChange && hasTarget) || /(atra[cç]|apaixon|romance|namor)/.test(n);
+}
+
+function namesFromSupportingCast(text) {
+  const found = [];
+  for (const match of String(text || '').matchAll(/\b([A-ZÁÉÍÓÚÂÊÔÃ][\p{L}'-]{2,40})(?:\s+[A-ZÁÉÍÓÚÂÊÔÃ][\p{L}'-]{2,40})?\b/gu)) {
+    found.push(match[0].trim());
+  }
+  return found;
+}
+
+export function inferNpcNameFromRequest(campaign = {}, question = '') {
+  const names = [
+    ...Object.keys(campaign.relationships || {}),
+    ...Object.keys(campaign.worldState?.npcs || {}),
+    ...namesFromSupportingCast(campaign.supportingCast),
+  ].filter(Boolean).sort((a, b) => b.length - a.length);
+  for (const name of names) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(question)) return name;
+  }
+  const match = String(question || '').match(/(?:que(?:\s+(?:a|o|as|os))?|para a|para o|pra)\s+([A-ZÁÉÍÓÚÂÊÔÃ][\p{L}'-]{1,40})/u);
+  return match ? match[1] : '';
+}
+
+export function inferMasterTags(campaign, question) {
+  if (!isMasterChangeRequest(question)) return [];
+  const npc = inferNpcNameFromRequest(campaign, question);
+  const attraction = /atra[cç]|apaixon|romance|namor|interesse (em mim|por mim|romant)/.test(requestNorm(question));
+  if (attraction) {
+    const who = npc || 'O NPC da cena';
+    const tags = [];
+    if (npc) tags.push(`[RELAÇÃO:${npc}|Amigável]`);
+    tags.push(`[ACORDO: ${who} demonstra atração pelo jogador]`);
+    tags.push(`[INTERVENÇÃO: ${who} demonstra atração pelo jogador na cena atual]`);
+    return tags;
+  }
+  const note = String(question || '').trim().slice(0, MASTER_INTERVENTION_MAX);
+  return note ? [`[INTERVENÇÃO: ${note}]`] : [];
+}
+
+function mergeInferredMasterTags(gmText, inferred = []) {
+  let tagged = String(gmText || '');
+  if (!inferred.length) return tagged;
+  const hasRel = /\[RELA[CÇ][AÃ]O:/i.test(tagged);
+  const hasAcordo = parseAcordoTags(tagged).length > 0;
+  const hasInter = parseIntervencaoTags(tagged).length > 0;
+  const extra = inferred.filter(tag => {
+    if (/\[RELA[CÇ][AÃ]O:/i.test(tag)) return !hasRel;
+    if (/\[ACORDO:/i.test(tag)) return !hasAcordo;
+    if (/\[INTERVEN/i.test(tag)) return !hasInter;
+    return true;
+  });
+  return extra.length ? `${tagged}\n${extra.join('\n')}` : tagged;
+}
+
+export const MASTER_BEAT_PREFIX = '[O Mestre da mesa aplicou:';
+
+export function buildMasterBeatMessage(note) {
+  const text = String(note || 'o pedido da mesa').trim().slice(0, MASTER_INTERVENTION_MAX);
+  return `${MASTER_BEAT_PREFIX} ${text}]
+Isto não é uma ação do personagem. Continue a CENA ATUAL (não avance tempo). Em um beat curto, mostre o pedido já valendo — olhar, gesto, tom, como o NPC trata o jogador agora. Não recuse por ser protagonista ou por intimidade. Não fale, escolha ou sinta pelo jogador.`;
+}
+
+export function isMasterBeatMessage(text) {
+  return String(text || '').trim().startsWith(MASTER_BEAT_PREFIX);
+}
+
+export function masterBeatDisplay() {
+  return 'O Mestre aplicou o pedido na cena.';
 }
 
 /** Aplica tags da conversa com o Mestre ao estado da campanha, sem narrar. */
-export function applyMasterChatReply(campaign = {}, gmText = '') {
-  const extracted = parseAcordoTags(gmText);
+export function applyMasterChatReply(campaign = {}, gmText = '', playerRequest = '') {
+  let tagged = mergeInferredMasterTags(gmText, inferMasterTags(campaign, playerRequest));
+  const extracted = parseAcordoTags(tagged);
   const merged = extracted.length
     ? mergeMasterAgreements(campaign, extracted)
     : { list: listMasterAgreements(campaign), added: [] };
-  const identity = parseIdentityTags(gmText, campaign);
-  const relationships = parseRelationships(gmText, campaign.relationships || {});
-  const incoming = parseIntervencaoTags(gmText).join(' ').trim().slice(0, MASTER_INTERVENTION_MAX);
+  const identity = parseIdentityTags(tagged, campaign);
+  const relationships = parseRelationships(tagged, campaign.relationships || {});
+  const incoming = parseIntervencaoTags(tagged).join(' ').trim().slice(0, MASTER_INTERVENTION_MAX);
   const previousNote = String(campaign.pendingMasterNote || '').trim();
   const pendingMasterNote = [previousNote, incoming].filter(Boolean).join(' ').slice(0, MASTER_INTERVENTION_MAX);
   const changes = {
@@ -180,6 +259,7 @@ export function applyMasterChatReply(campaign = {}, gmText = '') {
     },
     added: merged.added,
     changes,
+    needsSceneBeat: Boolean(changes.intervencao || changes.relacao || changes.cargo),
     status: describeMasterChatChanges(changes),
   };
 }
@@ -199,7 +279,7 @@ export function masterChatPrompt(campaign) {
     'Você é o Mestre deste RPG conversando diretamente com o jogador FORA da história. Responda em português, de forma clara, breve e acolhedora. Ajude a entender regras, a cena atual e possibilidades; escute pedidos sobre a condução do jogo.',
     'Não narre novas ações, não avance tempo, não role dados e não conceda recompensas. Não escreva uma cena completa. Esta conversa continua fora da história. Não revele segredos desconhecidos do personagem. Se faltar informação, diga isso.',
     'Pedidos do jogador aqui são LEI e valem NA HORA. Se pedirem para mudar sentimentos de NPC, cargo, situação, talentos, a cena atual ou uma regra da mesa, CONFIRME em uma frase que isso já vale e, nas últimas linhas, emita as tags ocultas. O aplicativo APLICA as tags imediatamente. Diga que aplicou.',
-    'Tags permitidas (nunca no texto falado; só nas últimas linhas): [ACORDO: regra duradoura de tom/ritmo/mesa] [CARGO:novo título] [SITUAÇÃO:frase curta] [HABILIDADE:talentos atuais] [RELAÇÃO:Nome|Atitude] [INTERVENÇÃO:instrução curta para o narrador aplicar NA PRÓXIMA cena].',
+    'Tags permitidas (nunca no texto falado; só nas últimas linhas): [ACORDO: regra duradoura de tom/ritmo/mesa] [CARGO:novo título] [SITUAÇÃO:frase curta] [HABILIDADE:talentos atuais] [RELAÇÃO:Nome|Atitude] [INTERVENÇÃO:instrução curta para o narrador aplicar NA CENA ATUAL].',
     'Atitudes válidas: Hostil, Suspeito, Neutral, Amigável. Atração de um NPC pelo jogador → [RELAÇÃO:Nome|Amigável] mais [ACORDO: Nome demonstra atração pelo jogador] e [INTERVENÇÃO: Nome demonstra atração pelo jogador na cena atual].',
     'Exemplo: "quero que a Arya tenha atração por mim" → confirme e emita [RELAÇÃO:Arya|Amigável] [ACORDO: Arya demonstra atração pelo jogador] [INTERVENÇÃO: Arya demonstra atração pelo jogador na cena atual]. Hostil/Suspeito/Neutral conforme o pedido.',
     `Campanha: ${campaign.world}. Personagem: ${campaign.charName}.`,

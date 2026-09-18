@@ -1,11 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   MASTER_AGREEMENTS_MAX,
   appendMasterAgreements,
   applyMasterAgreements,
   applyMasterChatReply,
+  buildMasterBeatMessage,
   capMasterAgreements,
+  inferMasterTags,
+  inferNpcNameFromRequest,
+  isMasterBeatMessage,
+  isMasterChangeRequest,
   listMasterAgreements,
   masterChatPrompt,
   masterGuidance,
@@ -82,6 +88,8 @@ test('Acordos novos entram no prompt e o excesso é cortado sem perder os mais r
   const prompt = masterGuidance({ masterAgreements: ['Nunca falar pelo jogador'] });
   assert.ok(prompt.includes('Nunca falar pelo jogador'));
   assert.ok(prompt.includes('respeite os acordos da mesa'));
+  assert.ok(prompt.includes('FATO da mesa'));
+  assert.ok(!prompt.includes('não são acontecimento'));
 });
 
 test('Extrai [INTERVENÇÃO:] e remove todas as tags da conversa visível', () => {
@@ -123,6 +131,7 @@ test('applyMasterChatReply aplica tags na hora e guarda intervenção para a pr�
   assert.equal(next.changes.intervencao, true);
   assert.ok(next.status.includes('Acordo salvo'));
   assert.ok(next.status.includes('Relação atualizada'));
+  assert.equal(next.needsSceneBeat, true);
   assert.deepEqual(campaign.relationships, { Arya: 'Neutral' });
 });
 
@@ -150,10 +159,62 @@ test('Intervenção do Mestre entra no prompt de narração e no modo economia',
   assert.ok(full.includes('CONTEXTO INTERNO (não é fala do jogador)'));
   assert.ok(full.includes('aplique AGORA'));
   assert.ok(full.includes(note));
+  assert.ok(full.includes('prevalece sobre a regra de não dar intimidade'));
   assert.ok(short.startsWith('CONTEXTO INTERNO:'));
   assert.equal(masterInterventionContext(''), '');
   const economy = economyPrompt({ world: 'Westeros', charName: 'Edric', pendingMasterNote: note, items: [] }, '', 'Dia 2');
   assert.ok(economy.includes('INTERVENÇÃO DO MESTRE'));
   assert.ok(economy.includes(note));
   assert.ok(economy.includes('aplique AGORA'));
+});
+
+test('Pedido de atração sem tags do modelo ainda aplica relação e pede beat na cena', () => {
+  assert.equal(isMasterChangeRequest('quero que a Arya tenha atração por mim'), true);
+  assert.equal(isMasterChangeRequest('quero que Arya tenha atração por mim'), true);
+  assert.equal(isMasterChangeRequest('por que preciso desse teste?'), false);
+  assert.equal(isMasterChangeRequest('quero que você explique o teste de Força'), false);
+  const campaign = { relationships: { Arya: 'Neutral' }, masterAgreements: [], memory: '' };
+  assert.equal(inferNpcNameFromRequest(campaign, 'quero que Arya tenha atração por mim'), 'Arya');
+  assert.equal(inferNpcNameFromRequest({}, 'quero que a Sansa tenha atração por mim'), 'Sansa');
+  const tags = inferMasterTags(campaign, 'quero que a Arya tenha atração por mim');
+  assert.ok(tags.some(tag => tag.includes('RELAÇÃO:Arya|Amigável')));
+  const next = applyMasterChatReply(campaign, 'Combinado, vou considerar isso.', 'quero que a Arya tenha atração por mim');
+  assert.equal(next.patch.relationships.Arya, 'Amigável');
+  assert.ok(next.patch.masterAgreements.some(item => item.includes('Arya demonstra atração')));
+  assert.ok(next.patch.pendingMasterNote.includes('Arya demonstra atração'));
+  assert.equal(next.visible, 'Combinado, vou considerar isso.');
+  assert.equal(next.needsSceneBeat, true);
+  assert.ok(next.changes.relacao);
+  assert.ok(next.changes.intervencao);
+  assert.ok(next.changes.acordo);
+});
+
+test('Modelo só com [RELAÇÃO:] ainda infere intervenção para o beat da cena', () => {
+  const campaign = { relationships: { Arya: 'Neutral' }, masterAgreements: [], memory: '' };
+  const next = applyMasterChatReply(campaign, 'Aplicado.\n[RELAÇÃO:Arya|Atraída]', 'quero que a Arya tenha atração por mim');
+  assert.equal(next.patch.relationships.Arya, 'Amigável');
+  assert.ok(next.patch.pendingMasterNote.includes('Arya demonstra atração'));
+  assert.equal(next.needsSceneBeat, true);
+});
+
+test('Beat do Mestre é contexto interno, não fala do jogador', () => {
+  const message = buildMasterBeatMessage('Arya demonstra atração pelo jogador na cena atual');
+  assert.equal(isMasterBeatMessage(message), true);
+  assert.ok(message.includes('CENA ATUAL'));
+  assert.ok(message.includes('Não recuse por ser protagonista'));
+  assert.equal(isMasterBeatMessage('Olho ao redor'), false);
+});
+
+test('askMaster libera o lock e dispara o beat no chat de jogo na hora', async () => {
+  const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
+  const ask = source.slice(source.indexOf('const askMaster'), source.indexOf('const executeTimeSkip'));
+  assert.ok(ask.includes('sending.current = false'));
+  assert.ok(ask.includes('setPlayPanel("narrator")'));
+  assert.ok(ask.includes('sendMsgRef.current'));
+  assert.ok(ask.includes('buildMasterBeatMessage'));
+  assert.ok(ask.includes('needsSceneBeat'));
+  assert.equal(ask.includes('await sendMsg('), false);
+  const economy = economyPrompt({ world: 'Westeros', charName: 'Edric', ordinaryCharacter: true, pendingMasterNote: 'Arya demonstra atração', items: [] }, '', 'Dia 2');
+  assert.ok(economy.includes('EXCETO INTERVENÇÃO DO MESTRE'));
+  assert.ok(economy.includes('fato da mesa'));
 });

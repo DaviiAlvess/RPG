@@ -28,3 +28,9 @@ test('parseRelationships deduplica pelo nome e a última tag válida vence', () 
   assert.deepEqual(parseRelationships('sem tags', { Arya: 'Neutral' }), { Arya: 'Neutral' });
   assert.deepEqual(parseRelationships(''), {});
 });
+
+test('parseRelationships trata atração e sinônimos como Amigável', () => {
+  const next = parseRelationships('[RELAÇÃO:Arya|Atraída] [RELAÇÃO:Jon|apaixonado]', {});
+  assert.equal(next.Arya, 'Amigável');
+  assert.equal(next.Jon, 'Amigável');
+});

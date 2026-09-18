@@ -19,6 +19,7 @@ export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, on
       const result = await onAsk(draft.trim());
       setDraft('');
       if (result?.status) setStatus(result.status);
+      if (result?.needsSceneBeat) onClose();
     }
     catch (failure) { setError(failure.message); setRetryAt(Date.now() + Math.min(300, Math.max(0, Number(failure.retryAfter) || 0)) * 1000); }
   };
@@ -38,7 +39,7 @@ export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, on
   return <div className="modal-overlay"><section className="modal-content master-chat" role="dialog" aria-modal="true" aria-labelledby="master-chat-title">
     <div className="modal-header"><h3 id="master-chat-title">Falar com o Mestre</h3><button type="button" className="modal-close" aria-label="Fechar conversa" disabled={busy} onClick={onClose}>×</button></div>
     <div className="modal-body">
-      <p className="settings-hint">Aqui você fala como jogador, fora da história. Pedidos de mudança valem na hora (relações, cargo, cena): o jogo aplica as tags imediatamente. A conversa continua fora da história.</p>
+      <p className="settings-hint">Pedidos de mudança valem na hora: o narrador mostra na cena atual (atração, cargo, correção), sem esperar a próxima ação. A conversa em si continua fora da história.</p>
       <div className="master-chat-messages" aria-live="polite">
         {!campaign.masterChat?.length ? <p>Pergunte sobre a cena, uma regra ou como deixar a aventura do seu jeito.</p> : null}
         {(campaign.masterChat || []).map((message, index) => <div key={index} className="master-chat-message"><strong>{message.role === 'user' ? 'Você' : 'Mestre'}</strong><NarrativeContent text={stripMasterTags(message.content)} /></div>)}
@@ -52,7 +53,7 @@ export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, on
       </form>
       <section className="master-agreements" aria-labelledby="master-agreements-title">
         <h4 id="master-agreements-title">Acordos da mesa</h4>
-        <p>Estes combinados entram na narração dos próximos turnos. Apague um se não quiser mais.</p>
+        <p>Estes combinados entram na narração na hora, inclusive no beat da cena atual. Apague um se não quiser mais.</p>
         {agreements.length ? <ul className="master-agreement-list">
           {agreements.map((text, index) => <li key={`${index}-${text.slice(0, 24)}`} className="master-agreement">
             <p>{text}</p>

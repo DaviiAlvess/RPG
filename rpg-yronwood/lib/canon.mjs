@@ -4,7 +4,7 @@ export function knownIpFidelityRule(world) {
   return [
     `REGRA DURA — PERMANEÇA EM ${name}.`,
     'Física, lugares nomeados e sistema de poder deste mundo são lei.',
-    'Inventar só extras locais; nunca reescrever o destino canônico dos protagonistas.',
+    'Inventar só extras locais; nunca reescrever o destino canônico dos protagonistas. Exceção: INTERVENÇÃO DO MESTRE (Falar com o Mestre) pedindo atração ou relação na cena atual é fato da mesa — mostre, não recuse.',
     'Se estiver em dúvida, fique no genérico-local — não invente canon falso.',
   ].join(' ');
 }

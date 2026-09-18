@@ -4,7 +4,7 @@ import SpecialAbilitySettings from "../components/SpecialAbilitySettings";
 import { normalizeSpecialAbility, specialAbilityDirection } from "../lib/special-ability.mjs";
 import { gmRequestError, requestJson } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
-import { applyMasterAgreements, applyMasterChatReply, listMasterAgreements, masterChatPrompt, masterGuidance, masterInterventionContext } from "../lib/master-chat.mjs";
+import { applyMasterAgreements, applyMasterChatReply, buildMasterBeatMessage, isMasterBeatMessage, listMasterAgreements, masterBeatDisplay, masterChatPrompt, masterGuidance, masterInterventionContext } from "../lib/master-chat.mjs";
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
 import { knownIpFidelityRule, shouldGroundGmTurn } from "../lib/canon.mjs";
 import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseCompletedMissions, missionXp } from "../lib/progression.mjs";
@@ -181,7 +181,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
   const lines = [
     `Você é o Mestre de um RPG de texto ambientado em: ${c.world}.`,
     c.isKnownIP ? knownIpFidelityRule(c.world) : "",
-    c.ordinaryCharacter ? `PERSONAGEM COADJUVANTE ORIGINAL: iniciou como pessoa comum. Sem profecia, linhagem secreta, poderes exclusivos ou intimidade gratuita com protagonistas. Cargo, treino e influência acompanham a campanha (CONDIÇÃO ATUAL). A origem e o começo permanecem em ORIGEM E COMEÇO e na MEMÓRIA. Eventos e personagens desta aventura são ficção original dentro do cenário, não canon oficial. Esta regra prevalece sobre a regra de exceção de poderes.` : "",
+    c.ordinaryCharacter ? `PERSONAGEM COADJUVANTE ORIGINAL: iniciou como pessoa comum. Sem profecia, linhagem secreta ou poderes exclusivos. Sem intimidade gratuita com protagonistas — EXCETO quando INTERVENÇÃO DO MESTRE ou um acordo da mesa pedir explicitamente atração ou relação: nesse caso obedeça o Mestre. Cargo, treino e influência acompanham a campanha (CONDIÇÃO ATUAL). A origem e o começo permanecem em ORIGEM E COMEÇO e na MEMÓRIA. Eventos e personagens desta aventura são ficção original dentro do cenário, não canon oficial. Esta regra prevalece sobre a regra de exceção de poderes, mas não sobre um pedido explícito em Falar com o Mestre.` : "",
     c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
     c.storyStartPoint ? `PREMISSA INICIAL (começo da campanha, não o status atual): ${c.storyStartPoint}` : "",
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
@@ -220,7 +220,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
       `Este é um universo com lore oficial. Você DEVE:`,
       `- Permanecer na física, nos lugares nomeados e no sistema de poder/magia de "${c.world}".`,
       `- Respeitar personagens, poderes, facções e eventos já estabelecidos no lore acima.`,
-      `- Inventar só extras locais (NPCs menores, vielas, tavernas). Nunca reescrever o destino canônico dos protagonistas.`,
+      `- Inventar só extras locais (NPCs menores, vielas, tavernas). Nunca reescrever o destino canônico dos protagonistas. Exceção: pedido explícito em Falar com o Mestre (atração/relação na cena) é fato da mesa — mostre na narração; não recuse por ser protagonista.`,
       `- NÃO inventar personagens famosos mortos/vivos fora da época, nem mudar o destino de figuras canônicas sem o jogador causar isso.`,
       `- NINGUÉM no mundo — NPCs, vilões, aliados — pode usar poderes, magias ou habilidades que não existem no canon original.`,
       `- Se não souber algo do canon, fique no genérico-local — nunca invente canon falso.`,
@@ -498,6 +498,8 @@ export default function RPG() {
   const skipNextTimeParseRef = useRef(false);
   const pendingLevelNoteRef = useRef("");
   const pendingMasterNoteRef = useRef("");
+  const msgsRef = useRef([]);
+  const dispRef = useRef([]);
 
   function clearAuto() {
     clearTimeout(timerRef.current);
@@ -1344,12 +1346,13 @@ export default function RPG() {
     setInput(""); taRef.current?.blur();
 
     const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
+    const isMasterBeat = isMasterBeatMessage(text);
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
     const newDisp = [
       ...baseDisp,
       {
-        type: isTimeSkipContext ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
-        text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
+        type: isTimeSkipContext || isMasterBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
+        text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
       },
     ];
     setMsgs(newMsgs); setDisp(newDisp);
@@ -1542,6 +1545,8 @@ export default function RPG() {
   };
 
   sendMsgRef.current = sendMsg;
+  msgsRef.current = msgs;
+  dispRef.current = disp;
 
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;
@@ -1787,6 +1792,8 @@ export default function RPG() {
   const askMaster = async (question) => {
     if (!active || sending.current || autoRef.current) throw new Error("Aguarde o turno atual terminar antes de conversar.");
     sending.current = true; setMasterBusy(true);
+    let applied;
+    let beatCamp = null;
     try {
       const history = [...(active.masterChat || []), { role: 'user', content: question.slice(0, 2000) }];
       const response = await apiFetch('/api/gm', { method: 'POST', body: JSON.stringify({
@@ -1796,7 +1803,7 @@ export default function RPG() {
       if (!response.ok || result.error || typeof result.text !== 'string' || !result.text.trim()) {
         throw gmRequestError(result, response.status, 'O Mestre não conseguiu responder. Sua mensagem foi mantida.');
       }
-      const applied = applyMasterChatReply(active, result.text);
+      applied = applyMasterChatReply(active, result.text, question);
       const visible = applied.visible || result.text.trim();
       if (applied.patch.pendingMasterNote) pendingMasterNoteRef.current = applied.patch.pendingMasterNote;
       const updated = {
@@ -1807,8 +1814,31 @@ export default function RPG() {
       };
       setActive(updated); saveCamp(active.id, updated);
       if (applied.status) showNotification(applied.status, "success");
-      return applied;
-    } finally { sending.current = false; setMasterBusy(false); }
+      if (applied.needsSceneBeat) beatCamp = updated;
+    } catch (error) {
+      sending.current = false;
+      setMasterBusy(false);
+      throw error;
+    }
+    sending.current = false;
+    setMasterBusy(false);
+    if (beatCamp) {
+      setPlayPanel("narrator");
+      const sendBeat = sendMsgRef.current;
+      const historyMsgs = Array.isArray(beatCamp.msgs) ? beatCamp.msgs : (msgsRef.current || []);
+      const historyDisp = Array.isArray(beatCamp.disp) ? beatCamp.disp : (dispRef.current || []);
+      if (sendBeat) {
+        void sendBeat(
+          buildMasterBeatMessage(beatCamp.pendingMasterNote || question),
+          historyMsgs,
+          historyDisp,
+          beatCamp,
+          beatCamp.lore || campLore,
+          false
+        );
+      }
+    }
+    return applied;
   };
 
   const executeTimeSkip = async (cancelPendingTest = false) => {

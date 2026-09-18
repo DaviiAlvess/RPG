@@ -4,7 +4,7 @@ import SpecialAbilitySettings from "../components/SpecialAbilitySettings";
 import { normalizeSpecialAbility, specialAbilityDirection } from "../lib/special-ability.mjs";
 import { gmRequestError, requestJson } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
-import { applyMasterAgreements, listMasterAgreements, masterChatPrompt, masterGuidance, mergeMasterAgreements, parseAcordoTags, stripAcordoTags } from "../lib/master-chat.mjs";
+import { applyMasterAgreements, applyMasterChatReply, listMasterAgreements, masterChatPrompt, masterGuidance, masterInterventionContext } from "../lib/master-chat.mjs";
 import { economyPrompt, memoryCutoff } from "../lib/economy.mjs";
 import { knownIpFidelityRule, shouldGroundGmTurn } from "../lib/canon.mjs";
 import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseCompletedMissions, missionXp } from "../lib/progression.mjs";
@@ -57,7 +57,7 @@ const cleanText = (t) =>
       stripTimeSkipTags(
         stripHpTags(
           t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
-           .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO|RELAÇÃO|RELACAO):([^\]]+)\]/gi, "")
+           .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO|RELAÇÃO|RELACAO|INTERVENÇÃO|INTERVENCAO):([^\]]+)\]/gi, "")
         )
       )
     )
@@ -187,6 +187,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
+    masterInterventionContext(c.pendingMasterNote),
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
     universeContext,
     c.charLore
@@ -496,6 +497,7 @@ export default function RPG() {
   const pendingRef = useRef([]);
   const skipNextTimeParseRef = useRef(false);
   const pendingLevelNoteRef = useRef("");
+  const pendingMasterNoteRef = useRef("");
 
   function clearAuto() {
     clearTimeout(timerRef.current);
@@ -948,8 +950,10 @@ export default function RPG() {
       charSkills: save.charSkills ?? active.charSkills,
       charBg: save.charBg ?? active.charBg,
       storyStartPoint: save.storyStartPoint ?? active.storyStartPoint,
+      pendingMasterNote: save.pendingMasterNote || "",
     };
     setActive(updated);
+    pendingMasterNoteRef.current = updated.pendingMasterNote || "";
     setMsgs(updated.msgs);
     setLevel(updated.level); setExperience(updated.experience); setAttributes(updated.attributes); setSkills(updated.skills);
     setGameTime(updated.gameTime); setTemporalEffects(updated.temporalEffects); setTimelineEvents(updated.timelineEvents);
@@ -1115,6 +1119,7 @@ export default function RPG() {
     const data = await readCamp(s.id);
     if (!data) return;
     setActive(data);
+    pendingMasterNoteRef.current = data.pendingMasterNote || "";
     setFailedAction(null); setInput(""); setSaveStatus("Progresso recuperado");
     const restoredTest = pendingTestFromMessages(data.msgs);
     setLastRoll(null);
@@ -1350,6 +1355,7 @@ export default function RPG() {
     setMsgs(newMsgs); setDisp(newDisp);
     let retryCamp = camp;
     let pendingLevelNote = "";
+    let pendingMasterNote = "";
 
     try {
       let memory = camp.memory || "";
@@ -1364,13 +1370,15 @@ export default function RPG() {
       }
       pendingLevelNote = pendingLevelNoteRef.current;
       pendingLevelNoteRef.current = "";
+      pendingMasterNote = pendingMasterNoteRef.current || camp.pendingMasterNote || "";
+      pendingMasterNoteRef.current = "";
       const res = await apiFetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           economyMode: Boolean(camp.economyMode),
           useGrounding: shouldGroundGmTurn(camp, baseMsgs.length),
           messages: newMsgs.slice(memoryUntil),
-          systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
+          systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, pendingMasterNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -1497,6 +1505,7 @@ export default function RPG() {
         temporalEffects: nextTemporalEffects,
         charInitialAge: camp.charInitialAge ?? charInitialAge,
         timelineEvents: nextTimelineEvents,
+        pendingMasterNote: "",
         updatedAt: Date.now(),
       };
       setActive(updated);
@@ -1521,6 +1530,7 @@ export default function RPG() {
 
     } catch (error) {
       if (pendingLevelNote) pendingLevelNoteRef.current = pendingLevelNote;
+      if (pendingMasterNote) pendingMasterNoteRef.current = pendingMasterNote;
       clearAuto(); setAutoMode(false); autoRef.current = false;
       setMsgs(baseMsgs); setDisp(baseDisp); setInput(text);
       const waitSec = baseMsgs.length === 0 ? 0 : Math.min(300, Math.max(0, Number(error.retryAfter) || 0));
@@ -1786,18 +1796,18 @@ export default function RPG() {
       if (!response.ok || result.error || typeof result.text !== 'string' || !result.text.trim()) {
         throw gmRequestError(result, response.status, 'O Mestre não conseguiu responder. Sua mensagem foi mantida.');
       }
-      const extracted = parseAcordoTags(result.text);
-      const visible = stripAcordoTags(result.text) || result.text.trim();
-      const merged = extracted.length ? mergeMasterAgreements(active, extracted) : { list: listMasterAgreements(active), added: [] };
+      const applied = applyMasterChatReply(active, result.text);
+      const visible = applied.visible || result.text.trim();
+      if (applied.patch.pendingMasterNote) pendingMasterNoteRef.current = applied.patch.pendingMasterNote;
       const updated = {
         ...active,
-        ...applyMasterAgreements(merged.list),
+        ...applied.patch,
         masterChat: [...history, { role: 'assistant', content: visible }],
         updatedAt: Date.now(),
       };
       setActive(updated); saveCamp(active.id, updated);
-      if (merged.added.length) showNotification("Acordo salvo", "success");
-      return merged.added.length;
+      if (applied.status) showNotification(applied.status, "success");
+      return applied;
     } finally { sending.current = false; setMasterBusy(false); }
   };
 

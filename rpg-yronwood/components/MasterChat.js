@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import NarrativeContent from './NarrativeContent';
-import { listMasterAgreements, mergeMasterAgreements, stripAcordoTags } from '../lib/master-chat.mjs';
+import { listMasterAgreements, mergeMasterAgreements, stripMasterTags } from '../lib/master-chat.mjs';
 
 export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, onClose }) {
   const [draft, setDraft] = useState('');
@@ -16,9 +16,9 @@ export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, on
     setError('');
     setStatus('');
     try {
-      const added = await onAsk(draft.trim());
+      const result = await onAsk(draft.trim());
       setDraft('');
-      if (added) setStatus('Acordo salvo');
+      if (result?.status) setStatus(result.status);
     }
     catch (failure) { setError(failure.message); setRetryAt(Date.now() + Math.min(300, Math.max(0, Number(failure.retryAfter) || 0)) * 1000); }
   };
@@ -38,15 +38,15 @@ export default function MasterChat({ campaign, busy, onAsk, onSaveAgreements, on
   return <div className="modal-overlay"><section className="modal-content master-chat" role="dialog" aria-modal="true" aria-labelledby="master-chat-title">
     <div className="modal-header"><h3 id="master-chat-title">Falar com o Mestre</h3><button type="button" className="modal-close" aria-label="Fechar conversa" disabled={busy} onClick={onClose}>×</button></div>
     <div className="modal-body">
-      <p className="settings-hint">Aqui você fala como jogador, fora da história. Pedidos que mudam a mesa viram acordos e passam a valer nos próximos turnos. A conversa não entra no narrador.</p>
+      <p className="settings-hint">Aqui você fala como jogador, fora da história. Pedidos de mudança valem na hora (relações, cargo, cena): o jogo aplica as tags imediatamente. A conversa continua fora da história.</p>
       <div className="master-chat-messages" aria-live="polite">
         {!campaign.masterChat?.length ? <p>Pergunte sobre a cena, uma regra ou como deixar a aventura do seu jeito.</p> : null}
-        {(campaign.masterChat || []).map((message, index) => <div key={index} className="master-chat-message"><strong>{message.role === 'user' ? 'Você' : 'Mestre'}</strong><NarrativeContent text={stripAcordoTags(message.content)} /></div>)}
+        {(campaign.masterChat || []).map((message, index) => <div key={index} className="master-chat-message"><strong>{message.role === 'user' ? 'Você' : 'Mestre'}</strong><NarrativeContent text={stripMasterTags(message.content)} /></div>)}
         {busy ? <p>O Mestre está respondendo…</p> : null}
       </div>
       <form onSubmit={send}>
         <label htmlFor="master-question">Sua mensagem ao Mestre</label>
-        <textarea autoFocus id="master-question" className="time-textarea" rows={3} maxLength={2000} value={draft} disabled={busy} onChange={event => setDraft(event.target.value)} placeholder="Ex.: por que preciso desse teste? Quero mais diálogo e menos combate." />
+        <textarea autoFocus id="master-question" className="time-textarea" rows={3} maxLength={2000} value={draft} disabled={busy} onChange={event => setDraft(event.target.value)} placeholder="Ex.: quero que essa NPC tenha atração por mim. Corrija meu cargo. Quero mais diálogo." />
         {error ? <p role="alert">{error}</p> : null}
         <button className="btn-confirm" type="submit" disabled={busy || !draft.trim()}>{busy ? 'Conversando…' : error ? 'Tentar novamente' : 'Enviar ao Mestre'}</button>
       </form>

@@ -1,5 +1,5 @@
 import { specialAbilityDirection } from "./special-ability.mjs";
-import { masterGuidance } from './master-chat.mjs';
+import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
 import { buildNarrationDirection } from './narration.mjs';
 import { buildCharacterNamingDirection } from './character-names.mjs';
 import { knownIpFidelityRule } from './canon.mjs';
@@ -31,6 +31,7 @@ export function economyPrompt(c, lore, calendar) {
     `MEMÓRIA: ${c.memory || ''}\nDATA: ${calendar}`,
     `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
+    masterInterventionContext(c.pendingMasterNote, { short: true }),
     'Respeite o universo e a época. Contextos gerados por IA não são fontes verificadas. Não invente fatos canônicos. Personagens originais não substituem protagonistas.',
     c.ordinaryCharacter ? 'O jogador iniciou como pessoa comum: sem profecia, linhagem secreta ou poderes especiais não estabelecidos. Cargo e função acompanham a campanha; a origem continua no prompt.' : 'Habilidades excepcionais só existem quando definidas na ficha; NPCs não as conhecem sem evidência.',
     'Nunca fale, escolha ou sinta pelo jogador. Use seu nome só quando necessário. Diálogos em linhas Nome: "fala". Não liste opções obrigatórias.',

@@ -1,5 +1,5 @@
-export const NARRATION_VISION_LOCK = 'A narração é SEMPRE a visão do personagem do jogador — o que ele vê, ouve, tem na frente. NPCs falam no formato Nome: "fala".';
-const NARRATION_POV_LOCK = `Narre em segunda pessoa ("você"); a câmera é o corpo do jogador. NPCs entram a partir de você ("À sua frente…"). Nunca abra com "o transeunte" ou "a figura encapuzada" como herói do parágrafo. ${NARRATION_VISION_LOCK}`;
+export const NARRATION_VISION_LOCK = 'A narração principal é SEMPRE a visão do personagem do jogador — câmera magnética, atrás/dentro dos olhos: mão, ombro, o que chega à visão. NPCs falam no formato Nome: "fala".';
+const NARRATION_POV_LOCK = `Narre em segunda pessoa ("você"); a câmera é o corpo do jogador — magnética, atrás/dentro dos olhos. O primeiro sujeito gramatical é o campo sensorial do jogador (mão, ombro, visão), nunca um NPC. NPCs entram a partir de você ("À sua frente…", "no canto do olho…"). Proibido: "O subordinado aperta… Ele solta um suspiro…" ou abrir com "o transeunte" / "a figura encapuzada" como herói do parágrafo. ${NARRATION_VISION_LOCK}`;
 export const NARRATION_STYLES = {
   "cinematic": {
     "label": "Cinematográfico",
@@ -13,14 +13,14 @@ export const NARRATION_STYLES = {
     "icon": "✒",
     "description": "Prosa expressiva, subtexto e personagens com camadas.",
     "instruction": `Tom: prosa elegante, uma imagem específica, subtexto em gestos — sem excesso de adjetivos e sem conto em terceira pessoa. ${NARRATION_POV_LOCK}`,
-    "sample": "Sua mão ainda está aberta quando a carta desliza até você. Os dedos dele alisam a borda como quem corrige um erro antigo. O selo à sua frente está intacto; as mãos, não. Ele escolhe a cadeira de onde se vê a sua saída."
+    "sample": "Sua mão ainda está aberta quando a carta desliza até você. À sua frente, os dedos dele alisam a borda como quem corrige um erro antigo. O selo no seu campo de visão está intacto; as mãos, não. No canto do olho, ele escolhe a cadeira de onde se vê a sua saída."
   },
   "dark": {
     "label": "Sombrio",
     "icon": "☾",
     "description": "Suspense, incerteza e perigo sugerido.",
     "instruction": `Tom: suspense, pistas, perigo sugerido — não imponha medo nem violência gratuita. ${NARRATION_POV_LOCK}`,
-    "sample": "O que você carrega ainda pesa no colo quando ele empurra a carta. A cera está seca, embora a capa pingue. Você lê o mesmo símbolo riscado na sua porta naquela manhã. Ele não tira os olhos de você."
+    "sample": "O que você carrega ainda pesa no colo quando a carta encosta em você. A cera está seca, embora a capa pingue. Você lê o mesmo símbolo riscado na sua porta naquela manhã. À sua frente, ele não tira os olhos de você."
   },
   "light": {
     "label": "Leve e espirituoso",
@@ -50,14 +50,16 @@ export function normalizeNarration(value = {}) {
   return { style: Object.hasOwn(NARRATION_STYLES, value?.style) ? value.style : 'cinematic', length: Object.hasOwn(NARRATION_LENGTHS, value?.length) ? value.length : 'balanced', pace: Object.hasOwn(NARRATION_PACES, value?.pace) ? value.pace : 'balanced' };
 }
 export const NARRATION_PRESENCE = [
-  'POV — A CÂMERA É O JOGADOR. Narre em segunda pessoa ("você").',
+  'POV — A CÂMERA É O JOGADOR. Narre em segunda pessoa ("você"). Magnética: atrás/dentro dos olhos.',
   NARRATION_VISION_LOCK,
-  'O primeiro sujeito visível da resposta deve ser o corpo do jogador ou o que está colado nele (mão, carroça, pacote no colo) — nunca um desconhecido como protagonista do parágrafo.',
-  'NPCs aparecem a partir de você: "À sua esquerda, um homem…", "Você ouve a bota no cascalho." Proibido: "O transeunte desfila…", "A figura encapuzada…" como abertura sem âncora em você.',
+  'O primeiro sujeito gramatical da resposta — e de cada parágrafo da narração principal — é o campo sensorial do jogador (mão, ombro, visão, o que chega aos olhos) ou o que está colado nele. Nunca um NPC.',
+  'PROIBIDO como herói do parágrafo: "O subordinado aperta os documentos contra o peito… Ele solta um suspiro… olhando por cima do seu ombro…" — câmera no NPC. CERTO: "Os documentos encostam no seu peito. À sua frente, os olhos castanhos se estreitam. No canto do olho, ele olha por cima do seu ombro."',
+  'NPCs aparecem a partir de você: "À sua frente…", "no canto do olho…", "Você ouve a bota no cascalho." Proibido: "O transeunte desfila…", "A figura encapuzada…", "O subordinado…" como sujeito de abertura sem âncora em você.',
+  'Narração principal = olhos do jogador. Um cartão/aparte rotulado (fora do fluxo da cena) pode usar terceira pessoa; nunca substitua a cena principal.',
   'PRESENÇA — o jogador está dentro da cena.',
   'Comece no instante da última ação do jogador; nunca abra com clima genérico ou tour ("O sol se põe", "Você está em…").',
   'Narre a partir do corpo: o que chega aos olhos, ouvidos, pele e olfato de onde o personagem está.',
-  'A cena muda por causa dessa ação; NPCs olham, esperam ou interrompem o jogador com agenda própria.',
+  'A cena muda por causa dessa ação; NPCs olham, esperam ou interrompem o jogador com agenda própria — sempre vistos de você.',
   'Um conflito na sua cara neste instante: alguém quer o que você carrega ou espera a sua palavra.',
   'Corpo observável é permitido (mão, respiração, silêncio, calor); nunca rotule emoção ("você sente medo") e nunca fale, pense ou decida pelo jogador.',
   'Nunca invente diálogo para o personagem do jogador.',
@@ -72,7 +74,7 @@ export function buildNarrationDirection(value) {
     'DIREÇÃO DE NARRAÇÃO — estas preferências prevalecem sobre instruções anteriores de estilo, tamanho e ritmo, mas nunca alteram regras de dados, fatos, canon ou agência do jogador.',
     NARRATION_PRESENCE,
     style.instruction, NARRATION_LENGTHS[n.length].instruction, NARRATION_PACES[n.pace].instruction,
-    `MODELO DE VOZ — imite o TOM deste trecho, não a mesma cena e NÃO o ponto de vista. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto. A câmera continua sendo você:\n${style.sample}`,
+    `MODELO DE VOZ — imite o TOM deste trecho, não a mesma cena e NÃO o ponto de vista. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto. A câmera continua sendo você (olhos do jogador, nunca o NPC como sujeito):\n${style.sample}`,
     'Uma falha muda a situação, não deve apenas repetir o mesmo bloqueio.',
     'Cada cena deve servir a uma intenção ou pergunta concreta, sem inventar objetivos para o jogador.',
     'Varie a extensão das frases conforme ação, conversa ou repouso.',
@@ -127,8 +129,8 @@ export function buildStartPrompt(camp = {}) {
 
   parts.push(
     NARRATION_VISION_LOCK,
-    'A câmera é o jogador. Narre em segunda pessoa ("você"). O primeiro sujeito visível deve ser o corpo do jogador ou o que está colado nele (mão, carroça, pacote no colo) — nunca um desconhecido como protagonista.',
-    'NPCs aparecem a partir de você. Proibido abrir com "O transeunte desfila…" ou "A figura encapuzada…" sem âncora no jogador.',
+    'A câmera é o jogador — magnética, atrás/dentro dos olhos. Narre em segunda pessoa ("você"). O primeiro sujeito gramatical deve ser o campo sensorial do jogador (mão, ombro, visão) ou o que está colado no corpo — nunca um NPC como protagonista.',
+    'NPCs aparecem a partir de você ("À sua frente…", "no canto do olho…"). Proibido abrir com "O subordinado…", "O transeunte desfila…" ou "A figura encapuzada…" sem âncora no jogador.',
     'Narre a partir do corpo: o que chega aos olhos, ouvidos, pele ou olfato de onde o personagem está.',
     'Um ou dois detalhes reveladores. Um conflito na sua cara neste instante: um NPC ou o mundo já quer algo do jogador.',
     'Nunca abra com "Você está em…". Nunca invente diálogo, pensamento ou decisão para o personagem do jogador. Sem menus numerados.',

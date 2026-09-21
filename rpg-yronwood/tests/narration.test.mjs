@@ -1,6 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NARRATION_STYLES, NARRATION_VISION_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
+import { readFile } from 'node:fs/promises';
+import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
+import { economyPrompt } from '../lib/economy.mjs';
+import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
+
+const PLAYER_CAMERA_MARKERS = ['sujeito gramatical', 'subordinado', 'canto do olho', 'dentro dos olhos', 'a partir de você', 'save antigo'];
+function assertPlayerCamera(text, label) {
+  for (const marker of PLAYER_CAMERA_MARKERS) {
+    assert.ok(String(text).includes(marker), `${label} precisa de "${marker}"`);
+  }
+}
 test('Campanhas antigas recebem preferências válidas', () => {
   assert.deepEqual(normalizeNarration(null), { style: 'cinematic', length: 'balanced', pace: 'balanced' });
   assert.equal(normalizeNarration({ style: 'toString', pace: 'invalid' }).style, 'cinematic');
@@ -152,4 +162,35 @@ test('IP conhecido abre em lugar/era do mundo, não numa estrada genérica, e pr
   });
   assert.equal(originalWorld.includes('estrada de terra genérica'), false);
   assert.equal(originalWorld.includes('lugar e era plausíveis'), false);
+});
+test('Câmera do jogador vale em save antigo, preset, Westeros, Bleach e mundo custom — sem toggle', async () => {
+  assert.ok(NARRATION_PRESENCE.includes('TODA mesa'));
+  assert.ok(NARRATION_PRESENCE.includes('não é opção da campanha'));
+  assertPlayerCamera(buildNarrationDirection(), 'default');
+  assertPlayerCamera(buildNarrationDirection(null), 'narration null');
+  assertPlayerCamera(buildNarrationDirection({}), 'narration vazia');
+  assertPlayerCamera(buildStartPrompt({}), 'campanha vazia');
+  assertPlayerCamera(buildStartPrompt({ charName: 'Edric', world: 'Westeros', isKnownIP: true }), 'Westeros');
+  assertPlayerCamera(buildStartPrompt({
+    charName: 'Ichigo',
+    world: 'Bleach — Rukongai',
+    isKnownIP: true,
+    isExistingChar: true,
+    storyStartPoint: 'O asfalto ainda quente sob os pés quando o reiatsu corta o ar.',
+  }), 'Bleach/Rukongai');
+  assertPlayerCamera(buildStartPrompt({ charName: 'Kael', world: 'Vale de Cinzas' }), 'mundo custom');
+  assertPlayerCamera(economyPrompt({ world: 'Westeros', charName: 'Edric' }, '', 'Dia 40'), 'economia save antigo');
+  assertPlayerCamera(economyPrompt({ world: 'Bleach — Rukongai', charName: 'Renji', economyMode: true }, '', 'Dia 2'), 'economia Bleach');
+  for (const preset of ADVENTURE_PRESETS) {
+    assertPlayerCamera(buildStartPrompt(preset), `preset ${preset.id}`);
+    assertPlayerCamera(buildNarrationDirection(preset.narration), `preset ${preset.id} narration`);
+  }
+  const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('systemPrompt: buildPrompt('));
+  assert.ok(source.includes('buildNarrationDirection(c.narration)'));
+  assert.ok(source.includes('O subordinado aperta'));
+  assert.ok(source.includes('sujeito gramatical'));
+  assert.ok(source.includes('sem toggle'));
+  assert.ok(source.includes('save antigo'));
+  assert.equal(/playerPov|povEnabled|cameraLock\s*[:=]/i.test(source), false);
 });

@@ -50,7 +50,7 @@ export function normalizeNarration(value = {}) {
   return { style: Object.hasOwn(NARRATION_STYLES, value?.style) ? value.style : 'cinematic', length: Object.hasOwn(NARRATION_LENGTHS, value?.length) ? value.length : 'balanced', pace: Object.hasOwn(NARRATION_PACES, value?.pace) ? value.pace : 'balanced' };
 }
 export const NARRATION_PRESENCE = [
-  'POV — A CÂMERA É O JOGADOR. Narre em segunda pessoa ("você"). Magnética: atrás/dentro dos olhos.',
+  'POV — A CÂMERA É O JOGADOR. Narre em segunda pessoa ("você"). Magnética: atrás/dentro dos olhos. Vale em TODA mesa (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno — não é opção da campanha.',
   NARRATION_VISION_LOCK,
   'O primeiro sujeito gramatical da resposta — e de cada parágrafo da narração principal — é o campo sensorial do jogador (mão, ombro, visão, o que chega aos olhos) ou o que está colado nele. Nunca um NPC.',
   'PROIBIDO como herói do parágrafo: "O subordinado aperta os documentos contra o peito… Ele solta um suspiro… olhando por cima do seu ombro…" — câmera no NPC. CERTO: "Os documentos encostam no seu peito. À sua frente, os olhos castanhos se estreitam. No canto do olho, ele olha por cima do seu ombro."',
@@ -129,7 +129,7 @@ export function buildStartPrompt(camp = {}) {
 
   parts.push(
     NARRATION_VISION_LOCK,
-    'A câmera é o jogador — magnética, atrás/dentro dos olhos. Narre em segunda pessoa ("você"). O primeiro sujeito gramatical deve ser o campo sensorial do jogador (mão, ombro, visão) ou o que está colado no corpo — nunca um NPC como protagonista.',
+    'A câmera é o jogador — magnética, atrás/dentro dos olhos. Vale em toda campanha, inclusive save antigo, sem recriar a mesa. Narre em segunda pessoa ("você"). O primeiro sujeito gramatical deve ser o campo sensorial do jogador (mão, ombro, visão) ou o que está colado no corpo — nunca um NPC como protagonista.',
     'NPCs aparecem a partir de você ("À sua frente…", "no canto do olho…"). Proibido abrir com "O subordinado…", "O transeunte desfila…" ou "A figura encapuzada…" sem âncora no jogador.',
     'Narre a partir do corpo: o que chega aos olhos, ouvidos, pele ou olfato de onde o personagem está.',
     'Um ou dois detalhes reveladores. Um conflito na sua cara neste instante: um NPC ou o mundo já quer algo do jogador.',

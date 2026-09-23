@@ -39,6 +39,20 @@ test('Mestre: validação, respostas completas e indisponibilidade', async () =>
     resetGeminiKeyState();
     globalThis.fetch = async () => { const err = new Error('aborted'); err.name = 'AbortError'; throw err; };
     assert.equal((await call(valid)).code, 504);
+    resetGeminiKeyState();
+    process.env.GEMINI_API_KEY_1 = 'test-key-2';
+    let abortThenOk = 0;
+    globalThis.fetch = async () => {
+      abortThenOk += 1;
+      if (abortThenOk === 1) {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        throw err;
+      }
+      return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'A cena segue.' }] } }] }) };
+    };
+    assert.equal((await call(valid)).data.text, 'A cena segue.');
+    assert.equal(abortThenOk, 2);
   } finally {
     globalThis.fetch = originalFetch;
     resetGeminiKeyState();
@@ -47,4 +61,16 @@ test('Mestre: validação, respostas completas e indisponibilidade', async () =>
       else process.env[name] = previousKeys[name];
     }
   }
+});
+
+test('Narrar depois do Mestre tem orçamento longo por tentativa, sem encolher pelas chaves', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const gmSource = await readFile(new URL('../pages/api/gm.js', import.meta.url), 'utf8');
+  const perRequest = Number(gmSource.match(/export const PER_REQUEST_MS = (\d+)/)?.[1]);
+  const minRequest = Number(gmSource.match(/export const MIN_PER_REQUEST_MS = (\d+)/)?.[1]);
+  assert.ok(perRequest >= 28000);
+  assert.ok(minRequest >= 18000);
+  assert.ok(gmSource.includes('callWithBudget'));
+  assert.ok(gmSource.includes('gemini-3.5-flash-lite'));
+  assert.equal(gmSource.includes('Math.floor((deadlineMs - 2000) / maxAttempts)'), false);
 });

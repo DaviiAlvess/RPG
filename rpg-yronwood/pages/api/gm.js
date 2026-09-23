@@ -10,12 +10,12 @@ import {
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
-const GM_DEADLINE_MS = 45000;
-const MAX_DEADLINE_MS = 55000;
+export const GM_DEADLINE_MS = 50000;
+export const MAX_DEADLINE_MS = 52000;
 const MIN_ATTEMPTS = 1;
 const MAX_ATTEMPTS_CAP = 16;
-const PER_REQUEST_MS = 12000;
-const MIN_PER_REQUEST_MS = 5000;
+export const PER_REQUEST_MS = 32000;
+export const MIN_PER_REQUEST_MS = 20000;
 const UPSTREAM_BACKOFF_MS = 250;
 const modelName = value => String(value || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL;
 const GOOGLE_SEARCH_TOOL = { google_search: {} };
@@ -89,8 +89,11 @@ export default async function handler(req, res) {
 
   const chamarGemini = async (body, modelo) => {
     const maxAttempts = Math.min(Math.max(chavesUnicas.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
-    const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS + Math.max(0, maxAttempts - 5) * 2500);
-    const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, Math.floor((deadlineMs - 2000) / maxAttempts)));
+    const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS);
+    // Do not divide the budget by every key: a long narrate (identity + lore +
+    // intervenção do Mestre) often needs 15–30s on lite. Starving the first call
+    // to ~5–12s is what surfaces "O Mestre demorou para responder".
+    const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, deadlineMs - 4000));
     const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
     let modelIdx = 0;
     let apiVersion = "v1beta";
@@ -148,16 +151,28 @@ export default async function handler(req, res) {
       const apiKey = pick.key;
       if (!apiKey) break;
       const modeloAtual = models[modelIdx];
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), Math.min(remaining, perRequestMs));
+      const callWithBudget = async (requestBody, budgetMs) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), budgetMs);
+        try {
+          return await callGemini(apiKey, modeloAtual, requestBody, controller.signal, apiVersion);
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
       try {
-        let { res: geminiRes, payload: data, parsed } = await callGemini(apiKey, modeloAtual, body, controller.signal, apiVersion);
+        const attemptBudget = Math.min(remaining, perRequestMs);
+        let { res: geminiRes, payload: data, parsed } = await callWithBudget(body, attemptBudget);
         // google_search is optional: a 403/429 on grounding must not be treated as key quota/auth.
+        // Use a fresh abort budget so the stripped retry is not leftover milliseconds.
         if (hasGoogleSearch(body) && (!parsed || !geminiRes.ok || !geminiText(data))) {
-          const stripped = await callGemini(apiKey, modeloAtual, withoutGoogleSearch(body), controller.signal, apiVersion);
-          geminiRes = stripped.res;
-          data = stripped.payload;
-          parsed = stripped.parsed;
+          const leftover = deadline - Date.now();
+          if (leftover > 2000) {
+            const stripped = await callWithBudget(withoutGoogleSearch(body), Math.min(leftover, perRequestMs));
+            geminiRes = stripped.res;
+            data = stripped.payload;
+            parsed = stripped.parsed;
+          }
         }
 
         if (!parsed) {
@@ -246,16 +261,12 @@ export default async function handler(req, res) {
         triedThisCall.add(apiKey);
         const timedOut = err.name === "AbortError";
         const networkErr = new Error(timedOut
-          ? "O Mestre demorou para responder. Tente novamente."
+          ? "O Mestre demorou para responder. Tente novamente; o que já foi combinado permanece."
           : "Não foi possível conectar ao Mestre. Tente novamente.");
         networkErr.status = timedOut ? 504 : 502;
         networkErr.code = timedOut ? "TIMEOUT" : "NETWORK";
         setLastError(networkErr);
-        const untried = chavesUnicas.filter(key => !triedThisCall.has(key));
-        if (timedOut && untried.length <= 1) break;
         if (deadline - Date.now() < 2000) break;
-      } finally {
-        clearTimeout(timeout);
       }
     }
 

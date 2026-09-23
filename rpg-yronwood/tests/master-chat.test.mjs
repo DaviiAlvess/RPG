@@ -208,12 +208,18 @@ test('Beat do Mestre é contexto interno, não fala do jogador', () => {
 test('askMaster libera o lock e dispara o beat no chat de jogo na hora', async () => {
   const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
   const ask = source.slice(source.indexOf('const askMaster'), source.indexOf('const executeTimeSkip'));
+  const send = source.slice(source.indexOf('const sendMsg'), source.indexOf('sendMsgRef.current = sendMsg'));
   assert.ok(ask.includes('sending.current = false'));
   assert.ok(ask.includes('setPlayPanel("narrator")'));
   assert.ok(ask.includes('sendMsgRef.current'));
   assert.ok(ask.includes('buildMasterBeatMessage'));
   assert.ok(ask.includes('needsSceneBeat'));
+  assert.ok(ask.includes('timeoutMs: GM_CLIENT_TIMEOUT_MS'));
   assert.equal(ask.includes('await sendMsg('), false);
+  assert.ok(send.includes('isMasterBeat ? memoryUntil'));
+  assert.ok(send.includes('!isMasterBeat && shouldGroundGmTurn'));
+  assert.ok(send.includes('timeoutMs: GM_CLIENT_TIMEOUT_MS'));
+  assert.ok(send.includes('pendingMasterNoteRef.current = pendingMasterNote'));
   const economy = economyPrompt({ world: 'Westeros', charName: 'Edric', ordinaryCharacter: true, pendingMasterNote: 'Arya demonstra atração', items: [] }, '', 'Dia 2');
   assert.ok(economy.includes('EXCETO INTERVENÇÃO DO MESTRE'));
   assert.ok(economy.includes('fato da mesa'));

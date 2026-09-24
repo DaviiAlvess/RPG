@@ -15,7 +15,7 @@ import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
-import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
+import { parseTest, resolveTest, itemEffect, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
 import IosInstallHint from "../components/IosInstallHint";
@@ -770,7 +770,7 @@ export default function RPG() {
     try {
       const { cloudLoadCampaign } = await import("../lib/rpg-cloud");
       const { ok, data } = await cloudLoadCampaign(id);
-      const chosen = newerCampaign(local, ok ? data : null);
+      const chosen = mergeCampaignRecords(local, ok ? data : null);
       if (chosen) { try { localStorage.setItem(campKey(id), JSON.stringify(chosen)); } catch {} }
       if (local && chosen === local && ok) showNotification("Progresso mais recente deste aparelho recuperado.", "info");
       return chosen;
@@ -2023,14 +2023,24 @@ export default function RPG() {
       <Head><title>RPGs prontos — Forja de Mundos</title></Head>
       <div className="cr-head"><button className="btn-ghost" type="button" onClick={() => setView("home")}>← Voltar</button><span className="shell-eyebrow">RPGS PRONTOS</span></div>
       <main className="cr-body"><section className="preset-library" aria-labelledby="preset-title">
-            <h2 id="preset-title">Um mundo. Uma vida comum. Sua história.</h2>
-            <p className="settings-hint">Escolha uma aventura pronta com personagens originais, longe dos holofotes dos protagonistas. Você pode revisar a ficha antes de começar.</p>
+            <h2 id="preset-title">Personagens originais em mundos conhecidos</h2>
+            <p className="settings-hint">Cada carta é um ponto de partida. Você revisa a ficha no passo Começar, antes da primeira cena.</p>
             <div className="preset-grid">
-              <article className="preset-card"><span className="preset-world">Westeros · Clássico</span><h3>Edric Yronwood</h3><p>Lorde de Pedra Sangrenta. Política, lealdade e o destino da sua casa.</p><button type="button" className="btn-primary" onClick={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}>Escolher Edric →</button></article>
-              {ADVENTURE_PRESETS.map(preset => <article className="preset-card" key={preset.id}>
-                <span className="preset-world">{preset.world}</span><span className="preset-genre">{preset.genre}</span>
-                <h3>{preset.charName}</h3><span className="preset-role">{preset.charTitle} · {preset.charAge} anos</span>
-                <p>{preset.hook}</p><button type="button" className="btn-primary" onClick={() => { setForm({ ...preset, appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Escolher esta história →</button>
+              <article className="preset-card preset-card-featured">
+                <div className="preset-card-copy">
+                  <span className="preset-world">Westeros · Clássico</span>
+                  <h3>Edric Yronwood</h3>
+                  <p className="preset-role">Lorde de Pedra Sangrenta · 26 anos</p>
+                  <p>A casa ainda cheira a cal e sangue velho. Um emissário de Porto Real espera no pátio com uma lista de cabeças dornesas.</p>
+                </div>
+                <button type="button" className="btn-primary" onClick={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}>Jogar como Edric</button>
+              </article>
+              {ADVENTURE_PRESETS.map(preset => <article className="preset-card preset-card-compact" key={preset.id}>
+                <span className="preset-world">{preset.world}</span>
+                <h3>{preset.charName}</h3>
+                <p>{preset.hook}</p>
+                <span className="preset-role">{preset.charTitle} · {preset.genre}</span>
+                <button type="button" className="btn-primary" onClick={() => { setForm({ ...preset, appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Revisar ficha</button>
               </article>)}
             </div>
           </section></main>
@@ -2057,11 +2067,8 @@ export default function RPG() {
       </div>
 
       <div className="cr-body">
-        {step === 2 && <label className="economy-setting"><input type="checkbox" checked={Boolean(form.economyMode)} onChange={e => setForm(f => ({ ...f, economyMode: e.target.checked }))} /><span><strong>Modo economia</strong><small>Respostas curtas, instruções compactas e menos chamadas no automático.</small></span></label>}
-        {step === 2 && <SpecialAbilitySettings value={form.specialAbility} onChange={specialAbility => setForm(f => ({ ...f, specialAbility }))} />}
-        {step === 2 && <NarrationSettings value={form.narration} onChange={narration => setForm(f => ({ ...f, narration }))} />}
         {step === 0 && <>
-          <div className="cr-lbl">PASSO 1 — O MUNDO</div>
+          <div className="cr-lbl">O mundo</div>
 
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
@@ -2090,11 +2097,14 @@ export default function RPG() {
               ))}
             </div>
           </div>
-          <button className="btn-primary" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>Próximo →</button>
+          <button type="button" className="btn-primary" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>Próximo</button>
+          {(!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())) ? (
+            <p className="field-needed">{!form.world.trim() ? "Falta o nome do mundo." : "Descreva o contexto do mundo original para continuar."}</p>
+          ) : null}
         </>}
 
         {step === 1 && <>
-          <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
+          <div className="cr-lbl">O personagem</div>
           {form.isKnownIP && (
             <div style={{ marginBottom: 14 }}>
               <div className="wizard-section-label">Quem você vai jogar?</div>
@@ -2120,7 +2130,7 @@ export default function RPG() {
           )}
           {form.isExistingChar && form.isKnownIP && (
             <div className="ip-hint">
-              Digite o nome do personagem e clique em <strong>BUSCAR FICHA</strong>. A ficha será preenchida automaticamente — no próximo passo você só escolhe <strong>em que momento da história</strong> quer começar.
+              Digite o nome do personagem e clique em <strong>Buscar ficha</strong>. A ficha será preenchida automaticamente — no próximo passo você só escolhe <strong>em que momento da história</strong> quer começar.
             </div>
           )}
           {form.isKnownIP && !form.isExistingChar && (
@@ -2143,13 +2153,14 @@ export default function RPG() {
                 ta rows={2} />
             )}
           </>}
-          <button className="btn-primary" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
-            {charSearchLoading ? "Buscando ficha..." : form.isExistingChar && form.isKnownIP ? "Buscar ficha →" : "Próximo →"}
+          <button type="button" className="btn-primary" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
+            {charSearchLoading ? "Buscando ficha..." : form.isExistingChar && form.isKnownIP ? "Buscar ficha" : "Próximo"}
           </button>
+          {!form.charName.trim() && !charSearchLoading ? <p className="field-needed">Digite o nome do personagem para continuar.</p> : null}
         </>}
 
         {step === 2 && form.isExistingChar && form.isKnownIP && <>
-          <div className="cr-lbl">PASSO 3 — ONDE COMEÇAR?</div>
+          <div className="cr-lbl">Onde começar</div>
           <F label="Contexto gerado pela IA — revise antes de jogar" value={form.charLore} set={(v) => setForm(f => ({ ...f, charLore: v }))} ta rows={5} />
           <div className="ficha-card">
             <div className="ficha-name">{form.charName}</div>
@@ -2174,43 +2185,68 @@ export default function RPG() {
             placeholder="ex: Início do anime / Arco do Exame Chunin / Após a Batalha de Winterfell / Depois que vira Hokage..."
             ta rows={3} />
           <div className="ip-hint">Descreva o momento exato da obra em que a aventura começa. O Mestre posicionará seu personagem nesse ponto do canon.</div>
-          <button className="btn-primary" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>Começar aventura</button>
         </>}
 
         {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
-          <div className="cr-lbl">PASSO 3 — REVISE E COMECE</div>
+          <div className="cr-lbl">Revise e comece</div>
           {form.ordinaryCharacter ? <section className="starter-card"><span className="preset-world">{form.world} · Personagem original</span><h2>{form.charName}</h2><p>{form.charTitle}</p><F label="Nome" value={form.charName} set={v => setForm(f => ({ ...f, charName: v }))} /><F label="História" value={form.charBg} set={v => setForm(f => ({ ...f, charBg: v }))} ta rows={3} /><F label="Personalidade" value={form.charPersonality} set={v => setForm(f => ({ ...f, charPersonality: v }))} /><F label="Habilidades" value={form.charSkills} set={v => setForm(f => ({ ...f, charSkills: v }))} ta rows={2} /><F label="Cena inicial" value={form.storyStartPoint} set={v => setForm(f => ({ ...f, storyStartPoint: v }))} ta rows={3} /><p>Personagens ao seu redor: {form.supportingCast}</p></section> : null}
-          <p className="settings-hint">A aparência é opcional. Você já pode começar com os detalhes atuais.</p>
-          <button className="btn-primary" onClick={finishCreate}>Começar com esta aparência →</button>
-          <div className="app-preview">
-            <div className="app-avatar">
-              <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
-              <div className="av-body">{form.appearance.body?.[0]}</div>
-              <div className="av-eyes">
-                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-                <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-              </div>
-            </div>
-            <div className="app-summary">
-              {Object.entries(APP_LABELS).map(([k, label]) => (
-                <div key={k} className="app-sum-row">
-                  <span className="app-sum-key">{label}:</span>
-                  <span className="app-sum-val">{form.appearance[k]}</span>
+          <details className="wizard-fold">
+            <summary>
+              <span>Aparência</span>
+              <span className="wizard-fold-preview">{form.appearance.height} · cabelo {form.appearance.hairColor} · olhos {form.appearance.eyeColor}</span>
+            </summary>
+            <p className="settings-hint">Opcional. O Mestre usa estes traços se você quiser; dá para começar como está.</p>
+            <div className="app-preview">
+              <div className="app-avatar">
+                <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
+                <div className="av-body">{form.appearance.body?.[0]}</div>
+                <div className="av-eyes">
+                  <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
+                  <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
                 </div>
-              ))}
-            </div>
-          </div>
-          {Object.entries(APP_OPTIONS).map(([key, opts]) => (
-            <div key={key} className="app-section">
-              <div className="app-section-label">{APP_LABELS[key]}</div>
-              <div className="chips">
-                {opts.map(opt => (
-                  <button key={opt} className={`chip ${form.appearance[key] === opt ? "on" : ""}`} onClick={() => setApp(key, opt)}>{opt}</button>
+              </div>
+              <div className="app-summary">
+                {Object.entries(APP_LABELS).map(([k, label]) => (
+                  <div key={k} className="app-sum-row">
+                    <span className="app-sum-key">{label}:</span>
+                    <span className="app-sum-val">{form.appearance[k]}</span>
+                  </div>
                 ))}
               </div>
             </div>
-          ))}
-          <button className="btn-primary" onClick={finishCreate}>Começar aventura</button>
+            {Object.entries(APP_OPTIONS).map(([key, opts]) => (
+              <div key={key} className="app-section">
+                <div className="app-section-label" id={`app-${key}`}>{APP_LABELS[key]}</div>
+                <div className="chips" role="group" aria-labelledby={`app-${key}`}>
+                  {opts.map(opt => (
+                    <button key={opt} type="button" className={`chip ${form.appearance[key] === opt ? "on" : ""}`} aria-pressed={form.appearance[key] === opt} onClick={() => setApp(key, opt)}>{opt}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </details>
+        </>}
+
+        {step === 2 && <>
+          <details className="wizard-fold">
+            <summary>
+              <span>Ajustes da mesa</span>
+              <span className="wizard-fold-preview">{form.economyMode ? "economia ligada" : "economia desligada"}</span>
+            </summary>
+            <p className="settings-hint">Opcional. Depois você muda isso em Ajustes, durante o jogo.</p>
+            <label className="economy-setting"><input type="checkbox" checked={Boolean(form.economyMode)} onChange={e => setForm(f => ({ ...f, economyMode: e.target.checked }))} /><span><strong>Modo economia</strong><small>Respostas curtas, instruções compactas e menos chamadas no automático.</small></span></label>
+            <SpecialAbilitySettings value={form.specialAbility} onChange={specialAbility => setForm(f => ({ ...f, specialAbility }))} />
+            <NarrationSettings value={form.narration} onChange={narration => setForm(f => ({ ...f, narration }))} />
+          </details>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim()}
+            onClick={finishCreate}
+          >Começar aventura</button>
+          {form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim() ? (
+            <p className="field-needed">Diga em que momento da história a aventura começa.</p>
+          ) : null}
         </>}
       </div>
     </div>

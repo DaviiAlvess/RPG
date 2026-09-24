@@ -92,10 +92,11 @@ function LevelUpChoice({ attributes, skills, onConfirm, onCancel }) {
             className="inventory-add-btn"
             disabled={picked.length !== 2}
             onClick={() => onConfirm({ type: "attrs", keys: picked })}
-            style={{ marginTop: 8, opacity: picked.length === 2 ? 1 : 0.45 }}
+            style={{ marginTop: 8 }}
           >
-            Confirmar
+            Confirmar dois atributos
           </button>
+          {picked.length !== 2 ? <p className="field-needed">Escolha dois atributos diferentes.</p> : null}
         </>
       ) : null}
       {mode === "skill" ? (
@@ -391,10 +392,11 @@ export default function PlayView(props) {
                 setView("home");
               }}
               type="button"
-              title="Voltar"
+              title="Voltar às aventuras"
               aria-label="Voltar às aventuras"
             >
               <i className="ti ti-home" />
+              <span className="topbar-btn-label">Início</span>
             </button>
 
             <div className="main-topbar-title">
@@ -404,7 +406,7 @@ export default function PlayView(props) {
                 </span>
                 <h2>{panel.label}</h2>
               </div>
-              <p>{panelSubtitle}</p>
+              <p title={panelSubtitle}>{panelSubtitle}</p>
               <span className="save-indicator" role="status">{props.saveStatus}</span>
               {playPanel === "narrator" ? (
                 <div className="game-time-indicator" title={timeLongLabel}>
@@ -423,6 +425,7 @@ export default function PlayView(props) {
               aria-label="Avançar no tempo"
             >
               <i className="ti ti-clock-hour-4" />
+              <span className="topbar-btn-label">Tempo</span>
             </button>
 
             <button
@@ -431,12 +434,15 @@ export default function PlayView(props) {
               type="button"
               title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
               aria-label={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+              aria-pressed={autoMode}
             >
               <i className="ti ti-player-play" />
+              <span className="topbar-btn-label">Auto</span>
             </button>
 
             <button className="topbar-btn" onClick={quickSave} type="button" title="Salvar rápido" aria-label="Salvar rápido">
               <i className="ti ti-device-floppy" />
+              <span className="topbar-btn-label">Salvar</span>
             </button>
           </div>
 
@@ -636,8 +642,8 @@ export default function PlayView(props) {
 
             <StoryConditionEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
 
-            <div className="card-box game-time-card">
-              <div className="section-label">Linha do tempo</div>
+            <section className="play-section game-time-card" aria-labelledby="sheet-timeline">
+              <h3 id="sheet-timeline" className="play-section-title">Linha do tempo</h3>
               <div className="game-time-display">
                 <i className={`ti ${todIcon}`} />
                 <div>
@@ -683,10 +689,10 @@ export default function PlayView(props) {
                   </div>
                 </div>
               </div>
-            </div>
+            </section>
 
-            <div className="card-box">
-              <div className="section-label">Vida e progresso</div>
+            <section className="play-section vitals-block" aria-labelledby="sheet-vitals">
+              <h3 id="sheet-vitals" className="play-section-title">Vida e progresso</h3>
               <div className="two-col">
                 <div>
                   <div className="hp-bar-wrap" style={{ marginBottom: 10 }}>
@@ -739,7 +745,7 @@ export default function PlayView(props) {
                   onCancel={() => setLevelUpOpen(false)}
                 />
               ) : null}
-            </div>
+            </section>
 
             <div className="stat-grid">
               {attributeEntries.map(([key, value]) => (
@@ -969,23 +975,35 @@ export default function PlayView(props) {
 
           <div className={`panel ${playPanel === "settings" ? "active" : ""}`}>
             <div>
-              <div className="panel-title">Configurações e ferramentas</div>
-              <div className="panel-sub">Ajuste a experiência e acesse ações da campanha.</div>
+              <div className="panel-title">Ajustes</div>
+              <div className="panel-sub">Mesa, sessão e arquivo desta campanha.</div>
             </div>
 
-            <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
-            {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
-            <SpecialAbilitySettings value={abilityDraft} onChange={setAbilityDraft} disabled={loading || autoMode} />
-            <button className="settings-action" type="button" disabled={loading || autoMode} onClick={() => props.onSpecialAbilityChange(abilityDraft)}>Salvar habilidade especial</button>
-            <NarrationSettings value={c.narration} onChange={props.onNarrationChange} disabled={loading || autoMode} />
-            {autoMode ? <p className="settings-hint">Pause o modo automático para mudar a narração.</p> : null}
+            <section className="play-section" aria-labelledby="settings-mesa">
+              <h3 id="settings-mesa" className="play-section-title">Mesa</h3>
+              <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
+              {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
+              <details className="settings-fold">
+                <summary>Habilidade especial</summary>
+                <SpecialAbilitySettings value={abilityDraft} onChange={setAbilityDraft} disabled={loading || autoMode} />
+                <button className="settings-action" type="button" disabled={loading || autoMode} onClick={() => props.onSpecialAbilityChange(abilityDraft)}>Salvar habilidade especial</button>
+              </details>
+              <details className="settings-fold">
+                <summary>Voz da narração</summary>
+                <NarrationSettings value={c.narration} onChange={props.onNarrationChange} disabled={loading || autoMode} />
+                {autoMode ? <p className="settings-hint">Pause o modo automático para mudar a narração.</p> : null}
+              </details>
+            </section>
+
+            <section className="play-section" aria-labelledby="settings-sessao">
+              <h3 id="settings-sessao" className="play-section-title">Durante a sessão</h3>
             <div className="settings-list">
               <div className="settings-item">
                 <div className="settings-item-label">
                   <i className="ti ti-player-play" />
                   <span>Modo automático</span>
                 </div>
-                <button className={`settings-toggle ${autoMode ? "on" : ""}`} onClick={toggleAuto} type="button">
+                <button className={`settings-toggle ${autoMode ? "on" : ""}`} onClick={toggleAuto} type="button" aria-pressed={autoMode}>
                   {autoMode ? "Ligado" : "Desligado"}
                 </button>
               </div>
@@ -1000,7 +1018,7 @@ export default function PlayView(props) {
                   <i className="ti ti-volume" />
                   <span>Sons</span>
                 </div>
-                <button className={`settings-toggle ${soundEnabled ? "on" : ""}`} onClick={() => setSoundEnabled(!soundEnabled)} type="button">
+                <button className={`settings-toggle ${soundEnabled ? "on" : ""}`} onClick={() => setSoundEnabled(!soundEnabled)} type="button" aria-pressed={soundEnabled}>
                   {soundEnabled ? "Ligado" : "Desligado"}
                 </button>
               </div>
@@ -1008,12 +1026,13 @@ export default function PlayView(props) {
               <div className="settings-item">
                 <div className="settings-item-label">
                   <i className="ti ti-robot" />
-                  <span>Auto-detecção</span>
+                  <span>Detectar testes sozinho</span>
                 </div>
                 <button
                   className={`settings-toggle ${autoDetectionEnabled ? "on" : ""}`}
                   onClick={() => setAutoDetectionEnabled(!autoDetectionEnabled)}
                   type="button"
+                  aria-pressed={autoDetectionEnabled}
                 >
                   {autoDetectionEnabled ? "Ligado" : "Desligado"}
                 </button>
@@ -1022,9 +1041,9 @@ export default function PlayView(props) {
               <div className="settings-item">
                 <div className="settings-item-label">
                   <i className="ti ti-device-floppy" />
-                  <span>Auto-save</span>
+                  <span>Salvar sozinho</span>
                 </div>
-                <button className={`settings-toggle ${autoSaveEnabled ? "on" : ""}`} onClick={() => setAutoSaveEnabled(!autoSaveEnabled)} type="button">
+                <button className={`settings-toggle ${autoSaveEnabled ? "on" : ""}`} onClick={() => setAutoSaveEnabled(!autoSaveEnabled)} type="button" aria-pressed={autoSaveEnabled}>
                   {autoSaveEnabled ? "Ligado" : "Desligado"}
                 </button>
               </div>
@@ -1034,29 +1053,35 @@ export default function PlayView(props) {
               <i className="ti ti-palette" />
               <span>Tema atual: {theme === "dark" ? "Escuro" : "Claro"}</span>
             </button>
+              <div className="skill-list session-meta">
+                <div className="skill-row">
+                  <span className={`skill-dot ${connectionStatus === "online" ? "prof" : ""}`} />
+                  <span className="skill-name">Conexão</span>
+                  <span className="skill-val">{connectionStatus || "desconhecida"}</span>
+                </div>
+                <div className="skill-row">
+                  <span className="skill-dot prof" />
+                  <span className="skill-name">Último save</span>
+                  <span className="skill-val">{lastSaved ? fmtTime(lastSaved) : "Ainda não salvo"}</span>
+                </div>
+              </div>
+            </section>
 
-            <button className="settings-action" onClick={quickSave} type="button">
-              <i className="ti ti-device-floppy" />
-              <span>Salvar agora</span>
-            </button>
-
-            <button className="settings-action" onClick={() => setShowTimeSkipModal(true)} type="button">
-              <i className="ti ti-clock-hour-4" />
-              <span>Avançar no tempo</span>
-            </button>
-
-            <button className="settings-action" onClick={exportToBook} type="button">
-              <i className="ti ti-book-download" />
-              <span>Exportar aventura para livro</span>
-            </button>
-
-            <button className="settings-action" onClick={saveSlot} type="button">
-              <i className="ti ti-bookmark-plus" />
-              <span>Criar save slot</span>
-            </button>
-
-            <div className="card-box">
-              <div className="section-label">Save slots</div>
+            <section className="play-section" aria-labelledby="settings-arquivo">
+              <h3 id="settings-arquivo" className="play-section-title">Arquivo</h3>
+              <p className="settings-hint">Para avançar o calendário da história, use Tempo no topo da tela.</p>
+              <button className="settings-action" onClick={quickSave} type="button">
+                <i className="ti ti-device-floppy" />
+                <span>Salvar agora</span>
+              </button>
+              <button className="settings-action" onClick={exportToBook} type="button">
+                <i className="ti ti-book-download" />
+                <span>Exportar aventura para livro</span>
+              </button>
+              <button className="settings-action" onClick={saveSlot} type="button">
+                <i className="ti ti-bookmark-plus" />
+                <span>Criar save slot</span>
+              </button>
               {saveList.length ? (
                 <div className="equip-list">
                   {saveList.map((save) => (
@@ -1076,6 +1101,7 @@ export default function PlayView(props) {
                         onClick={() => deleteSlot?.(save.id)}
                         type="button"
                         title="Apagar save"
+                        aria-label={`Apagar save ${save.name || ""}`}
                       >
                         <i className="ti ti-trash" />
                       </button>
@@ -1083,12 +1109,12 @@ export default function PlayView(props) {
                   ))}
                 </div>
               ) : (
-                <div className="panel-sub">Nenhum save slot criado.</div>
+                <p className="panel-sub">Nenhum save slot criado ainda.</p>
               )}
-            </div>
+            </section>
 
-            <div className="card-box">
-              <div className="section-label">Testes rápidos</div>
+            <section className="play-section" aria-labelledby="settings-testes">
+              <h3 id="settings-testes" className="play-section-title">Inserir teste no narrador</h3>
               <div className="dice-history">
                 {attributeEntries.map(([key]) => (
                   <button
@@ -1104,23 +1130,7 @@ export default function PlayView(props) {
                   </button>
                 ))}
               </div>
-            </div>
-
-            <div className="card-box">
-              <div className="section-label">Sessão</div>
-              <div className="skill-list">
-                <div className="skill-row">
-                  <span className={`skill-dot ${connectionStatus === "online" ? "prof" : ""}`} />
-                  <span className="skill-name">Conexão</span>
-                  <span className="skill-val">{connectionStatus || "desconhecida"}</span>
-                </div>
-                <div className="skill-row">
-                  <span className="skill-dot prof" />
-                  <span className="skill-name">Último save</span>
-                  <span className="skill-val">{lastSaved ? fmtTime(lastSaved) : "Ainda não salvo"}</span>
-                </div>
-              </div>
-            </div>
+            </section>
 
             <button className="settings-action danger" onClick={resetChat} type="button">
               <i className="ti ti-trash" />

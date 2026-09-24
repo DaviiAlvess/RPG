@@ -69,6 +69,23 @@ test('Falhas de API são distinguíveis e cota/indisponibilidade tentam outra ch
     resetGeminiKeyState();
     globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({ promptFeedback: { blockReason: 'SAFETY' } }) });
     res = await call(); assert.equal(res.data.code, 'CONTENT_BLOCKED');
+
+    resetGeminiKeyState();
+    count = 0;
+    const used = [];
+    globalThis.fetch = async url => {
+      count++;
+      used.push(String(url).split('key=')[1]);
+      if (used.length === 1) {
+        return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [] } }] }) };
+      }
+      return okText();
+    };
+    res = await call();
+    assert.equal(res.code, 200);
+    assert.equal(res.data.text, 'Uma cena.');
+    assert.equal(used.length, 2);
+    assert.notEqual(used[0], used[1]);
   } finally {
     globalThis.fetch = previousFetch;
     resetGeminiKeyState();

@@ -30,6 +30,32 @@ export function newerCampaign(local, cloud) {
   return new Date(local.updatedAt || 0).getTime() > new Date(cloud.updatedAt || 0).getTime() ? local : cloud;
 }
 
+const CAMPAIGN_PERSIST_FIELDS = [
+  'charTitle', 'charOriginTitle', 'charSituation', 'charSkills',
+  'charBg', 'storyStartPoint', 'pendingMasterNote',
+  'masterAgreements', 'masterGuidance', 'masterChat',
+];
+
+function hasPersistValue(value) {
+  if (value == null) return false;
+  if (typeof value === 'string') return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+/** Escolhe o save mais novo e recupera identidade/acordos se a cópia vencedora os tiver perdido. */
+export function mergeCampaignRecords(local, cloud) {
+  const chosen = newerCampaign(local, cloud);
+  const other = chosen === local ? cloud : local;
+  if (!chosen) return other ?? null;
+  if (!other) return chosen;
+  const next = { ...chosen };
+  for (const key of CAMPAIGN_PERSIST_FIELDS) {
+    if (!hasPersistValue(next[key]) && hasPersistValue(other[key])) next[key] = other[key];
+  }
+  return next;
+}
+
 export function mergeCampaignIndex(cloud = [], local = []) {
   const byId = new Map();
   for (const item of Array.isArray(local) ? local : []) {

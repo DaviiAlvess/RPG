@@ -1,7 +1,7 @@
 import { get, ref, remove, runTransaction } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { ensureFirebaseReady } from "./firebase-browser";
-import { prepareCampaignForRtdb } from "./rtdb-util";
+import { cloudWriteIsStale, interpretSaveTransaction, prepareCampaignForRtdb } from "./rtdb-util";
 
 async function waitForUser(auth, timeoutMs = 5000) {
   if (auth.currentUser) return auth.currentUser;
@@ -56,12 +56,21 @@ export async function cloudSaveCampaign(campaign) {
       updatedAt: campaign.updatedAt || now,
       createdAt: existingSnap.exists() ? existingSnap.val()?.createdAt || now : now,
     });
-    const result = await runTransaction(pathRef, (current) => {
-      if (current && new Date(current.updatedAt || 0).getTime() > new Date(payload.updatedAt).getTime()) return;
-      return payload;
-    }, { applyLocally: false });
-    if (!result.committed) return { ok: false, conflict: true, error: "Existe uma versão mais recente na nuvem. Reabra a campanha para recuperá-la." };
-    return { ok: true };
+    const commit = async () => {
+      let staleWrite = false;
+      const result = await runTransaction(pathRef, (current) => {
+        if (cloudWriteIsStale(current, payload)) {
+          staleWrite = true;
+          return;
+        }
+        staleWrite = false;
+        return payload;
+      }, { applyLocally: false });
+      return { committed: result.committed, staleWrite };
+    };
+    let outcome = await commit();
+    if (!outcome.committed && !outcome.staleWrite) outcome = await commit();
+    return interpretSaveTransaction(outcome);
   } catch (err) {
     console.error("cloudSaveCampaign:", err);
     const code = err.code || "";

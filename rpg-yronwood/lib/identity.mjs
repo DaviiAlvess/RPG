@@ -29,9 +29,10 @@ function freezeOrigin(currentTitle, nextTitle, originTitle) {
 export function parseIdentityTags(text, campaign = {}) {
   const currentTitle = String(campaign.charTitle || '').trim();
   const nextTitle = lastTag(text, TAG_KEYS.cargo) || currentTitle;
+  const origin = freezeOrigin(currentTitle, nextTitle, campaign.charOriginTitle);
   return {
     charTitle: nextTitle,
-    charOriginTitle: freezeOrigin(currentTitle, nextTitle, campaign.charOriginTitle),
+    charOriginTitle: origin || currentTitle,
     charSituation: lastTag(text, TAG_KEYS.situacao) || String(campaign.charSituation || '').trim(),
     charSkills: lastTag(text, TAG_KEYS.habilidade) || String(campaign.charSkills || '').trim(),
   };
@@ -41,9 +42,10 @@ export function parseIdentityTags(text, campaign = {}) {
 export function applyManualIdentity(campaign = {}, edits = {}) {
   const currentTitle = String(campaign.charTitle || '').trim();
   const nextTitle = String(edits.charTitle ?? campaign.charTitle ?? '').replace(/\s+/g, ' ').trim();
+  const origin = freezeOrigin(currentTitle, nextTitle, edits.charOriginTitle ?? campaign.charOriginTitle);
   return {
     charTitle: nextTitle,
-    charOriginTitle: freezeOrigin(currentTitle, nextTitle, edits.charOriginTitle ?? campaign.charOriginTitle),
+    charOriginTitle: origin || currentTitle,
     charSituation: String(edits.charSituation ?? campaign.charSituation ?? '').trim(),
     charSkills: String(edits.charSkills ?? campaign.charSkills ?? '').trim(),
     charBg: String(edits.charBg ?? campaign.charBg ?? '').trim(),

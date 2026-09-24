@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gmRequestError, isRetryableGmTimeout, requestJson, retryAfterWaitMs, GM_CLIENT_TIMEOUT_MS } from '../lib/api-client.mjs';
+import { gmRequestError, isRetryableGmTimeout, isRetryableGmFailure, requestJson, retryAfterWaitMs, GM_CLIENT_TIMEOUT_MS } from '../lib/api-client.mjs';
 test('Espera limitada mesmo quando o corpo da resposta fica travado', async () => {
   let calls = 0, signal;
   await assert.rejects(requestJson('/api/gm', {}, { timeoutMs: 10, retryOnce: false, fetchImpl: async (_url, options) => {
@@ -72,6 +72,33 @@ test('Timeout no cliente tenta o narrar uma vez com prazo novo', async () => {
   assert.equal(calls, 2);
   assert.equal(response.status, 200);
   assert.equal((await response.json()).text, 'Beat da cena.');
+});
+test('Resposta vazia ou indisponível do Mestre tenta o narrar uma vez; 400 não', async () => {
+  let calls = 0;
+  const emptyThenOk = await requestJson('/api/gm', {}, {
+    fetchImpl: async () => {
+      calls++;
+      if (calls === 1) return { ok: false, status: 502, json: async () => ({ error: 'Vazio', code: 'EMPTY_RESPONSE' }) };
+      return { ok: true, status: 200, json: async () => ({ text: 'A cena segue.' }) };
+    },
+  });
+  assert.equal(calls, 2);
+  assert.equal(emptyThenOk.status, 200);
+  assert.equal((await emptyThenOk.json()).text, 'A cena segue.');
+
+  calls = 0;
+  const stillInvalid = await requestJson('/api/gm', {}, {
+    fetchImpl: async () => {
+      calls++;
+      return { ok: false, status: 400, json: async () => ({ error: 'Corpo ausente', code: 'INVALID_BODY' }) };
+    },
+  });
+  assert.equal(calls, 1);
+  assert.equal(stillInvalid.status, 400);
+  assert.equal(isRetryableGmFailure({ code: 'EMPTY_RESPONSE' }), true);
+  assert.equal(isRetryableGmFailure({ code: 'UPSTREAM_UNAVAILABLE' }), true);
+  assert.equal(isRetryableGmFailure({ code: 'API_AUTH' }), false);
+  assert.equal(isRetryableGmFailure({ code: 'INVALID_BODY' }, { status: 400 }), false);
 });
 test('Mensagens de cota, timeout, chave e modelo ficam distintas', async () => {
   assert.equal(retryAfterWaitMs(45, 4000), 4000);

@@ -31,7 +31,22 @@ const geminiText = data => data?.candidates?.[0]?.content?.parts
   .map((part) => part.text).join("");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "2mb" } } };
+
+export function readGmRequestBody(raw) {
+  if (raw == null || raw === "") return {};
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
+  return null;
+}
 
 export default async function handler(req, res) {
   const MODELO_GM = modelName(process.env.GEMINI_MODEL);
@@ -48,7 +63,15 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
 
-  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, useGrounding, world, charName } = req.body ?? {};
+  const requestBody = readGmRequestBody(req.body);
+  if (requestBody == null) {
+    return res.status(400).json({ error: "Pedido inválido: corpo ausente ou malformado.", code: "INVALID_BODY" });
+  }
+  if (Object.keys(requestBody).length === 0) {
+    return res.status(400).json({ error: "Pedido inválido: corpo ausente.", code: "INVALID_BODY" });
+  }
+
+  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, useGrounding, world, charName } = requestBody;
 
   const parseJsonFromText = (text) => {
     const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "").trim();
@@ -99,7 +122,6 @@ export default async function handler(req, res) {
     let apiVersion = "v1beta";
     let lastError = null;
     let lastNonRateLimitError = null;
-    let emptyRetries = 0;
     const deadline = Date.now() + deadlineMs;
     const triedThisCall = new Set();
     const authRefusedKeys = new Set();
@@ -246,12 +268,8 @@ export default async function handler(req, res) {
           empty.status = blocked ? 422 : 502;
           setLastError(empty);
           if (blocked) { lastError.fatal = true; throw lastError; }
-          if (emptyRetries < 1 && attempt < maxAttempts - 1) {
-            emptyRetries += 1;
-            continue;
-          }
-          lastError.fatal = true;
-          throw lastError;
+          triedThisCall.add(apiKey);
+          continue;
         }
 
         recordKeyUsage(apiKey, parseUsageTokens(data));
@@ -395,8 +413,8 @@ export default async function handler(req, res) {
   }
 
   // ── Modo: ação automática do personagem ────────────────────────────
-  if (req.body?.useAutoAction) {
-    const { camp, lastGmText } = req.body;
+  if (requestBody.useAutoAction) {
+    const { camp, lastGmText } = requestBody;
     if (!camp?.charName) {
       return res.status(400).json({ error: 'Campo "camp.charName" ausente.' });
     }
@@ -448,11 +466,11 @@ export default async function handler(req, res) {
   if (!Array.isArray(messages) || messages.length === 0 || messages.some((m) =>
     !m || !["user", "assistant"].includes(m.role) ||
     typeof m.content !== "string" || !m.content.trim())) {
-    return res.status(400).json({ error: 'Campo "messages" ausente ou inválido.' });
+    return res.status(400).json({ error: 'Campo "messages" ausente ou inválido.', code: "INVALID_BODY" });
   }
 
   if (typeof systemPrompt !== "string" || !systemPrompt.trim()) {
-    return res.status(400).json({ error: 'Campo "systemPrompt" ausente.' });
+    return res.status(400).json({ error: 'Campo "systemPrompt" ausente.', code: "INVALID_BODY" });
   }
 
   try {
@@ -463,7 +481,7 @@ export default async function handler(req, res) {
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: req.body?.economyMode === true ? 1024 : 2048, temperature: 0.9 },
+      generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 1024 : 2048, temperature: 0.9 },
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
 

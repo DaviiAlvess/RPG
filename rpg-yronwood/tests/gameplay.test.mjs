@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
+import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
 test('Testes acentuados e dificuldade explícita', () => {
   const trial = parseTest('[TESTE:Força|DC:16] Abrir a porta');
   assert.equal(trial.attribute, 'Força');
@@ -41,6 +41,25 @@ test('Recuperação preserva a versão mais recente, local ou remota', () => {
   assert.equal(newerCampaign(cloud, local), local);
   assert.equal(newerCampaign(local, null), local);
   assert.equal(newerCampaign(null, cloud), cloud);
+});
+test('Abrir campanha recupera cargo, origem e acordos se a cópia mais nova os tiver perdido', () => {
+  const local = {
+    id: 'a',
+    updatedAt: 1000,
+    charTitle: 'guarda',
+    charOriginTitle: 'estalagem',
+    charSituation: 'pátio',
+    masterAgreements: ['Cenas curtas'],
+    pendingMasterNote: 'Mostre a atração',
+  };
+  const cloud = { id: 'a', updatedAt: 2000, charTitle: 'sargento', msgs: [] };
+  const recovered = mergeCampaignRecords(local, cloud);
+  assert.equal(recovered.charTitle, 'sargento');
+  assert.equal(recovered.charOriginTitle, 'estalagem');
+  assert.equal(recovered.charSituation, 'pátio');
+  assert.deepEqual(recovered.masterAgreements, ['Cenas curtas']);
+  assert.equal(recovered.pendingMasterNote, 'Mostre a atração');
+  assert.equal(mergeCampaignRecords(local, null).charOriginTitle, 'estalagem');
 });
 test('A lista da nuvem vazia não apaga aventuras que só existem neste aparelho', () => {
   const local = [{ id: 'casa', world: 'Westeros', updatedAt: '2026-01-02' }];

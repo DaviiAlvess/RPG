@@ -59,6 +59,13 @@ test('identityPromptLines apresenta o agora e mantém o começo para perguntas',
   assert.ok(!lines.includes(' — Ajudante de uma estalagem'));
 });
 
+test('parseIdentityTags grava origem no cargo atual quando a campanha ainda não tinha origem', () => {
+  const next = parseIdentityTags('Sem tags de cargo.', { charTitle: 'guarda da porta', charSkills: 'lança' });
+  assert.equal(next.charTitle, 'guarda da porta');
+  assert.equal(next.charOriginTitle, 'guarda da porta');
+  assert.equal(next.charSkills, 'lança');
+});
+
 test('tags de identidade saem do texto visível', () => {
   const visible = stripIdentityTags('Você cruza o pátio. [CARGO:guarda] [SITUAÇÃO:porta norte] [HABILIDADE:lança]');
   assert.equal(visible.replace(/\s+/g, ' ').trim(), 'Você cruza o pátio.');

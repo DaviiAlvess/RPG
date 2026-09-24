@@ -45,6 +45,20 @@ export function isRetryableGmTimeout(error, response) {
   return false;
 }
 
+const RETRYABLE_GM_CODES = new Set([
+  'CLIENT_TIMEOUT',
+  'TIMEOUT',
+  'EMPTY_RESPONSE',
+  'UPSTREAM_UNAVAILABLE',
+  'UPSTREAM_RESPONSE',
+  'CLIENT_NETWORK',
+]);
+
+export function isRetryableGmFailure(error, response) {
+  if (isRetryableGmTimeout(error, response)) return true;
+  return RETRYABLE_GM_CODES.has(error?.code);
+}
+
 function clientTimeoutError() {
   const error = new Error('A conexão com o Mestre demorou demais. Tente novamente; o que já foi combinado permanece.');
   error.code = 'CLIENT_TIMEOUT';
@@ -93,7 +107,7 @@ async function requestJsonOnce(url, options, { timeoutMs, fetchImpl }) {
   } finally { clearTimeout(timer); }
 }
 
-/** One request, including body reading, with a bounded wait. Retries /api/gm 429 and timeout once. */
+/** One request, including body reading, with a bounded wait. Retries /api/gm 429, timeout, empty and upstream once. */
 export async function requestJson(url, options = {}, {
   timeoutMs = GM_CLIENT_TIMEOUT_MS,
   fetchImpl = fetch,
@@ -112,12 +126,12 @@ export async function requestJson(url, options = {}, {
       if (waitMs > 0) await sleep(waitMs);
       return once();
     }
-    if (isGmApiUrl(url) && isRetryableGmTimeout({ code: data.code, status: first.status }, first)) {
+    if (isGmApiUrl(url) && isRetryableGmFailure({ code: data.code, status: first.status }, first)) {
       return once();
     }
     return first;
   } catch (error) {
-    if (retryOnce && isGmApiUrl(url) && isRetryableGmTimeout(error)) {
+    if (retryOnce && isGmApiUrl(url) && isRetryableGmFailure(error)) {
       return once();
     }
     throw error;

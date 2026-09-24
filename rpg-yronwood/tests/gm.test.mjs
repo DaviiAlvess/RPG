@@ -26,6 +26,12 @@ test('Mestre: validação, respostas completas e indisponibilidade', async () =>
       assert.equal((await call({ ...valid, messages })).code, 400);
     }
     assert.equal((await call({ ...valid, systemPrompt: {} })).code, 400);
+    const emptyBody = await call({});
+    assert.equal(emptyBody.code, 400);
+    assert.equal(emptyBody.data.code, 'INVALID_BODY');
+    const malformed = await call('não é json');
+    assert.equal(malformed.code, 400);
+    assert.equal(malformed.data.code, 'INVALID_BODY');
     globalThis.fetch = async (_url, options) => {
       assert.ok(options.signal instanceof AbortSignal);
       return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [
@@ -33,6 +39,7 @@ test('Mestre: validação, respostas completas e indisponibilidade', async () =>
       ] } }], usageMetadata: { totalTokenCount: 12 } }) };
     };
     assert.equal((await call(valid)).data.text, 'Uma porta se abre.');
+    assert.equal((await call(JSON.stringify(valid))).data.text, 'Uma porta se abre.');
     resetGeminiKeyState();
     globalThis.fetch = async () => ({ ok: false, status: 429, json: async () => ({ error: { message: 'Quota exceeded' } }) });
     assert.equal((await call(valid)).code, 429);

@@ -15,7 +15,7 @@ import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
-import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
+import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
 import IosInstallHint from "../components/IosInstallHint";
@@ -477,6 +477,7 @@ export default function RPG() {
   const [showAuthPassword, setShowAuthPassword] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [firebaseOk, setFirebaseOk] = useState(true);
+  const [cloudOk, setCloudOk] = useState(true);
   const [authMessage, setAuthMessage] = useState(null);
 
   const gameTimeRef = useRef(gameTime);
@@ -520,25 +521,36 @@ export default function RPG() {
     });
   }, []);
 
+  const readLocalIndex = (userId) => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   const reloadCampaigns = useCallback(async (userId) => {
+    const local = readLocalIndex(userId);
     try {
       const { cloudListCampaigns } = await import("../lib/rpg-cloud");
       const { ok, data, error } = await cloudListCampaigns();
       if (ok && Array.isArray(data)) {
-        localStorage.setItem(idxKeyForUser(userId), JSON.stringify(data));
-        setIdx(data);
+        const merged = mergeCampaignIndex(data, local);
+        localStorage.setItem(idxKeyForUser(userId), JSON.stringify(merged));
+        setIdx(merged);
+        setCloudOk(true);
         return;
       }
-      if (error) console.warn("Nuvem:", error);
+      if (error) {
+        setCloudOk(false);
+        console.warn("Nuvem:", error);
+      }
     } catch (e) {
+      setCloudOk(false);
       console.warn("reloadCampaigns:", e);
     }
-    try {
-      const local = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
-      setIdx(local);
-    } catch {
-      setIdx([]);
-    }
+    setIdx(local);
   }, []);
 
   const migrateLocalCampaigns = useCallback(async (userId) => {
@@ -615,10 +627,7 @@ export default function RPG() {
       await reloadCampaigns(userId);
       const { cloudHealthCheck } = await import("../lib/rpg-cloud");
       const h = await cloudHealthCheck();
-      if (!h.ok) {
-        setFirebaseOk(false);
-        setAuthMessage({ type: "error", text: h.error });
-      }
+      setCloudOk(h.ok);
     })();
   }, [authReady, user, reloadCampaigns, migrateLocalCampaigns]);
 
@@ -719,8 +728,11 @@ export default function RPG() {
       try {
         const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
         const result = await cloudSaveCampaign(snapshot);
-        if (result.ok) { setLastSaved(Date.now()); setSaveStatus("Salvo na nuvem"); }
-        else setSaveStatus(result.conflict ? "Nuvem mais recente — reabra a campanha" : local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
+        if (result.ok) { setLastSaved(Date.now()); setSaveStatus("Salvo na nuvem"); setCloudOk(true); }
+        else {
+          if (!result.conflict) setCloudOk(false);
+          setSaveStatus(result.conflict ? "Nuvem mais recente — reabra a campanha" : local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
+        }
         return { ...result, local };
       } catch (error) {
         setSaveStatus(local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
@@ -770,9 +782,12 @@ export default function RPG() {
     const { cloudListCampaigns } = await import("../lib/rpg-cloud");
     const { ok, data } = await cloudListCampaigns();
     if (ok && Array.isArray(data)) {
-      localStorage.setItem(idxKeyForUser(getUserId(user)), JSON.stringify(data));
-      return data;
+      const merged = mergeCampaignIndex(data, readLocalIndex(getUserId(user)));
+      localStorage.setItem(idxKeyForUser(getUserId(user)), JSON.stringify(merged));
+      setCloudOk(true);
+      return merged;
     }
+    setCloudOk(false);
     try {
       return JSON.parse(localStorage.getItem(idxKeyForUser(getUserId(user))) || "[]");
     } catch {
@@ -843,6 +858,8 @@ export default function RPG() {
     setActive(null);
     setView("home");
     setAuthPassword("");
+    setAuthMessage(null);
+    setCloudOk(true);
     showNotification("Sessão encerrada.", "info");
   };
 
@@ -1963,6 +1980,11 @@ export default function RPG() {
             <span className="user-email" title={user.email}>{user.email}</span>
             <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
           </div>
+          {!cloudOk ? (
+            <div className="auth-alert auth-alert-warning" style={{ margin: "0 20px 12px" }}>
+              A nuvem não aceitou o save. As aventuras continuam neste aparelho; dá para jogar.
+            </div>
+          ) : null}
           <div className="camp-list">
             <div className="library-heading"><div><h2>Suas aventuras</h2></div><span className="campaign-count">{idx.length} {idx.length === 1 ? "mundo" : "mundos"}</span></div>
             {!idx.length ? (

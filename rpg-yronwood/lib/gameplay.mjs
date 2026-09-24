@@ -29,6 +29,20 @@ export function newerCampaign(local, cloud) {
   if (!cloud?.id) return local;
   return new Date(local.updatedAt || 0).getTime() > new Date(cloud.updatedAt || 0).getTime() ? local : cloud;
 }
+
+export function mergeCampaignIndex(cloud = [], local = []) {
+  const byId = new Map();
+  for (const item of Array.isArray(local) ? local : []) {
+    if (item?.id == null) continue;
+    byId.set(String(item.id), item);
+  }
+  for (const item of Array.isArray(cloud) ? cloud : []) {
+    if (item?.id == null) continue;
+    const id = String(item.id);
+    byId.set(id, newerCampaign(byId.get(id), item));
+  }
+  return [...byId.values()].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+}
 export function readWorldState(text, previous = {}) {
   const next = { ...previous, npcs: { ...(previous.npcs || {}) }, promises: [...(previous.promises || [])], secrets: [...(previous.secrets || [])] };
   for (const match of String(text).matchAll(/\[(LOCAL|PROMESSA|SEGREDO|NPC):([^\]]+)\]/gi)) {

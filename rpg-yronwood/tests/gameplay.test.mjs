@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
+import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
 test('Testes acentuados e dificuldade explícita', () => {
   const trial = parseTest('[TESTE:Força|DC:16] Abrir a porta');
   assert.equal(trial.attribute, 'Força');
@@ -41,6 +41,13 @@ test('Recuperação preserva a versão mais recente, local ou remota', () => {
   assert.equal(newerCampaign(cloud, local), local);
   assert.equal(newerCampaign(local, null), local);
   assert.equal(newerCampaign(null, cloud), cloud);
+});
+test('A lista da nuvem vazia não apaga aventuras que só existem neste aparelho', () => {
+  const local = [{ id: 'casa', world: 'Westeros', updatedAt: '2026-01-02' }];
+  const cloud = [{ id: 'mar', world: 'One Piece', updatedAt: '2026-01-03' }];
+  assert.deepEqual(mergeCampaignIndex([], local), local);
+  assert.equal(mergeCampaignIndex(cloud, local).map((item) => item.id).join(','), 'mar,casa');
+  assert.equal(mergeCampaignIndex([{ id: 'casa', updatedAt: '2026-02-01' }], local)[0].updatedAt, '2026-02-01');
 });
 test('Memória guarda local, NPCs, segredos e promessas sem duplicar', () => {
   const state = readWorldState('[LOCAL:Taverna] [NPC:Arya|Amigável, viu a chave] [SEGREDO:chave; apenas Arya sabe] [PROMESSA:voltar]');

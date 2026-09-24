@@ -96,11 +96,29 @@ export function buildNarrationDirection(value) {
   ].join('\n');
 }
 
+export const START_BEAT_PREFIX = '[INÍCIO DA AVENTURA]';
+export function isStartBeatMessage(text) {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  if (t.startsWith(START_BEAT_PREFIX)) return true;
+  return t.includes('NARRAÇÃO VISCERAL') && /A aventura começa/.test(t);
+}
+export function startBeatDisplay() {
+  return 'A aventura começa.';
+}
+export function sanitizeStartDisplay(disp = []) {
+  return (Array.isArray(disp) ? disp : []).map((message) => {
+    if (!message || (message.type !== 'user' && message.type !== 'auto')) return message;
+    if (!isStartBeatMessage(message.text)) return message;
+    return { ...message, type: 'time_skip_ctx', text: startBeatDisplay() };
+  });
+}
+
 export function buildStartPrompt(camp = {}) {
   const name = String(camp.charName || '').trim() || 'o personagem';
   const world = String(camp.world || '').trim() || 'este mundo';
   const moment = String(camp.storyStartPoint || '').trim();
-  const parts = [];
+  const parts = [START_BEAT_PREFIX];
 
   if (moment) {
     if (camp.isExistingChar) {

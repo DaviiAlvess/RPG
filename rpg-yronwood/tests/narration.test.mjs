@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
 import { economyPrompt } from '../lib/economy.mjs';
-import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
+import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, START_BEAT_PREFIX, buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from '../lib/narration.mjs';
 
 const PLAYER_CAMERA_MARKERS = ['sujeito gramatical', 'subordinado', 'canto do olho', 'dentro dos olhos', 'a partir de você', 'save antigo'];
 const VISCERAL_MARKERS = [
@@ -249,4 +249,24 @@ test('Narração visceral é trava global no start e no turno — save vazio, an
   const economySrc = await readFile(new URL('../lib/economy.mjs', import.meta.url), 'utf8');
   assert.ok(economySrc.includes('narração visceral'));
   assert.ok(economySrc.includes('menos frases, não menos corpo'));
+});
+test('O briefing de início vai ao Mestre, não vaza no chat do jogador', async () => {
+  const start = buildStartPrompt({ charName: 'Edric', world: 'Westeros', isKnownIP: true });
+  assert.ok(start.startsWith(START_BEAT_PREFIX));
+  assert.equal(isStartBeatMessage(start), true);
+  assert.equal(isStartBeatMessage('Dou um passo à frente.'), false);
+  assert.equal(startBeatDisplay().includes('NARRAÇÃO VISCERAL'), false);
+  const leaked = sanitizeStartDisplay([
+    { type: 'user', text: start },
+    { type: 'gm', text: 'A palma cola na madeira. O ar trava no peito.' },
+  ]);
+  assert.equal(leaked[0].type, 'time_skip_ctx');
+  assert.equal(leaked[0].text, startBeatDisplay());
+  assert.equal(leaked[1].type, 'gm');
+  const oldSave = sanitizeStartDisplay([{ type: 'user', text: `A aventura começa neste instante.\n${NARRATION_VISCERAL_LOCK}` }]);
+  assert.equal(oldSave[0].type, 'time_skip_ctx');
+  const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('isStartBeatMessage'));
+  assert.ok(source.includes('startBeatDisplay()'));
+  assert.ok(source.includes('sanitizeStartDisplay'));
 });

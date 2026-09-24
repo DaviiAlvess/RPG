@@ -13,7 +13,7 @@ import { parseRelationships } from "../lib/relationships.mjs";
 import { applyManualIdentity, identityPromptLines, identityTagList, parseIdentityTags, stripIdentityTags } from "../lib/identity.mjs";
 import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
-import { buildNarrationDirection, buildStartPrompt, normalizeNarration } from "../lib/narration.mjs";
+import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
 import { parseTest, resolveTest, itemEffect, newerCampaign, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
 import PlayView from "../components/PlayView";
@@ -1131,7 +1131,7 @@ export default function RPG() {
     setLastRoll(null);
     setPendingTest(restoredTest); setShowRollButton(Boolean(restoredTest));
     setMsgs(data.msgs || []);
-    setDisp(data.disp || []);
+    setDisp(sanitizeStartDisplay(data.disp || []));
     setSceneImg(data.img || null);
     setImgOk(!!data.img);
     setCampLore(data.lore || "");
@@ -1351,12 +1351,13 @@ export default function RPG() {
 
     const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
     const isMasterBeat = isMasterBeatMessage(text);
+    const isStartBeat = isStartBeatMessage(text);
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
     const newDisp = [
       ...baseDisp,
       {
-        type: isTimeSkipContext || isMasterBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
-        text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
+        type: isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
+        text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
       },
     ];
     setMsgs(newMsgs); setDisp(newDisp);

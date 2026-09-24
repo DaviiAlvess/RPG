@@ -34,7 +34,7 @@ import {
   shouldShowTimeSeparator,
   formatGameTimeLong,
 } from "../lib/timeSystem";
-import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply } from "../lib/autoMode";
+import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction } from "../lib/autoMode";
 import { normalizeDialogueText } from "../lib/dialogueFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -1100,7 +1100,9 @@ export default function RPG() {
 
   // ─── Auto mode ────────────────────────────────────────────────────
   const scheduleNextTurn = useCallback((options, currentMsgs, currentDisp, camp, lore) => {
-    if (!autoRef.current || sending.current) return;
+    if (!autoRef.current) return;
+    clearTimeout(timerRef.current);
+    clearInterval(cdRef.current);
 
     const safeOptions = (options || []).filter(Boolean);
     const step = planAutoStep({
@@ -1120,9 +1122,16 @@ export default function RPG() {
       });
     }, 1000);
 
-    timerRef.current = setTimeout(async () => {
+    const fire = async () => {
+      if (!autoRef.current) {
+        setAutoWaiting(false);
+        return;
+      }
+      if (sending.current) {
+        timerRef.current = setTimeout(fire, 400);
+        return;
+      }
       setAutoWaiting(false);
-      if (!autoRef.current || sending.current) return;
 
       if (step.kind === "roll") {
         const roll = rollAutoD20();
@@ -1139,8 +1148,10 @@ export default function RPG() {
 
       const lastGmText = getLastGmText(currentDisp, currentMsgs);
       const chosen = await resolveAutoAction(camp, lastGmText, safeOptions, apiFetch);
-      sendMsgRef.current?.(chosen, currentMsgs, currentDisp, camp, lore, true);
-    }, autoDelay * 1000);
+      const action = String(chosen || "").trim() || buildLocalAutoAction(camp, lastGmText);
+      sendMsgRef.current?.(action, currentMsgs, currentDisp, camp, lore, true);
+    };
+    timerRef.current = setTimeout(fire, Math.max(250, autoDelay * 1000));
   }, [autoDelay, apiFetch]);
 
   const toggleAuto = () => {
@@ -1153,7 +1164,7 @@ export default function RPG() {
       return;
     }
 
-    showNotification("Modo automático ligado. A história segue sozinha, inclusive nos testes. Intervenha quando quiser.", "info");
+    showNotification("Automático ligado. A história segue sozinha até você apertar Desativar.", "info");
     if (!loading && !sending.current && !autoWaiting && active) {
       const lastGm = getLastGmText(disp, msgs);
       if (lastGm || pendingRef.current.length || msgs.length > 0) {
@@ -1412,6 +1423,7 @@ export default function RPG() {
     let retryCamp = camp;
     let pendingLevelNote = "";
     let pendingMasterNote = "";
+    let resumeAuto = null;
 
     try {
       let memory = camp.memory || "";
@@ -1578,9 +1590,9 @@ export default function RPG() {
       setPendingTest(nextTest);
       setShowRollButton(Boolean(nextTest) && !autoRef.current);
       if (nextTest) setLastRoll(null);
-      if (autoRef.current) {
-        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
-      }
+      resumeAuto = autoRef.current
+        ? { options, msgs: finalMsgs, disp: finalDisp, camp: updated, lore }
+        : null;
 
       // Inventory is updated once per turn from explicit [ITEM: ...] events.
 
@@ -1607,6 +1619,9 @@ export default function RPG() {
     }
 
     sending.current = false; setLoading(false); setStatus("");
+    if (resumeAuto && autoRef.current) {
+      scheduleNextTurn(resumeAuto.options, resumeAuto.msgs, resumeAuto.disp, resumeAuto.camp, resumeAuto.lore);
+    }
   };
 
   sendMsgRef.current = sendMsg;

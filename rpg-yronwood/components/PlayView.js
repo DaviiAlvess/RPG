@@ -432,12 +432,12 @@ export default function PlayView(props) {
               className={`topbar-btn ${autoMode ? "on" : ""}`}
               onClick={toggleAuto}
               type="button"
-              title={autoMode ? "Desligar automático e assumir o controle" : "Ligar automático: a história segue sozinha, inclusive nos dados"}
-              aria-label={autoMode ? "Desligar automático e assumir o controle" : "Ligar automático"}
+              title={autoMode ? "Desativar o automático e parar a história" : "Ligar automático: a história segue sozinha até você desativar"}
+              aria-label={autoMode ? "Desativar o automático" : "Ligar automático"}
               aria-pressed={autoMode}
             >
-              <i className="ti ti-player-play" />
-              <span className="topbar-btn-label">Auto</span>
+              <i className={`ti ${autoMode ? "ti-player-pause" : "ti-player-play"}`} />
+              <span className="topbar-btn-label">{autoMode ? "Desativar" : "Auto"}</span>
             </button>
 
             <button className="topbar-btn" onClick={quickSave} type="button" title="Salvar rápido" aria-label="Salvar rápido">
@@ -467,8 +467,8 @@ export default function PlayView(props) {
                     <span className="auto-dot" />
                     <span>
                       {pendingTest
-                        ? <>Modo automático — rolando o teste em <strong>{countdown}s</strong>.</>
-                        : <>Modo automático — a história segue em <strong>{countdown}s</strong>.</>}
+                        ? <>Automático segue — rolando o teste em <strong>{countdown}s</strong>. Só para em Desativar.</>
+                        : <>Automático segue — próxima cena em <strong>{countdown}s</strong>. Só para em Desativar.</>}
                     </span>
                   </div>
                   <button className="btn-intervir" onClick={intervene} type="button">
@@ -481,7 +481,7 @@ export default function PlayView(props) {
                 <div className="auto-banner auto-banner-quiet">
                   <div className="auto-banner-top">
                     <span className="auto-dot" />
-                    <span>Modo automático ativo — o narrador segue a história.</span>
+                    <span>Automático ligado — a história continua. Só para em Desativar.</span>
                   </div>
                   <button className="btn-intervir" onClick={intervene} type="button">
                     Intervir agora

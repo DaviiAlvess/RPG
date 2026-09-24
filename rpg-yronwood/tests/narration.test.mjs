@@ -3,13 +3,34 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
 import { economyPrompt } from '../lib/economy.mjs';
-import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
+import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, buildNarrationDirection, buildStartPrompt, normalizeNarration } from '../lib/narration.mjs';
 
 const PLAYER_CAMERA_MARKERS = ['sujeito gramatical', 'subordinado', 'canto do olho', 'dentro dos olhos', 'a partir de você', 'save antigo'];
+const VISCERAL_MARKERS = [
+  'NARRAÇÃO VISCERAL',
+  'ANCORAGEM BIOLÓGICA',
+  'SENTIDOS CRUS',
+  'VISÃO DE TÚNEL',
+  'ZERO ABSTRAÇÃO',
+  'AÇÃO DESAJEITADA',
+  'RITMO CARDÍACO',
+  'respiração presa',
+  'ferrugem',
+  'assustador',
+  'aterrorizante',
+  'frases curtas',
+  'não é opção da campanha',
+];
 function assertPlayerCamera(text, label) {
   for (const marker of PLAYER_CAMERA_MARKERS) {
     assert.ok(String(text).includes(marker), `${label} precisa de "${marker}"`);
   }
+}
+function assertVisceralLock(text, label) {
+  for (const marker of VISCERAL_MARKERS) {
+    assert.ok(String(text).includes(marker), `${label} precisa de "${marker}"`);
+  }
+  assert.ok(String(text).includes(NARRATION_VISCERAL_LOCK), `${label} precisa da trava visceral completa`);
 }
 test('Campanhas antigas recebem preferências válidas', () => {
   assert.deepEqual(normalizeNarration(null), { style: 'cinematic', length: 'balanced', pace: 'balanced' });
@@ -193,4 +214,39 @@ test('Câmera do jogador vale em save antigo, preset, Westeros, Bleach e mundo c
   assert.ok(source.includes('sem toggle'));
   assert.ok(source.includes('save antigo'));
   assert.equal(/playerPov|povEnabled|cameraLock\s*[:=]/i.test(source), false);
+});
+test('Narração visceral é trava global no start e no turno — save vazio, antigo e presets', async () => {
+  assert.ok(NARRATION_PRESENCE.includes(NARRATION_VISCERAL_LOCK));
+  assert.ok(NARRATION_PRESENCE.includes('não é estilo extra'));
+  assertVisceralLock(buildNarrationDirection(), 'turno default');
+  assertVisceralLock(buildNarrationDirection(null), 'turno narration null');
+  assertVisceralLock(buildNarrationDirection({}), 'turno narration vazia');
+  assertVisceralLock(buildNarrationDirection({ style: 'literary', length: 'rich', pace: 'slow' }), 'turno save antigo literary');
+  assertVisceralLock(buildStartPrompt({}), 'start campanha vazia');
+  assertVisceralLock(buildStartPrompt({ charName: 'Edric', world: 'Westeros', isKnownIP: true }), 'start Westeros');
+  assertVisceralLock(buildStartPrompt({
+    charName: 'Ichigo',
+    world: 'Bleach — Rukongai',
+    isKnownIP: true,
+    isExistingChar: true,
+    storyStartPoint: 'O asfalto ainda quente sob os pés quando o reiatsu corta o ar.',
+  }), 'start Bleach');
+  assertVisceralLock(buildStartPrompt({ charName: 'Kael', world: 'Vale de Cinzas' }), 'start mundo custom');
+  assertVisceralLock(economyPrompt({ world: 'Westeros', charName: 'Edric' }, '', 'Dia 40'), 'economia save antigo');
+  assertVisceralLock(economyPrompt({ world: 'Bleach — Rukongai', charName: 'Renji', economyMode: true }, '', 'Dia 2'), 'economia curto');
+  assert.ok(economyPrompt({ world: 'Westeros', charName: 'Edric' }, '', 'Dia 40').includes('menos frases, não menos corpo'));
+  for (const preset of ADVENTURE_PRESETS) {
+    assertVisceralLock(buildStartPrompt(preset), `preset ${preset.id} start`);
+    assertVisceralLock(buildNarrationDirection(preset.narration), `preset ${preset.id} turno`);
+  }
+  const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
+  assert.ok(source.includes('ANCORAGEM BIOLÓGICA') || source.includes('Ancoragem biológica'));
+  assert.ok(source.includes('SENTIDOS CRUS'));
+  assert.ok(source.includes('Visão de túnel'));
+  assert.ok(source.includes('assustador'));
+  assert.ok(source.includes('AÇÃO DESAJEITADA') || source.includes('Ação desajeitada'));
+  assert.ok(source.includes('Ritmo cardíaco'));
+  const economySrc = await readFile(new URL('../lib/economy.mjs', import.meta.url), 'utf8');
+  assert.ok(economySrc.includes('narração visceral'));
+  assert.ok(economySrc.includes('menos frases, não menos corpo'));
 });

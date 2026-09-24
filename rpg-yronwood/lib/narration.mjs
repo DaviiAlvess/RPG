@@ -147,7 +147,12 @@ export function buildStartPrompt(camp = {}) {
 
   if (camp.isKnownIP) {
     parts.push(
-      `Permaneça na física, nos lugares nomeados e no sistema de poder de "${world}". Inventar só extras locais; se não souber um fato canônico, fique no genérico-local.`
+      `Permaneça na física, nos lugares nomeados e no sistema de poder de "${world}". Inventar só extras locais; se não souber um fato canônico, fique no genérico-local.`,
+      `Abra o jogador na margem de uma trama deste universo (conflito ou arco estabelecido). Se o briefing trouxer [TRAMA:...], use uma delas; senão pesquise um arco atual e registre [TRAMA:título|gancho]. Não o coloque no lugar do protagonista da obra.`
+    );
+  } else {
+    parts.push(
+      `Abra 1 trama própria deste mundo com [TRAMA:título|gancho] se a história ainda não tiver nenhuma.`
     );
   }
 

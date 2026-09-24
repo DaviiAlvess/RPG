@@ -39,12 +39,15 @@ test('Economia inclui a regra dura no topo quando isKnownIP, sem apagar personag
   assert.ok(prompt.includes('pessoa comum'));
   assert.ok(prompt.includes('[TESTE:Força|DC:12]'));
   assert.ok(prompt.includes('[XP:n]'));
+  assert.ok(prompt.includes('busca na rede'));
+  assert.ok(prompt.includes('[TRAMA:título|gancho]'));
 });
 
 test('Economia sem IP conhecido não injeta a regra dura', () => {
   const prompt = economyPrompt({ world: 'Vale de Cinzas', charName: 'Kael' }, '', 'dia 1');
   assert.equal(prompt.includes('REGRA DURA'), false);
   assert.equal(prompt.includes('PERMANEÇA EM'), false);
+  assert.ok(prompt.includes('MUNDO ORIGINAL'));
 });
 
 test('Create flow busca lore e liga grounding nos primeiros turnos de IP conhecido', async () => {
@@ -55,5 +58,6 @@ test('Create flow busca lore e liga grounding nos primeiros turnos de IP conheci
   assert.ok(source.includes('knownIpFidelityRule'));
   assert.ok(source.includes('PERSONAGEM COADJUVANTE ORIGINAL'));
   assert.ok(source.includes('A aventura segue sem o briefing da busca.'));
+  assert.ok(source.includes('parsePlotTags'));
   assert.equal(source.includes('setView("create"); showNotification(error.message, "error"); return;'), false);
 });

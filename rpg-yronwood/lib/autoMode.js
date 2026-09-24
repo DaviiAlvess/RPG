@@ -1,6 +1,7 @@
 /**
  * Modo automático — escolhe a próxima ação do personagem com base na personalidade.
  */
+import { parseTest, pendingTestFromMessages, resolveTest } from './gameplay.mjs';
 
 const TRAIT_PROFILES = [
   {
@@ -122,6 +123,26 @@ export function pickFromOptions(options, camp) {
   return safeOptions[Math.floor(Math.random() * safeOptions.length)];
 }
 
+export function planAutoStep({ lastGmText, options, messages, pendingTest } = {}) {
+  const test = pendingTest || pendingTestFromMessages(messages) || parseTest(lastGmText || '');
+  if (test) return { kind: 'roll', test };
+  return { kind: 'action', options: (options || []).filter(Boolean) };
+}
+
+export function rollAutoD20() {
+  return Math.floor(Math.random() * 20) + 1;
+}
+
+export function buildAutoTestReply(test, attributes, roll, skills = {}) {
+  const result = resolveTest(test, attributes || {}, roll, skills || {});
+  const skillPart = result.skillBonus != null ? `; perícia: ${result.skillBonus}` : '';
+  return {
+    roll,
+    result,
+    text: `Resultado do teste de ${test.attribute}: ${test.description}. D20: ${roll}; modificador: ${result.modifier}${skillPart}; total: ${result.total}; dificuldade: ${test.difficulty}. Resultado definido pelas regras: ${result.outcome}. Narre esta consequência sem rolar novamente.`,
+  };
+}
+
 export function buildLocalAutoAction(camp, lastGmText) {
   const traits = detectTraits(camp);
   const profile = traits[Math.floor(Math.random() * traits.length)];
@@ -160,8 +181,11 @@ export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
           charSkills: camp?.charSkills,
           specialAbility: camp?.specialAbility,
           charTitle: camp?.charTitle,
+          charSituation: camp?.charSituation,
           world: camp?.world,
           gameStyle: camp?.gameStyle,
+          plots: (camp?.plots || []).filter((plot) => plot && plot.status !== 'encerrada').slice(0, 3),
+          missions: (camp?.missions || []).filter((mission) => mission && !mission.completed).slice(0, 3),
         },
         lastGmText,
       }),

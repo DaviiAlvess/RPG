@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { economyPrompt, memoryCutoff } from '../lib/economy.mjs';
 import { resetGeminiKeyState } from '../lib/gemini-keys.mjs';
+import { resolveAutoAction } from '../lib/autoMode.js';
 const load = async path => {
   let source = await readFile(new URL(path, import.meta.url), 'utf8');
   if (source.includes('gemini-keys.mjs')) {
@@ -25,7 +26,6 @@ test('Memória considera tamanho e preserva a próxima ação sem cortar histór
   assert.equal(memoryCutoff(messages, 18, true), 18);
 });
 test('Automático econômico não chama a IA para escolher uma ação', async () => {
-  const { resolveAutoAction } = await load('../lib/autoMode.js');
   const action = await resolveAutoAction({ economyMode: true }, 'Uma porta aberta.', [], () => { throw new Error('Chamada extra indevida'); });
   assert.ok(action.length > 0);
 });

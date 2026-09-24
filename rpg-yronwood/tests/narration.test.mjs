@@ -170,6 +170,8 @@ test('IP conhecido abre em lugar/era do mundo, não numa estrada genérica, e pr
     ordinaryCharacter: true,
   });
   assert.match(original, /lugar e era plausíveis/i);
+  assert.match(original, /trama deste universo/i);
+  assert.match(original, /\[TRAMA:/);
   assert.match(original, /estrada de terra genérica/i);
   assert.ok(original.includes('Naruto'));
   assert.match(original, /pessoa comum/);

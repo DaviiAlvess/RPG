@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages } from '../lib/gameplay.mjs';
+import { parseTest, resolveTest, itemEffect, newerCampaign, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages, storyListsFor, bindStoryLists, stripTemplateCampaignId } from '../lib/gameplay.mjs';
 test('Testes acentuados e dificuldade explícita', () => {
   const trial = parseTest('[TESTE:Força|DC:16] Abrir a porta');
   assert.equal(trial.attribute, 'Força');
@@ -68,6 +68,37 @@ test('A lista da nuvem vazia não apaga aventuras que só existem neste aparelho
   assert.equal(mergeCampaignIndex(cloud, local).map((item) => item.id).join(','), 'mar,casa');
   assert.equal(mergeCampaignIndex([{ id: 'casa', updatedAt: '2026-02-01' }], local)[0].updatedAt, '2026-02-01');
 });
+test('Inventário e missões de uma história não entram em outra', () => {
+  const casa = { id: 'c1-casa', items: ['Espada de Pedra Sangrenta'], missions: [{ id: 'm1', text: 'Defender o portão', completed: false }], plots: [{ id: 'p1', title: 'Cerco', hook: 'O emissário espera', status: 'ativa' }] };
+  const mar = { id: 'c2-mar', items: ['Machado do estaleiro'], missions: [{ id: 'm2', text: 'Reparar o casco', completed: false }], plots: [{ id: 'p2', title: 'Barco abandonado', hook: 'Pedido de ajuda', status: 'ativa' }] };
+  const sessaoCasa = { activeId: 'c1-casa', items: casa.items, missions: casa.missions, plots: casa.plots };
+
+  assert.deepEqual(storyListsFor('c2-mar', casa, sessaoCasa), { items: [], missions: [], plots: [] });
+  assert.deepEqual(bindStoryLists('c2-mar', casa, sessaoCasa).items, []);
+  assert.deepEqual(bindStoryLists('c2-mar', casa, sessaoCasa).missions, []);
+  assert.deepEqual(bindStoryLists('c2-mar', casa, sessaoCasa).plots, []);
+  assert.deepEqual(storyListsFor('c2-mar', mar, sessaoCasa), { items: mar.items, missions: mar.missions, plots: mar.plots });
+  assert.deepEqual(storyListsFor('c1-casa', { world: 'Westeros' }, sessaoCasa), { items: casa.items, missions: casa.missions, plots: casa.plots });
+
+  const nova = bindStoryLists('c3-nova', { id: 'naruto', items: casa.items, missions: casa.missions, plots: casa.plots }, sessaoCasa);
+  assert.equal(nova.id, 'c3-nova');
+  assert.equal(nova.presetId, 'naruto');
+  assert.deepEqual(nova.items, []);
+  assert.deepEqual(nova.missions, []);
+  assert.deepEqual(nova.plots, []);
+
+  const mesma = bindStoryLists('c1-casa', casa, sessaoCasa, { items: ['Adaga'], missions: [] });
+  assert.deepEqual(mesma.items, ['Adaga']);
+  assert.deepEqual(mesma.missions, []);
+
+  const ficha = stripTemplateCampaignId({ id: 'one-piece', world: 'One Piece', items: ['Espada'], missions: casa.missions, plots: [{ title: 'Arco de Alabasta' }] });
+  assert.equal(ficha.id, undefined);
+  assert.equal(ficha.presetId, 'one-piece');
+  assert.equal(ficha.items, undefined);
+  assert.equal(ficha.missions, undefined);
+  assert.equal(ficha.plots, undefined);
+});
+
 test('Memória guarda local, NPCs, segredos e promessas sem duplicar', () => {
   const state = readWorldState('[LOCAL:Taverna] [NPC:Arya|Amigável, viu a chave] [SEGREDO:chave; apenas Arya sabe] [PROMESSA:voltar]');
   assert.equal(state.location, 'Taverna');

@@ -1,4 +1,5 @@
 import { skillForAttribute } from './progression.mjs';
+import { asPlotList } from './plots.mjs';
 
 export const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const attributeKeys = { forca: 'strength', destreza: 'dexterity', mente: 'mind', carisma: 'charisma' };
@@ -41,6 +42,67 @@ function hasPersistValue(value) {
   if (typeof value === 'string') return Boolean(value.trim());
   if (Array.isArray(value)) return value.length > 0;
   return true;
+}
+
+export function asItemList(value) {
+  return Array.isArray(value) ? value.slice() : [];
+}
+
+export function asMissionList(value) {
+  return Array.isArray(value) ? value.slice() : [];
+}
+
+export function emptyStoryLists() {
+  return { items: [], missions: [], plots: [] };
+}
+
+/** Preset/template id never becomes the persist key of a playable story. */
+export function stripTemplateCampaignId(record) {
+  if (!record || typeof record !== 'object') return {};
+  const { id, items, missions, plots, ...rest } = record;
+  if (id != null && String(id).trim() && !rest.presetId) rest.presetId = String(id);
+  return rest;
+}
+
+export function pinStoryIdentity(record, persistId) {
+  if (persistId == null || persistId === '') return { ...(record || {}) };
+  const next = { ...(record || {}), id: String(persistId) };
+  if (record?.id != null && String(record.id) !== String(persistId) && !next.presetId) {
+    next.presetId = String(record.id);
+  }
+  return next;
+}
+
+/**
+ * Inventário e missões pertencem só à história persistId.
+ * O estado da sessão só entra quando a história aberta é a mesma.
+ */
+export function storyListsFor(persistId, record, session = {}) {
+  const id = persistId != null ? String(persistId) : '';
+  if (!id) return emptyStoryLists();
+  const recordId = record?.id != null ? String(record.id) : '';
+  const sessionId = session.activeId != null ? String(session.activeId) : '';
+  const items = recordId === id
+    ? asItemList(record.items)
+    : (sessionId === id ? asItemList(session.items) : []);
+  const missions = recordId === id
+    ? asMissionList(record.missions)
+    : (sessionId === id ? asMissionList(session.missions) : []);
+  const plots = recordId === id
+    ? asPlotList(record.plots)
+    : (sessionId === id ? asPlotList(session.plots) : []);
+  return { items, missions, plots };
+}
+
+export function bindStoryLists(persistId, record, session = {}, overrides = {}) {
+  const lists = storyListsFor(persistId, record, session);
+  const pinned = pinStoryIdentity(record, persistId);
+  return {
+    ...pinned,
+    items: Object.prototype.hasOwnProperty.call(overrides, 'items') ? asItemList(overrides.items) : lists.items,
+    missions: Object.prototype.hasOwnProperty.call(overrides, 'missions') ? asMissionList(overrides.missions) : lists.missions,
+    plots: Object.prototype.hasOwnProperty.call(overrides, 'plots') ? asPlotList(overrides.plots) : lists.plots,
+  };
 }
 
 /** Escolhe o save mais novo e recupera identidade/acordos se a cópia vencedora os tiver perdido. */

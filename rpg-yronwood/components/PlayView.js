@@ -432,8 +432,8 @@ export default function PlayView(props) {
               className={`topbar-btn ${autoMode ? "on" : ""}`}
               onClick={toggleAuto}
               type="button"
-              title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
-              aria-label={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+              title={autoMode ? "Desligar automático e assumir o controle" : "Ligar automático: a história segue sozinha, inclusive nos dados"}
+              aria-label={autoMode ? "Desligar automático e assumir o controle" : "Ligar automático"}
               aria-pressed={autoMode}
             >
               <i className="ti ti-player-play" />
@@ -466,7 +466,9 @@ export default function PlayView(props) {
                   <div className="auto-banner-top">
                     <span className="auto-dot" />
                     <span>
-                      Modo automático — próxima ação do personagem em <strong>{countdown}s</strong>.
+                      {pendingTest
+                        ? <>Modo automático — rolando o teste em <strong>{countdown}s</strong>.</>
+                        : <>Modo automático — a história segue em <strong>{countdown}s</strong>.</>}
                     </span>
                   </div>
                   <button className="btn-intervir" onClick={intervene} type="button">
@@ -479,8 +481,11 @@ export default function PlayView(props) {
                 <div className="auto-banner auto-banner-quiet">
                   <div className="auto-banner-top">
                     <span className="auto-dot" />
-                    <span>Modo automático ativo — aguardando o narrador...</span>
+                    <span>Modo automático ativo — o narrador segue a história.</span>
                   </div>
+                  <button className="btn-intervir" onClick={intervene} type="button">
+                    Intervir agora
+                  </button>
                 </div>
               ) : null}
 
@@ -558,7 +563,9 @@ export default function PlayView(props) {
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
                   {pendingTest.description ? <span>{pendingTest.description}</span> : null}
                   <span>
-                    {pendingSkillName
+                    {autoMode
+                      ? "O automático rola este teste daqui a pouco. Intervenha se quiser assumir o dado."
+                      : pendingSkillName
                       ? `D20 + modificador ${pendingTest.attribute} (${pendingPreview.modifier >= 0 ? "+" : ""}${pendingPreview.modifier}) + perícia ${pendingSkillName} (+${pendingPreview.skillBonus || 0}). Role o dado abaixo ou desista da tentativa no salto de tempo.`
                       : `D20 + modificador (${pendingPreview?.modifier >= 0 ? "+" : ""}${pendingPreview?.modifier ?? 0}). Role o dado abaixo ou desista da tentativa no salto de tempo.`}
                   </span>
@@ -921,7 +928,28 @@ export default function PlayView(props) {
           <div className={`panel ${playPanel === "missions" ? "active" : ""}`}>
             <div>
               <div className="panel-title">Missões</div>
-              <div className="panel-sub">Objetivos em andamento e concluídos.</div>
+              <div className="panel-sub">Tramas desta história e os objetivos que elas geram.</div>
+            </div>
+
+            <div className="card-box">
+              <div className="section-label">Tramas desta história</div>
+              <div className="mission-list">
+                {(Array.isArray(c.plots) ? c.plots : []).length ? (
+                  (c.plots || []).map((plot, index) => (
+                    <div key={plot?.id || `plot-${index}`} className={`mission-item ${plot?.status === "encerrada" ? "done" : ""}`}>
+                      <div className="mission-check">
+                        <i className={`ti ${plot?.status === "encerrada" ? "ti-check" : "ti-point-filled"}`} />
+                      </div>
+                      <div className="mission-text">
+                        {plot?.title}
+                        {plot?.hook ? ` — ${plot.hook}` : ""}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="panel-sub">Ainda sem trama. O mestre abre uma nas primeiras cenas.</div>
+                )}
+              </div>
             </div>
 
             <div className="card-box">
@@ -1009,7 +1037,7 @@ export default function PlayView(props) {
               </div>
               {autoMode ? (
                 <p className="settings-hint">
-                  A história continua sozinha conforme a personalidade do personagem. Use <strong>Intervir agora</strong> ou desligue o auto para assumir o controle.
+                  A história segue sozinha, inclusive rolando testes. Só para quando você clicar em <strong>Intervir agora</strong> ou desligar o auto.
                 </p>
               ) : null}
 

@@ -38,6 +38,8 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     assert.match(lorePrompt, /ERA/);
     assert.match(lorePrompt, /PODER|FÍSICA/);
     assert.match(lorePrompt, /NÃO INVENTAR/i);
+    assert.match(lorePrompt, /TRAMA/);
+    assert.match(lorePrompt, /Pesquise o universo/);
     assert.deepEqual(loreBody.tools, [{ google_search: {} }]);
     let gmBody;
     globalThis.fetch = async (_url, options) => {

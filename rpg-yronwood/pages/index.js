@@ -15,7 +15,8 @@ import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
-import { parseTest, resolveTest, itemEffect, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages } from "../lib/gameplay.mjs";
+import { parseTest, itemEffect, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages, bindStoryLists, storyListsFor, stripTemplateCampaignId, pinStoryIdentity, asItemList, asMissionList } from "../lib/gameplay.mjs";
+import { asPlotList, parsePlotTags, plotDirection, plotPromptLines } from "../lib/plots.mjs";
 import PlayView from "../components/PlayView";
 import ToastContainer from "../components/ToastContainer";
 import IosInstallHint from "../components/IosInstallHint";
@@ -33,7 +34,7 @@ import {
   shouldShowTimeSeparator,
   formatGameTimeLong,
 } from "../lib/timeSystem";
-import { resolveAutoAction, getLastGmText } from "../lib/autoMode";
+import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply } from "../lib/autoMode";
 import { normalizeDialogueText } from "../lib/dialogueFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ const cleanText = (t) =>
       stripTimeSkipTags(
         stripHpTags(
           t.replace(/\[(LOCAL|PROMESSA|SEGREDO|NPC):[^\]]+\]/gi, "").replace(/IMAGE_PROMPT:\s*.+/gi, "")
-           .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO|RELAÇÃO|RELACAO|INTERVENÇÃO|INTERVENCAO):([^\]]+)\]/gi, "")
+           .replace(/\[(MISSÃO|CONCLUÍDA|ITEM|XP|ACORDO|RELAÇÃO|RELACAO|INTERVENÇÃO|INTERVENCAO|TRAMA|TRAMA_FIM):([^\]]+)\]/gi, "")
         )
       )
     )
@@ -185,7 +186,8 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
     c.storyStartPoint ? `PREMISSA INICIAL (começo da campanha, não o status atual): ${c.storyStartPoint}` : "",
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
-    `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
+    `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, plots: c.plots, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
+    plotPromptLines(c.plots),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
@@ -313,7 +315,8 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `REGRA 10 — RESPEITE O LORE.`,
     `As regras, a magia, a política e a física de ${c.world} valem para todos — exceto as habilidades exclusivas do jogador (REGRA 0C). NPCs nunca quebram o lore. Não crie poderes fora do universo para ninguém além do personagem do jogador.`,
     ``,
-    `REGRA 11 — MISSÕES E OBJETIVOS.`,
+    `REGRA 11 — TRAMAS E MISSÕES.`,
+    plotDirection(c),
     `Quando surgir um objetivo claro — tarefa, pedido, promessa — inclua na última linha: [MISSÃO: descrição em 1 linha]. Ao cumprir: [CONCLUÍDA: descrição]. Use com parcimônia.`,
     `Quando o jogador conquistar um marco confirmado — vitória, missão concluída ou risco inteligente — acrescente a tag oculta [XP:10] (ajuste entre 5 e 25). Não mencione XP na narração falada. Não conceda XP a cada turno.`,
     `Quando a cena ferir ou curar o corpo de fato — golpe, veneno, queda, sutura, poção — acrescente a tag oculta [HP:-8] ou [HP:+12] (somente deltas com sinal). Não use a cada turno nem por cansaço leve. A 0 HP, narre desmaio e inconsciência; o jogador NÃO morre automaticamente a menos que o mundo o mate naquele instante. Aguarde o jogador ou o Mestre.`,
@@ -338,7 +341,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral trava global: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral trava global: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration));
   lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
@@ -570,7 +573,7 @@ export default function RPG() {
       try {
         const raw = localStorage.getItem(campKey(s.id));
         if (!raw) continue;
-        const camp = JSON.parse(raw);
+        const camp = bindStoryLists(s.id, JSON.parse(raw));
         const res = await cloudSaveCampaign(camp);
         if (res.ok) migrated++;
       } catch {}
@@ -691,27 +694,32 @@ export default function RPG() {
   };
 
   const buildCampaignSnapshot = useCallback((base, overrides = {}) => {
-    const camp = { ...(base || active || {}), ...overrides };
-    if (!camp.id) return null;
+    const persistId = overrides.id ?? base?.id ?? active?.id;
+    if (persistId == null || persistId === "") return null;
+    const sameActive = Boolean(active && String(active.id) === String(persistId));
+    const source = base || (sameActive ? active : {}) || {};
+    const lists = storyListsFor(persistId, source, { activeId: active?.id, items: active?.items, missions, plots: active?.plots });
+    const camp = pinStoryIdentity({ ...source, ...overrides }, persistId);
     return {
       ...camp,
-      msgs: overrides.msgs ?? camp.msgs ?? msgs,
-      disp: overrides.disp ?? camp.disp ?? disp,
-      hp: overrides.hp ?? camp.hp ?? hp,
-      missions: overrides.missions ?? camp.missions ?? missions,
-      img: overrides.img ?? sceneImg ?? camp.img ?? null,
-      lore: overrides.lore ?? campLore ?? camp.lore ?? "",
-      charAge: String(overrides.charInitialAge ?? charInitialAge ?? camp.charInitialAge ?? camp.charAge ?? ""),
-      charInitialAge: overrides.charInitialAge ?? charInitialAge ?? camp.charInitialAge ?? (parseInt(camp.charAge, 10) || 18),
-      gameTime: normalizeGameTime(overrides.gameTime ?? camp.gameTime ?? gameTime),
-      temporalEffects: overrides.temporalEffects ?? camp.temporalEffects ?? temporalEffects ?? [],
-      timelineEvents: overrides.timelineEvents ?? camp.timelineEvents ?? timelineEvents ?? [],
-      items: overrides.items ?? camp.items ?? [],
-      experience: overrides.experience ?? camp.experience ?? experience,
-      level: overrides.level ?? camp.level ?? level,
-      attributes: overrides.attributes ?? camp.attributes ?? attributes,
-      skills: overrides.skills ?? camp.skills ?? skills,
-      masterChat: overrides.masterChat ?? camp.masterChat ?? [],
+      msgs: overrides.msgs ?? camp.msgs ?? (sameActive ? msgs : []),
+      disp: overrides.disp ?? camp.disp ?? (sameActive ? disp : []),
+      hp: overrides.hp ?? camp.hp ?? (sameActive ? hp : 100),
+      missions: Object.prototype.hasOwnProperty.call(overrides, "missions") ? asMissionList(overrides.missions) : lists.missions,
+      plots: Object.prototype.hasOwnProperty.call(overrides, "plots") ? asPlotList(overrides.plots) : lists.plots,
+      img: overrides.img ?? (sameActive ? sceneImg : camp.img) ?? camp.img ?? null,
+      lore: overrides.lore ?? (sameActive ? campLore : camp.lore) ?? camp.lore ?? "",
+      charAge: String(overrides.charInitialAge ?? (sameActive ? charInitialAge : camp.charInitialAge) ?? camp.charInitialAge ?? camp.charAge ?? ""),
+      charInitialAge: overrides.charInitialAge ?? (sameActive ? charInitialAge : camp.charInitialAge) ?? camp.charInitialAge ?? (parseInt(camp.charAge, 10) || 18),
+      gameTime: normalizeGameTime(overrides.gameTime ?? camp.gameTime ?? (sameActive ? gameTime : undefined)),
+      temporalEffects: overrides.temporalEffects ?? camp.temporalEffects ?? (sameActive ? temporalEffects : []) ?? [],
+      timelineEvents: overrides.timelineEvents ?? camp.timelineEvents ?? (sameActive ? timelineEvents : []) ?? [],
+      items: Object.prototype.hasOwnProperty.call(overrides, "items") ? asItemList(overrides.items) : lists.items,
+      experience: overrides.experience ?? camp.experience ?? (sameActive ? experience : 0),
+      level: overrides.level ?? camp.level ?? (sameActive ? level : 1),
+      attributes: overrides.attributes ?? camp.attributes ?? (sameActive ? attributes : undefined),
+      skills: overrides.skills ?? camp.skills ?? (sameActive ? skills : undefined),
+      masterChat: overrides.masterChat ?? camp.masterChat ?? (sameActive ? [] : camp.masterChat) ?? [],
       ...applyMasterAgreements(overrides.masterAgreements ?? listMasterAgreements({ ...camp, ...overrides })),
       updatedAt: new Date().toISOString(),
     };
@@ -719,7 +727,8 @@ export default function RPG() {
 
   const saveCamp = useCallback(async (id, d) => {
     if (!user) return { ok: false, local: false };
-    const snapshot = buildCampaignSnapshot(d, { id: id || d?.id });
+    const persistId = id || d?.id;
+    const snapshot = buildCampaignSnapshot(d, { id: persistId });
     if (!snapshot) return { ok: false, local: false };
     let local = false;
     try { localStorage.setItem(campKey(snapshot.id), JSON.stringify(snapshot)); local = true; } catch {}
@@ -771,10 +780,14 @@ export default function RPG() {
       const { cloudLoadCampaign } = await import("../lib/rpg-cloud");
       const { ok, data } = await cloudLoadCampaign(id);
       const chosen = mergeCampaignRecords(local, ok ? data : null);
-      if (chosen) { try { localStorage.setItem(campKey(id), JSON.stringify(chosen)); } catch {} }
-      if (local && chosen === local && ok) showNotification("Progresso mais recente deste aparelho recuperado.", "info");
+      if (chosen) {
+        const pinned = bindStoryLists(id, chosen);
+        try { localStorage.setItem(campKey(id), JSON.stringify(pinned)); } catch {}
+        if (local && chosen === local && ok) showNotification("Progresso mais recente deste aparelho recuperado.", "info");
+        return pinned;
+      }
       return chosen;
-    } catch { return local; }
+    } catch { return local ? bindStoryLists(id, local) : local; }
   };
 
   const loadIdx = async () => {
@@ -856,6 +869,7 @@ export default function RPG() {
     setUser(null);
     setIdx([]);
     setActive(null);
+    setMissions([]);
     setView("home");
     setAuthPassword("");
     setAuthMessage(null);
@@ -934,13 +948,14 @@ export default function RPG() {
       msgs: [...msgs],
       disp: [...disp],
       img: sceneImg,
-      missions: [...missions],
-      items: [...(active.items || [])],
+      missions: asMissionList(active.missions ?? missions),
+      plots: asPlotList(active.plots),
+      items: asItemList(active.items),
       relationships: { ...(active.relationships || {}) },
     };
     const currentSaves = active.saves || [];
     const updatedSaves = [newSave, ...currentSaves].slice(0, 5);
-    const updated = { ...active, saves: updatedSaves, missions, hp, items: newSave.items, relationships: newSave.relationships };
+    const updated = { ...active, saves: updatedSaves, missions: newSave.missions, plots: newSave.plots, hp, items: newSave.items, relationships: newSave.relationships };
     setActive(updated);
     saveCamp(active.id, buildCampaignSnapshot(updated));
     showNotification("Save slot criado!", "success");
@@ -964,8 +979,9 @@ export default function RPG() {
       disp: save.disp || [],
       img: save.img || null,
       hp: save.hp ?? 100,
-      missions: save.missions || [],
-      items: save.items || active.items || [],
+      missions: asMissionList(save.missions),
+      plots: asPlotList(save.plots),
+      items: asItemList(save.items),
       relationships: save.relationships || active.relationships || {},
       charTitle: save.charTitle ?? active.charTitle,
       charOriginTitle: save.charOriginTitle ?? active.charOriginTitle,
@@ -1087,6 +1103,11 @@ export default function RPG() {
     if (!autoRef.current || sending.current) return;
 
     const safeOptions = (options || []).filter(Boolean);
+    const step = planAutoStep({
+      lastGmText: getLastGmText(currentDisp, currentMsgs),
+      options: safeOptions,
+      messages: currentMsgs,
+    });
     setAutoWaiting(true);
     setCountdown(autoDelay);
     cdRef.current = setInterval(() => {
@@ -1102,6 +1123,19 @@ export default function RPG() {
     timerRef.current = setTimeout(async () => {
       setAutoWaiting(false);
       if (!autoRef.current || sending.current) return;
+
+      if (step.kind === "roll") {
+        const roll = rollAutoD20();
+        const reply = buildAutoTestReply(step.test, camp.attributes, roll, camp.skills);
+        setLastRoll(roll);
+        setDiceNum(roll);
+        setDiceLabel(roll === 20 ? "d20 — Crítico!" : roll === 1 ? "d20 — Falha crítica!" : "d20 — rolagem automática");
+        setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
+        setPendingTest(null);
+        setShowRollButton(false);
+        sendMsgRef.current?.(reply.text, currentMsgs, currentDisp, camp, lore, true);
+        return;
+      }
 
       const lastGmText = getLastGmText(currentDisp, currentMsgs);
       const chosen = await resolveAutoAction(camp, lastGmText, safeOptions, apiFetch);
@@ -1119,7 +1153,7 @@ export default function RPG() {
       return;
     }
 
-    showNotification("Modo automático ligado. A história segue pela personalidade do personagem.", "info");
+    showNotification("Modo automático ligado. A história segue sozinha, inclusive nos testes. Intervenha quando quiser.", "info");
     if (!loading && !sending.current && !autoWaiting && active) {
       const lastGm = getLastGmText(disp, msgs);
       if (lastGm || pendingRef.current.length || msgs.length > 0) {
@@ -1141,32 +1175,33 @@ export default function RPG() {
   const openCamp = async (s) => {
     const data = await readCamp(s.id);
     if (!data) return;
-    setActive(data);
-    pendingMasterNoteRef.current = data.pendingMasterNote || "";
+    const pinned = bindStoryLists(s.id, data);
+    setActive(pinned);
+    pendingMasterNoteRef.current = pinned.pendingMasterNote || "";
     setFailedAction(null); setInput(""); setSaveStatus("Progresso recuperado");
-    const restoredTest = pendingTestFromMessages(data.msgs);
+    const restoredTest = pendingTestFromMessages(pinned.msgs);
     setLastRoll(null);
     setPendingTest(restoredTest); setShowRollButton(Boolean(restoredTest));
-    setMsgs(data.msgs || []);
-    setDisp(sanitizeStartDisplay(data.disp || []));
-    setSceneImg(data.img || null);
-    setImgOk(!!data.img);
-    setCampLore(data.lore || "");
-    setHp(data.hp ?? 100);
-    setMissions(data.missions || []);
-    setCharInitialAge(parseInt(data.charInitialAge ?? data.charAge, 10) || 18);
-    setGameTime(normalizeGameTime(data.gameTime));
-    setTemporalEffects(Array.isArray(data.temporalEffects) ? data.temporalEffects : []);
-    setTimelineEvents(Array.isArray(data.timelineEvents) ? data.timelineEvents : [createAdventureStartEvent()]);
-    setExperience(data.experience ?? 0);
-    setLevel(data.level ?? 1);
-    setAttributes(data.attributes ?? { ...DEFAULT_ATTRIBUTES });
-    setSkills(data.skills ?? { ...DEFAULT_SKILLS });
+    setMsgs(pinned.msgs || []);
+    setDisp(sanitizeStartDisplay(pinned.disp || []));
+    setSceneImg(pinned.img || null);
+    setImgOk(!!pinned.img);
+    setCampLore(pinned.lore || "");
+    setHp(pinned.hp ?? 100);
+    setMissions(asMissionList(pinned.missions));
+    setCharInitialAge(parseInt(pinned.charInitialAge ?? pinned.charAge, 10) || 18);
+    setGameTime(normalizeGameTime(pinned.gameTime));
+    setTemporalEffects(Array.isArray(pinned.temporalEffects) ? pinned.temporalEffects : []);
+    setTimelineEvents(Array.isArray(pinned.timelineEvents) ? pinned.timelineEvents : [createAdventureStartEvent()]);
+    setExperience(pinned.experience ?? 0);
+    setLevel(pinned.level ?? 1);
+    setAttributes(pinned.attributes ?? { ...DEFAULT_ATTRIBUTES });
+    setSkills(pinned.skills ?? { ...DEFAULT_SKILLS });
     setShowChar(false);
     setPlayPanel("narrator");
     setAutoMode(false); setAutoWaiting(false); setPending([]); autoRef.current = false; pendingRef.current = [];
     setView("play");
-    if (!data.msgs?.length) doStart(data, data.lore || "");
+    if (!pinned.msgs?.length) doStart(pinned, pinned.lore || "");
   };
 
   const delCamp = async (id, e) => {
@@ -1267,8 +1302,8 @@ export default function RPG() {
     }
     const id = uid();
     const camp = {
+      ...stripTemplateCampaignId(form),
       id,
-      ...form,
       lore,
       memory: "", memoryUntil: 0, worldState: {},
       msgs: [],
@@ -1276,6 +1311,7 @@ export default function RPG() {
       img: null,
       hp: 100,
       missions: [],
+      plots: parsePlotTags(lore, []),
       saves: [],
       items: [],
       relationships: form.relationships || {},
@@ -1309,27 +1345,22 @@ export default function RPG() {
   const rollD20 = () => {
     if (sending.current || !active) return;
     if (failedAction) { showNotification("Use Tentar ação novamente para recuperar a resposta sem fazer outra rolagem.", "warning"); return; }
-    clearAuto(); setAutoMode(false); autoRef.current = false;
+    clearAuto();
     setPlayPanel("narrator");
-    const roll = Math.floor(Math.random() * 20) + 1;
+    const roll = rollAutoD20();
     setLastRoll(roll);
     setDiceNum(roll);
     setDiceLabel(roll === 20 ? "d20 — Crítico!" : roll === 1 ? "d20 — Falha crítica!" : "d20 — rolagem normal");
     setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
     if (pendingTest) {
-      const { attribute, description, difficulty } = pendingTest;
-      const result = resolveTest(pendingTest, attributes, roll, skills);
+      const reply = buildAutoTestReply(pendingTest, attributes, roll, skills);
       setPendingTest(null);
       setShowRollButton(false);
-      const skillPart = result.skillBonus != null ? `; perícia: ${result.skillBonus}` : "";
-      sendMsg(
-        `Resultado do teste de ${attribute}: ${description}. D20: ${roll}; modificador: ${result.modifier}${skillPart}; total: ${result.total}; dificuldade: ${difficulty}. Resultado definido pelas regras: ${result.outcome}. Narre esta consequência sem rolar novamente.`,
-        msgs, disp, active, campLore, false
-      );
+      sendMsg(reply.text, msgs, disp, active, campLore, Boolean(autoRef.current));
     } else {
       sendMsg(
         `Tento realizar uma ação e rolo um dado de 20 faces. (Resultado: ${roll}/20)`,
-        msgs, disp, active, campLore, false
+        msgs, disp, active, campLore, Boolean(autoRef.current)
       );
     }
   };
@@ -1413,15 +1444,17 @@ export default function RPG() {
       }
 
       let raw = data.text;
-      const updatedMissions = parseMissions(raw, missions);
-      const updatedItems = parseItems(raw, active?.items || []);
-      const updatedRelationships = parseRelationships(raw, camp.relationships || active?.relationships || {});
+      const lists = storyListsFor(camp.id, camp, { activeId: active?.id, items: active?.items, missions, plots: active?.plots });
+      const updatedMissions = parseMissions(raw, lists.missions);
+      const updatedItems = parseItems(raw, lists.items);
+      const updatedPlots = parsePlotTags(raw, lists.plots);
+      const updatedRelationships = parseRelationships(raw, camp.relationships || {});
       const updatedIdentity = parseIdentityTags(raw, camp);
       setMissions(updatedMissions);
 
       const currentXp = Number(camp.experience ?? experience) || 0;
       const currentLevel = Number(camp.level ?? level) || 1;
-      const prevMissions = camp.missions || missions || [];
+      const prevMissions = lists.missions;
       const newMissionCount = parseCompletedMissions(raw).filter((text) => {
         const t = text.toLowerCase();
         const existing = prevMissions.find((m) => {
@@ -1519,6 +1552,7 @@ export default function RPG() {
         img: newImg,
         lore,
         missions: updatedMissions,
+        plots: updatedPlots,
         items: updatedItems,
         relationships: updatedRelationships,
         ...updatedIdentity,
@@ -1540,28 +1574,36 @@ export default function RPG() {
 
       setPending(options);
       pendingRef.current = options;
-      const needsRoll = raw.toLowerCase().includes("[teste:");
-      if (autoRef.current && !needsRoll) {
-        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
-      } else if (autoRef.current && needsRoll) {
-        showNotification("Modo automático pausado — role o dado para continuar.", "warning");
-      }
-
       const nextTest = pendingTestFromMessages(finalMsgs);
       setPendingTest(nextTest);
-      setShowRollButton(Boolean(nextTest));
+      setShowRollButton(Boolean(nextTest) && !autoRef.current);
       if (nextTest) setLastRoll(null);
+      if (autoRef.current) {
+        scheduleNextTurn(options, finalMsgs, finalDisp, updated, lore);
+      }
 
       // Inventory is updated once per turn from explicit [ITEM: ...] events.
 
     } catch (error) {
       if (pendingLevelNote) pendingLevelNoteRef.current = pendingLevelNote;
       if (pendingMasterNote) pendingMasterNoteRef.current = pendingMasterNote;
-      clearAuto(); setAutoMode(false); autoRef.current = false;
+      clearAuto();
+      setAutoWaiting(false);
       setMsgs(baseMsgs); setDisp(baseDisp); setInput(text);
       const waitSec = baseMsgs.length === 0 ? 0 : Math.min(300, Math.max(0, Number(error.retryAfter) || 0));
       setFailedAction({ text, baseMsgs, baseDisp, camp: retryCamp, lore, skipPlan, errorMessage: error.message, retryAt: Date.now() + waitSec * 1000 });
       showNotification(error.message || "Erro ao contatar o Mestre. Sua ação foi preservada.", "error");
+      if (autoRef.current) {
+        const delayMs = Math.max(autoDelay * 1000, waitSec * 1000 || 0);
+        setAutoWaiting(true);
+        setCountdown(Math.max(autoDelay, waitSec || autoDelay));
+        timerRef.current = setTimeout(() => {
+          setAutoWaiting(false);
+          if (!autoRef.current || sending.current) return;
+          setFailedAction(null);
+          sendMsgRef.current?.(text, baseMsgs, baseDisp, retryCamp, lore, isAuto, skipPlan);
+        }, delayMs);
+      }
     }
 
     sending.current = false; setLoading(false); setStatus("");
@@ -1701,7 +1743,8 @@ export default function RPG() {
   };
 
   const toggleMission = useCallback((missionId) => {
-    const updatedMissions = missions.map((m) =>
+    const current = asMissionList(active?.missions ?? missions);
+    const updatedMissions = current.map((m) =>
       m.id === missionId ? { ...m, completed: !m.completed } : m
     );
     setMissions(updatedMissions);
@@ -1757,10 +1800,10 @@ export default function RPG() {
   }, []);
 
   useEffect(() => {
-    if (!autoSaveEnabled || !active) return;
+    if (!autoSaveEnabled || !active || view !== "play") return;
     const interval = setInterval(() => { quickSave(true); }, 60000);
     return () => clearInterval(interval);
-  }, [autoSaveEnabled, active, quickSave]);
+  }, [autoSaveEnabled, active, quickSave, view]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1889,8 +1932,9 @@ export default function RPG() {
     setTimeout(() => taRef.current?.focus(), 50);
   };
 
-  const activeMissions = missions.filter(m => !m.completed);
-  const doneMissions   = missions.filter(m => m.completed);
+  const storyMissions = asMissionList(active?.missions ?? missions);
+  const activeMissions = storyMissions.filter(m => !m.completed);
+  const doneMissions   = storyMissions.filter(m => m.completed);
 
   if (!clientReady) {
     return (
@@ -2040,7 +2084,7 @@ export default function RPG() {
                 <h3>{preset.charName}</h3>
                 <p>{preset.hook}</p>
                 <span className="preset-role">{preset.charTitle} · {preset.genre}</span>
-                <button type="button" className="btn-primary" onClick={() => { setForm({ ...preset, appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Revisar ficha</button>
+                <button type="button" className="btn-primary" onClick={() => { setForm({ ...stripTemplateCampaignId(preset), appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Revisar ficha</button>
               </article>)}
             </div>
           </section></main>
@@ -2298,7 +2342,7 @@ export default function RPG() {
       experience={experience}
       attributes={attributes}
       skills={skills}
-      missions={missions}
+      missions={storyMissions}
       characterAge={displayAge}
       gameTime={gameTime}
       temporalEffects={temporalEffects}

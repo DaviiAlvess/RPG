@@ -4,6 +4,7 @@ import { buildNarrationDirection } from './narration.mjs';
 import { buildCharacterNamingDirection } from './character-names.mjs';
 import { knownIpFidelityRule } from './canon.mjs';
 import { identityPromptLines, identityTagList } from './identity.mjs';
+import { plotDirection, plotPromptLines } from './plots.mjs';
 
 export function memoryCutoff(messages, memoryUntil = 0, economy = false) {
   const start = Math.max(0, Math.min(Number(memoryUntil) || 0, messages.length));
@@ -29,7 +30,9 @@ export function economyPrompt(c, lore, calendar) {
     `PREMISSA INICIAL (começo, não o status atual): ${c.storyStartPoint || ''}\nELENCO: ${c.supportingCast || ''}`,
     identityPromptLines(c).join('\n'),
     `MEMÓRIA: ${c.memory || ''}\nDATA: ${calendar}`,
-    `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
+    `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, plots: c.plots, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
+    plotPromptLines(c.plots),
+    plotDirection(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote, { short: true }),
     'Respeite o universo e a época. Contextos gerados por IA não são fontes verificadas. Não invente fatos canônicos. Personagens originais não substituem protagonistas. Pedido em Falar com o Mestre sobre atração ou relação na cena atual é fato da mesa: mostre agora; não recuse por canon.',
@@ -38,7 +41,7 @@ export function economyPrompt(c, lore, calendar) {
     'A câmera é o jogador ("você"): magnética, atrás/dentro dos olhos. Vale em toda campanha, inclusive save antigo. Primeiro sujeito gramatical = campo sensorial (mão, ombro, visão). NPCs a partir de você (À sua frente…, canto do olho); proibido "o subordinado" / "o transeunte" / figura encapuzada como protagonista. Feche o turno.',
     'Mesmo curto: narração visceral — menos frases, não menos corpo. Comece na ação do jogador. Ancoragem biológica (respiração presa, suor, tremor). Sentidos crus (ferrugem, mofo, pólvora). Visão de túnel, não panorama. Ação desajeitada. Frases curtas e secas. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Nunca fale, pense ou decida pelo jogador.',
     'Ação incerta: [TESTE:Força|DC:12] ou Destreza, Mente, Carisma. DC 8 fácil, 12 normal, 16 difícil, 20 extremo. Interrompa e aguarde o total que o jogo enviar. Narre 1 = falha crítica, 20 = sucesso crítico, senão sucesso / parcial / falha. Não invente faixas 1-5/16-20.',
-    `Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [XP:n], [HP:+n] ou [HP:-n], [LOCAL:nome], [NPC:nome|função, local e fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.`,
+    `Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [LOCAL:nome], [NPC:nome|função, local e fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.`,
     'Se a atitude de um NPC mudar, emita [RELAÇÃO:Nome|Atitude] (Hostil, Suspeito, Neutral, Amigável) só na mudança — não a cada turno. Nunca escreva a tag no diálogo.',
     'Conceda XP só por vitória confirmada, missão concluída ou risco inteligente — 5–25 em geral, nunca por andar ou conversar. Não mencione XP na narração.',
     'Ferimento ou cura clara na cena: tag oculta [HP:-8] ou [HP:+12] (somente com sinal). Não a cada turno. A 0 HP, narre desmaio/inconsciência — o jogador não morre automaticamente a menos que o mundo o mate; aguarde o jogador ou o Mestre.',

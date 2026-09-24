@@ -161,14 +161,14 @@ const GAME_STYLES = {
   aventura: {
     label: "Aventura",
     desc: "Narrativa lenta, exploração, mistério e diálogo.",
-    icon: "📖",
   },
   acao: {
     label: "Ação",
     desc: "Ritmo rápido, combates frequentes, cenas curtas e intensas.",
-    icon: "⚔️",
   },
 };
+
+const CREATE_STEPS = ["Mundo", "Personagem", "Começar"];
 
 // ─── System prompt ────────────────────────────────────────────────────
 const buildPrompt = (c, loreExtra, gameTime) => {
@@ -1346,7 +1346,7 @@ export default function RPG() {
     setFailedAction(null);
     sending.current = true;
     setLoading(true);
-    setStatus(isAuto ? "⚡ MODO AUTO — MESTRE NARRANDO ✦" : "✦ O MESTRE TECE O DESTINO ✦");
+    setStatus(isAuto ? "Modo automático — narrando" : "Narrando");
     setInput(""); taRef.current?.blur();
 
     const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
@@ -1887,16 +1887,10 @@ export default function RPG() {
   if (view === "home") return (
     <div className="rpg-shell">
       <Head><title>Forja de Mundos — RPG</title></Head>
-      <div className="shell-header">
-        <div className="shell-icon" aria-hidden="true">✦</div>
-        <div className="shell-eyebrow">SEU PRÓXIMO CAPÍTULO COMEÇA AQUI</div>
+      <header className={`shell-header ${user ? "is-library" : "is-gate"}`}>
         <h1 className="shell-title">Forja de Mundos</h1>
-        <p className="shell-sub">Escolha seu mundo. Escreva seu destino.</p>
-        <div className="hero-features" aria-label="Sobre o jogo">
-          <span>Mestre com IA</span><span>Escolhas livres</span><span>Histórias contínuas</span>
-        </div>
-        {!user ? <details className="scene-preview"><summary>Veja como uma aventura começa</summary><p>A chuva esfria o ombro da capa. No limiar da taverna, as últimas pegadas se desfazem na lama. A estalajadeira empurra um envelope para baixo do copo no instante em que a porta se abre.</p><p>Estalajadeira: “Se veio pelo mensageiro, chegou tarde.”</p><p>O copo treme. Um canto de papel ainda aparece sob a base.</p></details> : null}
-      </div>
+        <p className="shell-sub">RPG de texto com mestre de IA. Você escreve a ação; o narrador responde na hora.</p>
+      </header>
 
       {!authReady ? (
         <div className="auth-loading">Carregando conta...</div>
@@ -1906,7 +1900,7 @@ export default function RPG() {
         <div className="auth-box">
           {!firebaseOk && (
             <div className="auth-alert auth-alert-error">
-                  ⚠️ Firebase não acessível. No <a href="https://console.firebase.google.com/project/siterpg32" target="_blank" rel="noreferrer">Firebase Console</a>, ative <strong>Authentication → E-mail/Senha</strong>, crie o <strong>Realtime Database</strong> e publique as rules em <code>firebase/database.rules.json</code>.
+              Não foi possível conectar à conta. Tente de novo em alguns minutos.
             </div>
           )}
           <div className="auth-tabs">
@@ -1917,8 +1911,9 @@ export default function RPG() {
             <div className={`auth-alert auth-alert-${authMessage.type}`}>{authMessage.text}</div>
           )}
           <form className="auth-form" onSubmit={authTab === "login" ? handleSignIn : handleSignUp}>
-            <label className="auth-label">E-mail</label>
+            <label className="auth-label" htmlFor="auth-email">E-mail</label>
             <input
+              id="auth-email"
               type="email"
               className="auth-input"
               value={authEmail}
@@ -1927,9 +1922,10 @@ export default function RPG() {
               autoComplete="email"
               required
             />
-            <label className="auth-label">Senha</label>
+            <label className="auth-label" htmlFor="auth-password">Senha</label>
             <div className="auth-password-wrap">
               <input
+                id="auth-password"
                 type={showAuthPassword ? "text" : "password"}
                 className="auth-input auth-input-password"
                 value={authPassword}
@@ -1944,35 +1940,34 @@ export default function RPG() {
                 className="auth-password-toggle"
                 onClick={() => setShowAuthPassword((v) => !v)}
                 aria-label={showAuthPassword ? "Ocultar senha" : "Mostrar senha"}
-                tabIndex={-1}
               >
                 <i className={showAuthPassword ? "ti ti-eye-off" : "ti ti-eye"} />
               </button>
             </div>
             <button type="submit" className="auth-submit" disabled={authBusy || !firebaseOk}>
-              {authBusy ? "Aguarde..." : authTab === "login" ? "ENTRAR" : "CRIAR CONTA"}
+              {authBusy ? "Aguarde..." : authTab === "login" ? "Entrar" : "Criar conta"}
             </button>
           </form>
-          <p className="auth-hint">Suas histórias ficam salvas na nuvem. Acesse de qualquer celular ou computador.</p>
+          <p className="auth-hint">As histórias ficam salvas na conta. Dá para continuar no celular ou no computador.</p>
         </div>
+        <details className="scene-preview">
+          <summary>Como uma cena começa</summary>
+          <p>A chuva esfria o ombro da capa. No limiar da taverna, as últimas pegadas se desfazem na lama. A estalajadeira empurra um envelope para baixo do copo no instante em que a porta se abre.</p>
+          <p>Estalajadeira: “Se veio pelo mensageiro, chegou tarde.”</p>
+          <p>O copo treme. Um canto de papel ainda aparece sob a base.</p>
+        </details>
         </>
       ) : (
         <>
-          {user && (
-            <div className="auth-alert auth-alert-success" style={{ margin: "0 20px 12px" }}>
-              ☁️ Conectado — suas aventuras salvam automaticamente no Firebase.
-            </div>
-          )}
           <div className="user-bar">
-            <span className="user-email" title={user.email}>👤 {user.email}</span>
+            <span className="user-email" title={user.email}>{user.email}</span>
             <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
           </div>
           <div className="camp-list">
-            <div className="library-heading"><div><span className="shell-eyebrow">SUA JORNADA</span><h2>Suas aventuras</h2></div><span className="campaign-count">{idx.length} {idx.length === 1 ? "mundo" : "mundos"}</span></div>
+            <div className="library-heading"><div><h2>Suas aventuras</h2></div><span className="campaign-count">{idx.length} {idx.length === 1 ? "mundo" : "mundos"}</span></div>
             {!idx.length ? (
               <div className="camp-empty">
-                <div className="camp-empty-icon">🌍</div>
-                <div className="camp-empty-txt">Nenhuma aventura ainda.<br />Crie seu primeiro mundo — continua de onde parou em qualquer aparelho.</div>
+                <div className="camp-empty-txt">Ainda não há aventura.<br />Abra um RPG pronto ou crie o seu — continua de onde parou em qualquer aparelho.</div>
               </div>
             ) : idx.map((s) => (
               <div key={s.id} className="camp-card">
@@ -1982,16 +1977,16 @@ export default function RPG() {
                   <div className="camp-world">{s.world}</div>
                   <div className="camp-char"><i className="ti ti-sword" /> {s.charName}</div>
                   {s.updatedAt && <div className="camp-date">Última sessão: {fmtDate(s.updatedAt)}</div>}
-                    <span className="camp-continue">Continuar aventura <span aria-hidden="true">↗</span></span>
+                    <span className="camp-continue">Continuar aventura</span>
                   </span>
                 </button>
-                <button className="camp-del" onClick={(e) => delCamp(s.id, e)} aria-label="Apagar">✕</button>
+                <button className="camp-del" onClick={(e) => delCamp(s.id, e)} aria-label={`Apagar aventura de ${s.charName}`}>Apagar</button>
               </div>
             ))}
           </div>
           <div className="shell-foot">
-            <button className="btn-primary" type="button" onClick={() => setView("presets")}>✦ Explorar RPGs prontos</button>
-            <button className="settings-action" type="button" onClick={startCreate}>+ Criar meu próprio RPG</button>
+            <button className="btn-primary" type="button" onClick={() => setView("presets")}>Abrir RPGs prontos</button>
+            <button className="btn-secondary" type="button" onClick={startCreate}>Criar o meu</button>
           </div>
         </>
       )}
@@ -2026,14 +2021,14 @@ export default function RPG() {
       <Head><title>Novo Personagem</title></Head>
       <div className="cr-head">
         <button className="btn-ghost" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← Voltar</button>
-        <div className="cr-steps">
-          {[0, 1, 2].map(i => (
-            <span key={i} style={{ display: "flex", alignItems: "center" }}>
+        <nav className="cr-steps" aria-label="Etapas da criação">
+          {CREATE_STEPS.map((name, i) => (
+            <span key={name} className={`cr-step ${step === i ? "current" : ""} ${step > i ? "done" : ""}`}>
               <span className={`cr-dot ${step >= i ? "on" : ""}`} />
-              {i < 2 && <span className="cr-ln" />}
+              <span className="cr-step-name">{name}</span>
             </span>
           ))}
-        </div>
+        </nav>
         {step === 0
           ? <button className="btn-ghost" type="button" onClick={() => setView("presets")}>RPGs prontos</button>
           : <div style={{ width: 56 }} />}
@@ -2048,17 +2043,17 @@ export default function RPG() {
 
           <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
           <Toggle title="Universo existente?"
-            desc={form.isKnownIP ? "A IA pesquisa um briefing canônico (era, facções, regras de poder). Revise os fatos importantes antes de jogar." : "✨ Mundo original — você define o contexto abaixo"}
+            desc={form.isKnownIP ? "A IA pesquisa um briefing canônico (era, facções, regras de poder). Revise os fatos importantes antes de jogar." : "Mundo original — você define o contexto abaixo"}
             value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, storyStartPoint: "" }))} />
           {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
           {form.isKnownIP && form.world.trim() && (
             <div className="ip-hint">A IA vai pesquisar um briefing fiel de <strong>{form.world}</strong>: era, lugares, facções, regras de poder e o que não inventar.</div>
           )}
           <Toggle title="Gerar imagens de cena?"
-            desc={form.useImages ? "🖼️ Uma imagem por cena — mais imersivo, mais lento" : "⚡ Sem imagens — mais rápido e barato"}
+            desc={form.useImages ? "Uma imagem por cena — mais imersivo, mais lento" : "Sem imagens — mais rápido e barato"}
             value={form.useImages} onChange={() => setForm(f => ({ ...f, useImages: !f.useImages }))} />
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 8 }}>Estilo de jogo</div>
+            <div className="wizard-section-label">Estilo de jogo</div>
             <div className="style-pick">
               {Object.entries(GAME_STYLES).map(([key, s]) => (
                 <button
@@ -2067,7 +2062,7 @@ export default function RPG() {
                   className={`style-opt ${form.gameStyle === key ? "on" : ""}`}
                   onClick={() => setForm(f => ({ ...f, gameStyle: key }))}
                 >
-                  <span className="style-opt-title">{s.icon} {s.label}</span>
+                  <span className="style-opt-title">{s.label}</span>
                   <span className="style-opt-desc">{s.desc}</span>
                 </button>
               ))}
@@ -2080,14 +2075,14 @@ export default function RPG() {
           <div className="cr-lbl">PASSO 2 — O PERSONAGEM</div>
           {form.isKnownIP && (
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, color: "#4a2c00", textTransform: "uppercase", marginBottom: 8 }}>Quem você vai jogar?</div>
+              <div className="wizard-section-label">Quem você vai jogar?</div>
               <div className="style-pick">
                 <button
                   type="button"
                   className={`style-opt ${form.isExistingChar ? "on" : ""}`}
                   onClick={() => setForm(f => ({ ...f, isExistingChar: true, storyStartPoint: "" }))}
                 >
-                  <span className="style-opt-title">📖 Personagem da obra</span>
+                  <span className="style-opt-title">Personagem da obra</span>
                   <span className="style-opt-desc">Jogo como Naruto, Geralt, Jon Snow... — busco a ficha e você escolhe onde começar na história</span>
                 </button>
                 <button
@@ -2095,7 +2090,7 @@ export default function RPG() {
                   className={`style-opt ${!form.isExistingChar ? "on" : ""}`}
                   onClick={() => setForm(f => ({ ...f, isExistingChar: false, charLore: "", charAppearanceNote: "", storyStartPoint: "" }))}
                 >
-                  <span className="style-opt-title">✨ Personagem original</span>
+                  <span className="style-opt-title">Personagem original</span>
                   <span className="style-opt-desc">Crio meu próprio personagem neste universo — não precisa existir na obra</span>
                 </button>
               </div>
@@ -2135,7 +2130,7 @@ export default function RPG() {
           <div className="cr-lbl">PASSO 3 — ONDE COMEÇAR?</div>
           <F label="Contexto gerado pela IA — revise antes de jogar" value={form.charLore} set={(v) => setForm(f => ({ ...f, charLore: v }))} ta rows={5} />
           <div className="ficha-card">
-            <div className="ficha-name">⚔ {form.charName}</div>
+            <div className="ficha-name">{form.charName}</div>
             {form.charTitle && <div className="ficha-row"><span>Cargo</span><span>{form.charTitle}{form.charAge ? ` · ${form.charAge} anos` : ""}</span></div>}
             {form.charBg && <div className="ficha-row"><span>História</span><span>{form.charBg}</span></div>}
             {form.charPersonality && <div className="ficha-row"><span>Personalidade</span><span>{form.charPersonality}</span></div>}
@@ -2157,7 +2152,7 @@ export default function RPG() {
             placeholder="ex: Início do anime / Arco do Exame Chunin / Após a Batalha de Winterfell / Depois que vira Hokage..."
             ta rows={3} />
           <div className="ip-hint">Descreva o momento exato da obra em que a aventura começa. O Mestre posicionará seu personagem nesse ponto do canon.</div>
-          <button className="btn-primary" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>⚔ Começar aventura</button>
+          <button className="btn-primary" disabled={!form.storyStartPoint.trim()} onClick={finishCreate}>Começar aventura</button>
         </>}
 
         {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
@@ -2193,7 +2188,7 @@ export default function RPG() {
               </div>
             </div>
           ))}
-          <button className="btn-primary" onClick={finishCreate}>⚔ Começar aventura</button>
+          <button className="btn-primary" onClick={finishCreate}>Começar aventura</button>
         </>}
       </div>
     </div>
@@ -2316,12 +2311,13 @@ export default function RPG() {
 
 // ─── Sub-components ───────────────────────────────────────────────────
 function F({ label, value, set, placeholder, ta, rows }) {
+  const id = "field-" + String(label).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
     <div className="field">
-      <div className="field-label">{label}</div>
+      <label className="field-label" htmlFor={id}>{label}</label>
       {ta
-        ? <textarea className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
-        : <input className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
+        ? <textarea id={id} className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
+        : <input id={id} className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
     </div>
   );
 }
@@ -2333,8 +2329,8 @@ function Toggle({ title, desc, value, onChange }) {
         <div className="toggle-title">{title}</div>
         <div className="toggle-desc">{desc}</div>
       </div>
-      <button type="button" className={`toggle-btn ${value ? "on" : ""}`} onClick={onChange}>
-        {value ? "SIM" : "NÃO"}
+      <button type="button" className={`toggle-btn ${value ? "on" : ""}`} onClick={onChange} aria-pressed={value}>
+        {value ? "Sim" : "Não"}
       </button>
     </div>
   );

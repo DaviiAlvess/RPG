@@ -22,7 +22,7 @@ const PANEL_META = {
   narrator: { label: "Narrador", icon: "ti ti-message-2" },
   sheet: { label: "Ficha", icon: "ti ti-user-circle" },
   dice: { label: "Dados", icon: "ti ti-dice-5" },
-  inventory: { label: "Inventário", icon: "ti ti-backpack" },
+  inventory: { label: "Itens", icon: "ti ti-backpack" },
   missions: { label: "Missões", icon: "ti ti-flag-3" },
   settings: { label: "Ajustes", icon: "ti ti-settings" },
 };
@@ -392,6 +392,7 @@ export default function PlayView(props) {
               }}
               type="button"
               title="Voltar"
+              aria-label="Voltar às aventuras"
             >
               <i className="ti ti-home" />
             </button>
@@ -419,6 +420,7 @@ export default function PlayView(props) {
               onClick={() => setShowTimeSkipModal(true)}
               type="button"
               title="Avançar no tempo"
+              aria-label="Avançar no tempo"
             >
               <i className="ti ti-clock-hour-4" />
             </button>
@@ -428,11 +430,12 @@ export default function PlayView(props) {
               onClick={toggleAuto}
               type="button"
               title={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
+              aria-label={autoMode ? "Desativar modo automático" : "Ativar modo automático"}
             >
               <i className="ti ti-player-play" />
             </button>
 
-            <button className="topbar-btn" onClick={quickSave} type="button" title="Salvar rápido">
+            <button className="topbar-btn" onClick={quickSave} type="button" title="Salvar rápido" aria-label="Salvar rápido">
               <i className="ti ti-device-floppy" />
             </button>
           </div>
@@ -544,29 +547,6 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
-              <div className="ability-shortcut">
-                <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)} aria-haspopup="dialog" aria-label={agreementCount ? `Falar com o Mestre. ${agreementCount} acordos da mesa` : 'Falar com o Mestre. Acordos da mesa'}>
-                  <span aria-hidden="true">✦</span>
-                  <span>Falar com o Mestre</span>
-                  <span>Acordos da mesa{agreementCount ? ` (${agreementCount})` : ''}</span>
-                </button>
-                <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
-                  <span aria-hidden="true">✦</span><span>Habilidade</span><span aria-hidden="true">{abilityOpen ? '−' : '+'}</span>
-                </button>
-                {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Usar habilidade especial">
-                  {c.specialAbility?.enabled && c.specialAbility.name && c.specialAbility.description ? <>
-                    <p><strong>{c.specialAbility.name}</strong></p>
-                    <p>{c.specialAbility.description}</p>
-                    {c.specialAbility.limits ? <p><strong>Limites:</strong> {c.specialAbility.limits}</p> : null}
-                    <p className="settings-hint">{c.specialAbility.secret !== false ? 'Configurada para começar em segredo. Usá-la diante de alguém pode revelá-la.' : 'Sem segredo obrigatório.'}</p>
-                    <button className="btn-primary" type="button" disabled={loading || autoWaiting} onClick={() => { setInput(previous => (previous.trim() ? previous.trimEnd() + '\n' : '') + "Uso " + c.specialAbility.name + " para "); setAbilityOpen(false); taRef.current?.focus(); }}>✦ Preparar uso da habilidade</button>
-                    <p className="settings-hint">Complete o que quer fazer e toque em enviar. Seu texto atual será mantido.</p>
-                  </> : <p>Você ainda não configurou uma habilidade especial. Pode escolher um poder deste universo ou de outro.</p>}
-                  <button type="button" className="idea-help" onClick={() => { setPlayPanel('settings'); setAbilityOpen(false); }}>Configurar habilidade →</button>
-                </section> : null}
-              </div>
-              <div className="reading-tools"><button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>✧ Ideias para agir</button><button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? 'Sair do modo leitura' : 'Modo leitura'}</button></div>
-              {ideasOpen ? <div className="action-ideas">{[{ label: 'Investigar', text: 'Examino ' }, { label: 'Conversar', text: 'Me aproximo de ' }, { label: 'Agir', text: 'Tento ' }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               <div className="chat-input-row">
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
@@ -577,26 +557,7 @@ export default function PlayView(props) {
                       : `D20 + modificador (${pendingPreview?.modifier >= 0 ? "+" : ""}${pendingPreview?.modifier ?? 0}). Role o dado abaixo ou desista da tentativa no salto de tempo.`}
                   </span>
                 </div> : null}
-                <button
-                  className="btn-time-skip"
-                  onClick={() => setShowTimeSkipModal(true)}
-                  type="button"
-                  title="Avançar no tempo"
-                  disabled={loading || autoWaiting}
-                >
-                  <i className="ti ti-clock-hour-4" />
-                </button>
-
-                <button
-                  className={`btn-auto-toggle ${autoMode ? "on" : ""}`}
-                  onClick={toggleAuto}
-                  type="button"
-                  title="Alternar modo automático"
-                >
-                  {autoMode ? "AUTO ON" : "AUTO OFF"}
-                </button>
-
-                {props.failedAction ? <div className="api-failure" role="alert"><p>{props.failedAction.errorMessage || "Não foi possível responder. Sua ação foi preservada."}</p><button className="retry-action" type="button" disabled={loading || retrySeconds > 0} onClick={props.retryAction}>{retrySeconds > 0 ? `Aguarde ${retrySeconds}s` : "↻ Tentar ação novamente"}</button></div> : null}
+                {props.failedAction ? <div className="api-failure" role="alert"><p>{props.failedAction.errorMessage || "Não foi possível responder. Sua ação foi preservada."}</p><button className="retry-action" type="button" disabled={loading || retrySeconds > 0} onClick={props.retryAction}>{retrySeconds > 0 ? `Aguarde ${retrySeconds}s` : "Tentar de novo"}</button></div> : null}
                 <textarea
                   ref={taRef}
                   value={input}
@@ -630,9 +591,39 @@ export default function PlayView(props) {
                   disabled={loading || autoWaiting || !input?.trim()}
                   type="button"
                   title="Enviar ação"
+                  aria-label="Enviar ação"
                 >
                   <i className="ti ti-send-2" />
                 </button>
+              </div>
+              <div className="play-tools">
+                <div className="ability-shortcut">
+                  <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)} aria-haspopup="dialog" aria-label={agreementCount ? `Falar com o Mestre. ${agreementCount} acordos da mesa` : "Falar com o Mestre"}>
+                    <i className="ti ti-messages" aria-hidden="true" />
+                    <span>Falar com o Mestre</span>
+                    {agreementCount ? <span className="ability-count">{agreementCount}</span> : null}
+                  </button>
+                  <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
+                    <i className="ti ti-bolt" aria-hidden="true" />
+                    <span>Habilidade</span>
+                  </button>
+                </div>
+                <div className="reading-tools">
+                  <button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>Ideias para agir</button>
+                  <button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? "Sair da leitura" : "Modo leitura"}</button>
+                </div>
+                {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Usar habilidade especial">
+                  {c.specialAbility?.enabled && c.specialAbility.name && c.specialAbility.description ? <>
+                    <p><strong>{c.specialAbility.name}</strong></p>
+                    <p>{c.specialAbility.description}</p>
+                    {c.specialAbility.limits ? <p><strong>Limites:</strong> {c.specialAbility.limits}</p> : null}
+                    <p className="settings-hint">{c.specialAbility.secret !== false ? "Configurada para começar em segredo. Usá-la diante de alguém pode revelá-la." : "Sem segredo obrigatório."}</p>
+                    <button className="btn-primary" type="button" disabled={loading || autoWaiting} onClick={() => { setInput(previous => (previous.trim() ? previous.trimEnd() + "\n" : "") + "Uso " + c.specialAbility.name + " para "); setAbilityOpen(false); taRef.current?.focus(); }}>Preparar uso da habilidade</button>
+                    <p className="settings-hint">Complete o que quer fazer e toque em enviar. Seu texto atual será mantido.</p>
+                  </> : <p>Você ainda não configurou uma habilidade especial. Pode escolher um poder deste universo ou de outro.</p>}
+                  <button type="button" className="idea-help" onClick={() => { setPlayPanel("settings"); setAbilityOpen(false); }}>Configurar habilidade</button>
+                </section> : null}
+                {ideasOpen ? <div className="action-ideas">{[{ label: "Investigar", text: "Examino " }, { label: "Conversar", text: "Me aproximo de " }, { label: "Agir", text: "Tento " }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
               </div>
             </div>
           </div>
@@ -731,10 +722,6 @@ export default function PlayView(props) {
                     <span className="skill-val">Nível {level || 1}</span>
                     {readyToLevel && !levelUpOpen ? (
                       <button className="inventory-add-btn" onClick={() => setLevelUpOpen(true)} type="button">
-                        Subir de nível
-                      </button>
-                    ) : !readyToLevel ? (
-                      <button className="inventory-add-btn" type="button" disabled style={{ opacity: 0.45 }}>
                         Subir de nível
                       </button>
                     ) : null}

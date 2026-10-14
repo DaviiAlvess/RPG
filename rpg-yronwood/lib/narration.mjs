@@ -75,25 +75,57 @@ export const NARRATION_PRESENCE = [
   'Nunca invente diálogo para o personagem do jogador.',
   'Sentidos crus e visão de túnel: ferrugem, mofo, pólvora, trinco, bota — não lista decorativa nem vista panorâmica.',
   'Feche frases e o turno: situação viva que o jogador pode responder. Não corte no meio ("sob o…"). Sem menus numerados; não faça cliffhanger em toda resposta.',
-  'Não repita a abertura, metáfora ou estrutura da resposta anterior.'
+  'Não repita a abertura, metáfora ou estrutura da resposta anterior. O exemplo sensorial (suor, ferrugem, palma, cera) é tipo de detalhe, não um cardápio para usar de novo.'
 ].join('\n');
-export function buildNarrationDirection(value) {
+
+const ECHO_MARKS = ['suor', 'ferrugem', 'mofo', 'pólvora', 'polvora', 'batimento', 'calafrio', 'bile', 'cera', 'palma', 'respiração presa', 'respiracao presa'];
+
+function visibleLine(entry) {
+  if (typeof entry === 'string') return entry;
+  const kind = entry?.type || entry?.role;
+  if (kind && !['gm', 'assistant', 'auto', 'user'].includes(kind)) return '';
+  return String(entry?.text || entry?.content || '');
+}
+
+/** Nomes concretos do que as últimas falas já usaram, para o turno seguinte trocar de detalhe. */
+export function repetitionDirection(messages) {
+  const recent = [];
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0 && recent.length < 3; i -= 1) {
+    const clean = visibleLine(list[i]).replace(/\[[^\]]+\]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (clean.length < 28) continue;
+    recent.push(clean);
+  }
+  if (!recent.length) return '';
+  const blob = recent.join(' ').toLowerCase();
+  const used = ECHO_MARKS.filter((mark) => blob.includes(mark));
+  const openings = recent.slice(0, 2).map((line) => line.slice(0, 80));
+  return [
+    'NÃO REPITA O TURNO ANTERIOR.',
+    `Não abra igual e não recicle a mesma imagem: ${openings.map((line) => `"${line}"`).join(' | ')}.`,
+    used.length ? `Já saiu nesta cena — troque o detalhe: ${used.join(', ')}.` : '',
+    'Entre pela consequência nova. Outro objeto, outro sentido, outro gesto.',
+  ].filter(Boolean).join(' ');
+}
+
+export function buildNarrationDirection(value, recent) {
   const n = normalizeNarration(value);
   const style = NARRATION_STYLES[n.style];
   return [
     'DIREÇÃO DE NARRAÇÃO — estas preferências prevalecem sobre instruções anteriores de estilo, tamanho e ritmo, mas nunca alteram regras de dados, fatos, canon ou agência do jogador. A NARRAÇÃO VISCERAL é trava global: prevalece sobre tom literário, leve ou "épico" do seletor.',
     NARRATION_PRESENCE,
     style.instruction, NARRATION_LENGTHS[n.length].instruction, NARRATION_PACES[n.pace].instruction,
-    `MODELO DE VOZ — imite o CORTE e o CORPO deste trecho, não a mesma cena e NÃO o ponto de vista. Frases curtas, sentidos crus, câmera em você. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética. A câmera continua sendo você (olhos do jogador, nunca o NPC como sujeito):\n${style.sample}`,
+    `MODELO DE VOZ — copie só o ritmo (frase curta, câmera em você). Não copie a cena do exemplo (carta, cera, palma, pão, selo) se ela não estiver acontecendo agora. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética:\n${style.sample}`,
+    repetitionDirection(recent),
     'Uma falha muda a situação, não deve apenas repetir o mesmo bloqueio. Ação desajeitada: coisas caem, a voz falha, o corpo atrapalha.',
     'Cada cena deve servir a uma intenção ou pergunta concreta, sem inventar objetivos para o jogador.',
     'Ritmo cardíaco: frases curtas e secas. Alta tensão = muitos pontos, fôlego curto. Sem aparte poético ou filosófico.',
     'Nos diálogos, cada NPC quer algo específico. Mostre subtexto por uma pausa, gesto ou resposta indireta quando fizer sentido; evite que todos falem por enigmas.',
     'As escolhas devem produzir diferenças reconhecíveis. Mostre os riscos que o personagem poderia perceber pelo corpo; não transforme toda surpresa em punição arbitrária. Dê resolução a perguntas antigas antes de acumular mistérios novos.',
-    'Reutilize detalhes e relações já estabelecidos antes de criar novos. NPCs têm objetivos e limites de conhecimento; não adivinham segredos.',
+    'Reutilize fatos, nomes e relações já estabelecidos antes de criar novos. A imagem do turno anterior não se reaproveita: outro objeto, outro sentido, outro gesto. NPCs têm objetivos e limites de conhecimento; não adivinham segredos.',
     'Evite elogios automáticos e frases genéricas de destino. Proibido: assustador, aterrorizante, caótico, épico, horrível.',
     'Nunca avance uma decisão pelo jogador, determine seus sentimentos ou conceda sucesso para agradá-lo. Humor e drama respeitam a escala atual do personagem — sem adjetivo de pânico.'
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 export const START_BEAT_PREFIX = '[INÍCIO DA AVENTURA]';

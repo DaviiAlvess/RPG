@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
 import { economyPrompt } from '../lib/economy.mjs';
-import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, START_BEAT_PREFIX, buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from '../lib/narration.mjs';
+import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, START_BEAT_PREFIX, buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, repetitionDirection, sanitizeStartDisplay, startBeatDisplay } from '../lib/narration.mjs';
 
 const PLAYER_CAMERA_MARKERS = ['sujeito gramatical', 'subordinado', 'canto do olho', 'dentro dos olhos', 'a partir de você', 'save antigo'];
 const VISCERAL_MARKERS = [
@@ -210,7 +210,7 @@ test('Câmera do jogador vale em save antigo, preset, Westeros, Bleach e mundo c
   }
   const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
   assert.ok(source.includes('systemPrompt: buildPrompt('));
-  assert.ok(source.includes('buildNarrationDirection(c.narration)'));
+  assert.ok(source.includes('buildNarrationDirection(c.narration, c.disp || c.msgs)'));
   assert.ok(source.includes('O subordinado aperta'));
   assert.ok(source.includes('sujeito gramatical'));
   assert.ok(source.includes('sem toggle'));
@@ -251,6 +251,22 @@ test('Narração visceral é trava global no start e no turno — save vazio, an
   const economySrc = await readFile(new URL('../lib/economy.mjs', import.meta.url), 'utf8');
   assert.ok(economySrc.includes('narração visceral'));
   assert.ok(economySrc.includes('menos frases, não menos corpo'));
+});
+test('O turno seguinte aponta a abertura repetida e pede outro detalhe', () => {
+  const guard = repetitionDirection([
+    { type: 'gm', text: 'A palma da mão pulsa onde o ferro queimou. A cera vermelha estala no pergaminho.' },
+    { type: 'user', text: 'Apoio as mãos na mesa e encaro o capataz.' },
+    { type: 'gm', text: 'A palma ainda arde. Suor desce na cera.' },
+  ]);
+  assert.match(guard, /NÃO REPITA O TURNO ANTERIOR/);
+  assert.match(guard, /A palma ainda arde/);
+  assert.match(guard, /suor/);
+  assert.match(guard, /cera/);
+  assert.equal(repetitionDirection([]), '');
+  assert.equal(repetitionDirection([{ type: 'time_sep', text: 'Um dia depois' }]), '');
+  const prompt = buildNarrationDirection({ style: 'dark' }, [{ type: 'gm', text: 'A palma da mão pulsa. Cera e suor no pergaminho de novo.' }]);
+  assert.match(prompt, /NÃO REPITA O TURNO ANTERIOR/);
+  assert.match(prompt, /copie só o ritmo/);
 });
 test('O briefing de início vai ao Mestre, não vaza no chat do jogador', async () => {
   const start = buildStartPrompt({ charName: 'Edric', world: 'Westeros', isKnownIP: true });

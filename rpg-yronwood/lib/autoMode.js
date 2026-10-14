@@ -159,8 +159,16 @@ export function buildLocalAutoAction(camp, lastGmText) {
     return "Sigo até a próxima abertura e olho o que há do outro lado antes de cruzar.";
   }
 
-  const pool = profile.actions;
-  return pool[Math.floor(Math.random() * pool.length)];
+  const recent = (camp?.msgs || [])
+    .filter((message) => message?.role === "user")
+    .slice(-2)
+    .map((message) => normalizeText(message.content));
+  const pool = profile.actions.filter((action) => {
+    const opening = normalizeText(action).slice(0, 28);
+    return !recent.some((previous) => previous.includes(opening));
+  });
+  const usable = pool.length ? pool : profile.actions;
+  return usable[Math.floor(Math.random() * usable.length)];
 }
 
 export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
@@ -186,6 +194,7 @@ export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
           gameStyle: camp?.gameStyle,
           plots: (camp?.plots || []).filter((plot) => plot && plot.status !== 'encerrada').slice(0, 3),
           missions: (camp?.missions || []).filter((mission) => mission && !mission.completed).slice(0, 3),
+          recentActions: (camp?.msgs || []).filter((message) => message?.role === 'user').slice(-2).map((message) => String(message.content || '').replace(/\s+/g, ' ').trim().slice(0, 140)).filter(Boolean),
         },
         lastGmText,
       }),

@@ -1,22 +1,106 @@
-export function normalizeSpecialAbility(value = {}) {
+export const MAX_SPECIAL_ABILITIES = 3;
+export const ABILITY_NAME_MAX = 200;
+export const ABILITY_DESCRIPTION_MAX = 6000;
+export const ABILITY_LIMITS_MAX = 3000;
+
+export function normalizeOneSpecialAbility(entry = {}) {
   return {
-    enabled: value?.enabled === true,
-    name: String(value?.name || '').trim().slice(0, 100),
-    description: String(value?.description || '').trim().slice(0, 2000),
-    limits: String(value?.limits || '').trim().slice(0, 1000),
-    secret: value?.secret !== false
+    name: String(entry?.name || '').trim().slice(0, ABILITY_NAME_MAX),
+    description: String(entry?.description || '').trim().slice(0, ABILITY_DESCRIPTION_MAX),
+    limits: String(entry?.limits || '').trim().slice(0, ABILITY_LIMITS_MAX),
+    secret: entry?.secret !== false,
   };
 }
+
+function isCompleteAbility(ability) {
+  return Boolean(ability?.name && ability?.description);
+}
+
+/** Aceita o formato antigo (um objeto) ou até 3 habilidades em `abilities`. */
+export function normalizeSpecialAbilities(value = {}) {
+  if (Array.isArray(value)) {
+    const abilities = value.map(normalizeOneSpecialAbility).slice(0, MAX_SPECIAL_ABILITIES);
+    const complete = abilities.filter(isCompleteAbility);
+    return decorateLegacyFields({
+      enabled: complete.length > 0,
+      abilities,
+    });
+  }
+
+  if (value && Array.isArray(value.abilities)) {
+    const abilities = value.abilities.map(normalizeOneSpecialAbility).slice(0, MAX_SPECIAL_ABILITIES);
+    return decorateLegacyFields({
+      enabled: value.enabled === true,
+      abilities,
+    });
+  }
+
+  const one = normalizeOneSpecialAbility(value);
+  const abilities = one.name || one.description ? [one] : [];
+  return decorateLegacyFields({
+    enabled: value?.enabled === true,
+    abilities,
+  });
+}
+
+function decorateLegacyFields(bundle) {
+  const first = bundle.abilities.find(isCompleteAbility) || bundle.abilities[0] || normalizeOneSpecialAbility();
+  return {
+    enabled: bundle.enabled === true,
+    abilities: bundle.abilities,
+    name: first.name,
+    description: first.description,
+    limits: first.limits,
+    secret: first.secret,
+  };
+}
+
+/** Compatível com saves antigos — sempre devolve o pacote com `abilities`. */
+export function normalizeSpecialAbility(value = {}) {
+  return normalizeSpecialAbilities(value);
+}
+
+export function listActiveSpecialAbilities(value) {
+  const bundle = normalizeSpecialAbilities(value);
+  if (!bundle.enabled) return [];
+  return bundle.abilities.filter(isCompleteAbility).slice(0, MAX_SPECIAL_ABILITIES);
+}
+
+export function specialAbilitiesAreValid(value) {
+  const bundle = normalizeSpecialAbilities(value);
+  if (!bundle.enabled) return true;
+  return listActiveSpecialAbilities(bundle).length > 0;
+}
+
+/** Coloca ou troca a habilidade escolhida no texto do bate-papo. */
+export function prepareAbilityInput(previous, abilityName) {
+  const name = String(abilityName || '').trim();
+  if (!name) return String(previous || '');
+  const raw = String(previous || '');
+  const trimmed = raw.trim();
+  const rest = trimmed.replace(/^Uso\s+.+\s+para\s*/i, '').trim();
+  const prefix = `Uso ${name} para `;
+  if (!rest) return prefix;
+  return `${prefix}${rest}`;
+}
+
 export function specialAbilityDirection(value) {
-  const ability = normalizeSpecialAbility(value);
-  if (!ability.enabled || !ability.name || !ability.description) return '';
+  const active = listActiveSpecialAbilities(value);
+  if (!active.length) return '';
+  const many = active.length > 1;
   return [
-    'EXCEÇÃO EXPLÍCITA ESCOLHIDA PELO JOGADOR — prevalece sobre a restrição de personagem comum e a proibição de poderes de outros universos SOMENTE para esta habilidade:',
-    JSON.stringify(ability),
-    'O personagem possui esta habilidade desde o início da campanha e pode tentar usá-la. Não negue sua existência por não pertencer ao universo. Mantenha o restante do mundo fiel às suas regras.',
+    many
+      ? `EXCEÇÃO EXPLÍCITA ESCOLHIDA PELO JOGADOR — até ${active.length} habilidades especiais. Prevalecem sobre a restrição de personagem comum e a proibição de poderes de outros universos SOMENTE para estas habilidades:`
+      : 'EXCEÇÃO EXPLÍCITA ESCOLHIDA PELO JOGADOR — prevalece sobre a restrição de personagem comum e a proibição de poderes de outros universos SOMENTE para esta habilidade:',
+    JSON.stringify(active),
+    many
+      ? 'O personagem possui estas habilidades desde o início da campanha e pode tentar usá-las. Não negue a existência por não pertencerem ao universo. Mantenha o restante do mundo fiel às suas regras.'
+      : 'O personagem possui esta habilidade desde o início da campanha e pode tentar usá-la. Não negue sua existência por não pertencer ao universo. Mantenha o restante do mundo fiel às suas regras.',
     'Aplique os efeitos descritos, sem acrescentar técnicas, linhagens ou poderes não escolhidos. Um uso direto e garantido pela descrição não exige teste artificial; use testes apenas quando a execução ou resistência for realmente incerta.',
-    ability.limits ? 'Respeite exatamente os custos, limites e condições informados.' : 'Não invente um custo fixo ou uma proibição arbitrária; esclareça ambiguidades quando forem relevantes para a ação.',
-    ability.secret ? 'O poder começa em segredo. NPCs só conhecem o que testemunharam ou descobriram por evidência; conserve descobertas já registradas e nunca apague o conhecimento de testemunhas.' : 'Não imponha segredo ao jogador. NPCs ainda precisam de uma fonte plausível para conhecer o poder.',
-    'Não distribua esta habilidade a NPCs ou inimigos para compensar o jogador. Não use o poder nem decida revelá-lo sem uma ação do jogador.'
+    'Respeite exatamente os custos, limites e condições informados em cada habilidade. Se uma não tiver limites explícitos, não invente um custo fixo arbitrário.',
+    active.some((ability) => ability.secret)
+      ? 'Habilidades marcadas como segredo começam ocultas. NPCs só conhecem o que testemunharam ou descobriram por evidência; conserve descobertas já registradas e nunca apague o conhecimento de testemunhas.'
+      : 'Não imponha segredo ao jogador. NPCs ainda precisam de uma fonte plausível para conhecer o poder.',
+    'Não distribua estas habilidades a NPCs ou inimigos para compensar o jogador. Não use o poder nem decida revelá-lo sem uma ação do jogador.',
   ].join('\n');
 }

@@ -1,4 +1,5 @@
 import SpecialAbilitySettings from "./SpecialAbilitySettings";
+import { listActiveSpecialAbilities, prepareAbilityInput } from "../lib/special-ability.mjs";
 import MasterChat from "./MasterChat";
 import { listMasterAgreements } from "../lib/master-chat.mjs";
 import { TIME_SKIP_FOCUSES } from "../lib/time-skip-intent.mjs";
@@ -8,6 +9,7 @@ import { useState, useEffect } from "react";
 import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
 import NarrativeContent from "./NarrativeContent";
+import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 import {
   TIME_SKIP_PRESETS,
@@ -201,6 +203,7 @@ export default function PlayView(props) {
     return () => clearInterval(timer);
   }, [props.failedAction?.retryAt]);
   const [abilityOpen, setAbilityOpen] = useState(false);
+  const [selectedChatAbility, setSelectedChatAbility] = useState("");
   const [readerMode, setReaderMode] = useState(false);
   const [ideasOpen, setIdeasOpen] = useState(false);
   const [levelUpOpen, setLevelUpOpen] = useState(false);
@@ -284,8 +287,23 @@ export default function PlayView(props) {
 
   const c = active || {};
   const agreementCount = listMasterAgreements(c).length;
+  const chatAbilities = listActiveSpecialAbilities(c.specialAbility);
   const [abilityDraft, setAbilityDraft] = useState(c.specialAbility || {});
   useEffect(() => { setAbilityDraft(c.specialAbility || {}); }, [c.id, c.specialAbility]);
+  useEffect(() => {
+    if (!selectedChatAbility) return;
+    const names = listActiveSpecialAbilities(c.specialAbility).map((ability) => ability.name);
+    if (!names.includes(selectedChatAbility)) setSelectedChatAbility("");
+  }, [c.id, c.specialAbility, selectedChatAbility]);
+
+  const chooseChatAbility = (ability) => {
+    if (!ability?.name || loading || autoWaiting || autoMode) return;
+    setSelectedChatAbility(ability.name);
+    setInput((previous) => prepareAbilityInput(previous, ability.name));
+    setAbilityOpen(false);
+    setIdeasOpen(false);
+    requestAnimationFrame(() => taRef.current?.focus());
+  };
   const lastScene = [...(disp || [])].reverse().find(m => m.type === "gm");
   const panel = PANEL_META[playPanel] || PANEL_META.narrator;
   const hpPct = Math.max(0, Math.min(100, Number(hp) || 0));
@@ -299,6 +317,8 @@ export default function PlayView(props) {
   const missionTotal = Array.isArray(missions) ? missions.length : 0;
   const activeMissionList = Array.isArray(activeMissions) ? activeMissions : [];
   const doneMissionList = Array.isArray(doneMissions) ? doneMissions : [];
+  const activePlot = (Array.isArray(c.plots) ? c.plots : []).find((plot) => plot && plot.status !== "encerrada");
+  const sceneStake = activePlot?.title || activePlot?.hook || activeMissionList[0]?.text || "";
   const panelSubtitle = getPanelSubtitle(panel.label.toLowerCase() === "narrador" ? "narrator" : playPanel, loading, statusText, connectionStatus, c, lastSaved);
   const attributeEntries = Object.entries(attributes || {});
   const skillEntries = Object.entries(skills || {});
@@ -490,6 +510,12 @@ export default function PlayView(props) {
               ) : null}
 
               <div className="chat-messages">
+                {sceneStake ? (
+                  <div className="scene-stake" role="status">
+                    <span className="scene-stake-label">Em jogo</span>
+                    <span className="scene-stake-text">{sceneStake}</span>
+                  </div>
+                ) : null}
                 {c.worldState && <details className="journey-recap"><summary>Diário de pessoas e segredos</summary>{Object.entries(c.worldState.npcs || {}).map(([name, facts]) => <p key={name}><strong>{name}</strong> — {facts}</p>)}{(c.worldState.secrets || []).map((secret, i) => <p key={i}>Segredo: {secret}</p>)}{!Object.keys(c.worldState.npcs || {}).length && !c.worldState.secrets?.length ? <p>As pessoas conhecidas e os segredos registrados pelo Mestre aparecerão aqui.</p> : null}</details>}
                 {lastScene && !loading ? <details className="journey-recap"><summary>Sua jornada até aqui</summary><p>{c.worldState?.location ? `Local: ${c.worldState.location}` : c.world}</p><p>{activeMissionList[0]?.text ? `Objetivo: ${activeMissionList[0].text}` : "Explore a cena e escolha seu próximo passo."}</p><p>{lastScene.text.slice(0, 420)}{lastScene.text.length > 420 ? "…" : ""}</p>{c.worldState?.promises?.length ? <p>Promessas: {c.worldState.promises.join(" · ")}</p> : null}</details> : null}
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
@@ -512,24 +538,39 @@ export default function PlayView(props) {
                     );
                   }
 
+                  if (message?.type === "roll") {
+                    return (
+                      <div key={message?.id || `roll-${index}`} className="chat-roll" role="status">
+                        <i className="ti ti-dice-5" aria-hidden="true" />
+                        <div className="chat-roll-body">
+                          <strong className="chat-roll-num">D20 {message.roll ?? "—"}</strong>
+                          <span className="chat-roll-meta">{message.text}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isUser = message?.type === "user" || message?.type === "auto";
                   const isAuto = message?.type === "auto";
                   const isError = message?.type === "error";
+                  const talky = !isError && (isDialogueHeavy(message?.text) || (isUser && hasDialogueBlocks(message?.text)));
                   const timeLabel = renderMessageTime(message);
 
                   return (
                     <div
                       key={message?.id || `${message?.type || "msg"}-${index}`}
-                      className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""}`}
+                      className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""} ${talky ? "scene-talk" : ""}`}
                     >
-                      <div className={`msg-avatar ${isUser ? "" : "narrator"}`}>
-                        <i className={isUser ? "ti ti-user" : "ti ti-sparkles"} />
-                      </div>
-                      <div>
-                        {isUser && c?.charName ? (
+                      {talky ? null : (
+                        <div className={`msg-avatar ${isUser ? "" : "narrator"}`}>
+                          <i className={isUser ? "ti ti-user" : "ti ti-sparkles"} />
+                        </div>
+                      )}
+                      <div className={talky ? "msg-scene" : undefined}>
+                        {isUser && c?.charName && !hasDialogueBlocks(message?.text) ? (
                           <div className="msg-speaker">{c.charName}</div>
                         ) : null}
-                        <div className="msg-bubble">
+                        <div className={talky ? "msg-scene-body" : "msg-bubble"}>
                           {isError ? (
                             message?.text || ""
                           ) : (
@@ -586,11 +627,40 @@ export default function PlayView(props) {
                     autoMode
                       ? autoWaiting
                         ? "Clique em Intervir para agir manualmente."
-                        : `Modo auto ativo — ou digite para agir como ${c.charName || "o personagem"}.`
-                      : `O que ${c.charName || "o personagem"} faz agora?`
+                        : `Modo auto ativo — ou fale/aja como ${c.charName || "o personagem"}.`
+                      : selectedChatAbility
+                        ? `Complete: Uso ${selectedChatAbility} para…`
+                      : `Fale ou aja como ${c.charName || "o personagem"}… Ex.: "Abra o portão."`
                   }
                   rows={2}
                 />
+
+                {chatAbilities.length && !autoMode ? (
+                  <label className="chat-ability-select">
+                    <span className="sr-only">Escolher habilidade especial</span>
+                    <select
+                      value={selectedChatAbility}
+                      disabled={loading || autoWaiting || Boolean(props.failedAction)}
+                      aria-label="Escolher habilidade especial"
+                      onChange={(event) => {
+                        const name = event.target.value;
+                        if (!name) {
+                          setSelectedChatAbility("");
+                          return;
+                        }
+                        const ability = chatAbilities.find((item) => item.name === name);
+                        if (ability) chooseChatAbility(ability);
+                      }}
+                    >
+                      <option value="">Poder</option>
+                      {chatAbilities.map((ability) => (
+                        <option key={ability.name} value={ability.name}>
+                          {ability.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
 
                 {showRollButton ? (
                   <button className="btn-roll" onClick={rollD20} disabled={loading || Boolean(props.failedAction)} type="button" title="Resolver teste com D20">
@@ -616,27 +686,59 @@ export default function PlayView(props) {
                     <span>Falar com o Mestre</span>
                     {agreementCount ? <span className="ability-count">{agreementCount}</span> : null}
                   </button>
-                  <button type="button" className="ability-trigger" aria-expanded={abilityOpen} aria-controls="current-special-ability" onClick={() => setAbilityOpen(!abilityOpen)}>
+                  <button
+                    type="button"
+                    className="ability-trigger"
+                    aria-expanded={abilityOpen}
+                    aria-controls="current-special-ability"
+                    onClick={() => { setAbilityOpen(!abilityOpen); setIdeasOpen(false); }}
+                    aria-label={chatAbilities.length ? `Detalhes das habilidades especiais, ${chatAbilities.length} disponíveis` : "Habilidades especiais"}
+                  >
                     <i className="ti ti-bolt" aria-hidden="true" />
-                    <span>Habilidade</span>
+                    <span>
+                      {selectedChatAbility
+                        ? selectedChatAbility
+                        : chatAbilities.length
+                          ? `Poderes (${chatAbilities.length})`
+                          : "Poderes"}
+                    </span>
                   </button>
                 </div>
                 <div className="reading-tools">
-                  <button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => setIdeasOpen(!ideasOpen)}>Ideias para agir</button>
+                  <button className="idea-help" type="button" aria-expanded={ideasOpen} onClick={() => { setIdeasOpen(!ideasOpen); setAbilityOpen(false); }}>Ideias para agir</button>
                   <button className="idea-help" type="button" aria-pressed={readerMode} onClick={() => setReaderMode(!readerMode)}>{readerMode ? "Sair da leitura" : "Modo leitura"}</button>
                 </div>
-                {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Usar habilidade especial">
-                  {c.specialAbility?.enabled && c.specialAbility.name && c.specialAbility.description ? <>
-                    <p><strong>{c.specialAbility.name}</strong></p>
-                    <p>{c.specialAbility.description}</p>
-                    {c.specialAbility.limits ? <p><strong>Limites:</strong> {c.specialAbility.limits}</p> : null}
-                    <p className="settings-hint">{c.specialAbility.secret !== false ? "Configurada para começar em segredo. Usá-la diante de alguém pode revelá-la." : "Sem segredo obrigatório."}</p>
-                    <button className="btn-primary" type="button" disabled={loading || autoWaiting} onClick={() => { setInput(previous => (previous.trim() ? previous.trimEnd() + "\n" : "") + "Uso " + c.specialAbility.name + " para "); setAbilityOpen(false); taRef.current?.focus(); }}>Preparar uso da habilidade</button>
-                    <p className="settings-hint">Complete o que quer fazer e toque em enviar. Seu texto atual será mantido.</p>
-                  </> : <p>Você ainda não configurou uma habilidade especial. Pode escolher um poder deste universo ou de outro.</p>}
-                  <button type="button" className="idea-help" onClick={() => { setPlayPanel("settings"); setAbilityOpen(false); }}>Configurar habilidade</button>
+                {abilityOpen ? <section id="current-special-ability" className="ability-quick-panel" aria-label="Escolher habilidade especial">
+                  {chatAbilities.length ? (
+                    <>
+                      <p className="settings-hint">Escolha um poder para colocar no bate-papo. A história fica livre até você abrir isto.</p>
+                      <ul className="ability-pick-list">
+                        {chatAbilities.map((ability) => {
+                          const selected = selectedChatAbility === ability.name;
+                          return (
+                            <li key={ability.name}>
+                              <button
+                                type="button"
+                                className={`ability-pick-item${selected ? " selected" : ""}`}
+                                aria-pressed={selected}
+                                disabled={loading || autoWaiting}
+                                onClick={() => chooseChatAbility(ability)}
+                              >
+                                <span className="ability-pick-name">{ability.name}</span>
+                                <span className="ability-pick-desc">{ability.description}</span>
+                                {ability.limits ? <span className="ability-pick-limit">{ability.limits}</span> : null}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </>
+                  ) : (
+                    <p>Você ainda não configurou habilidades especiais. Pode ter até 3 poderes deste universo ou de outro.</p>
+                  )}
+                  <button type="button" className="idea-help" onClick={() => { setPlayPanel("settings"); setAbilityOpen(false); }}>Configurar habilidades</button>
                 </section> : null}
-                {ideasOpen ? <div className="action-ideas">{[{ label: "Investigar", text: "Examino " }, { label: "Conversar", text: "Me aproximo de " }, { label: "Agir", text: "Tento " }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Complete com sua intenção. Nada é enviado automaticamente.</span></div> : null}
+                {ideasOpen ? <div className="action-ideas">{[{ label: "Falar", text: "\"" }, { label: "Conversar", text: "Me aproximo e digo: \"" }, { label: "Investigar", text: "Examino " }, { label: "Agir", text: "Tento " }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Fale entre aspas ou complete a intenção. Nada é enviado sozinho.</span></div> : null}
               </div>
             </div>
           </div>
@@ -1012,9 +1114,9 @@ export default function PlayView(props) {
               <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
               {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
               <details className="settings-fold">
-                <summary>Habilidade especial</summary>
+                <summary>Habilidades especiais (até 3)</summary>
                 <SpecialAbilitySettings value={abilityDraft} onChange={setAbilityDraft} disabled={loading || autoMode} />
-                <button className="settings-action" type="button" disabled={loading || autoMode} onClick={() => props.onSpecialAbilityChange(abilityDraft)}>Salvar habilidade especial</button>
+                <button className="settings-action" type="button" disabled={loading || autoMode} onClick={() => props.onSpecialAbilityChange(abilityDraft)}>Salvar habilidades especiais</button>
               </details>
               <details className="settings-fold">
                 <summary>Voz da narração</summary>

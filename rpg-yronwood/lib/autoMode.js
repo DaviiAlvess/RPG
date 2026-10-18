@@ -143,20 +143,63 @@ export function buildAutoTestReply(test, attributes, roll, skills = {}) {
   };
 }
 
+/** Bolha de dado no chat — o jogador vê o número, não só o painel lateral. */
+export function formatRollDisplay(test, reply) {
+  const roll = reply?.roll;
+  const total = reply?.result?.total;
+  const outcome = reply?.result?.outcome || '';
+  const difficulty = test?.difficulty;
+  const attribute = test?.attribute || 'Teste';
+  const description = String(test?.description || '').trim();
+  return {
+    type: 'roll',
+    roll,
+    total,
+    difficulty,
+    outcome,
+    attribute,
+    text: [
+      `D20 ${roll}`,
+      total != null ? `total ${total}` : '',
+      difficulty != null ? `vs ${difficulty}` : '',
+      outcome,
+      description ? `· ${description}` : '',
+    ].filter(Boolean).join(' · ').replace(/\s+·\s+·/g, ' · '),
+  };
+}
+
+/** Automático age; não escreve discurso longo pelo jogador. */
+export function sanitizeAutoAction(text) {
+  let action = String(text || '').replace(/\s+/g, ' ').trim();
+  if (!action) return '';
+  action = action.replace(/^["«]|["»]$/g, '').trim();
+  const sentences = action.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  if (sentences.length > 2) action = sentences.slice(0, 2).join(' ');
+  const limit = /digo |falo |respondo |pergunto |ordeno /i.test(action) ? 110 : 140;
+  if (action.length > limit) {
+    const cut = action.slice(0, limit - 1);
+    const lastSpace = cut.lastIndexOf(' ');
+    action = `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim()}…`;
+  }
+  return action;
+}
+
 export function buildLocalAutoAction(camp, lastGmText) {
   const traits = detectTraits(camp);
   const profile = traits[Math.floor(Math.random() * traits.length)];
   const scene = normalizeText(lastGmText);
 
-  if (scene.includes("?")) {
-    return "Olho para quem falou e respondo em voz alta, direto ao ponto.";
+  if (scene.includes("?") || /:\s*[«""']/.test(lastGmText || "")) {
+    return sanitizeAutoAction('Digo: "Depende do que você oferece."');
   }
   if (scene.includes("perigo") || scene.includes("inimigo") || scene.includes("ataque")) {
-    return profile.actions.find((action) => action.includes("frente") || action.includes("Ajo"))
-      || profile.actions[0];
+    return sanitizeAutoAction(
+      profile.actions.find((action) => action.includes("frente") || action.includes("Ajo"))
+      || profile.actions[0]
+    );
   }
   if (scene.includes("porta") || scene.includes("corredor") || scene.includes("sala")) {
-    return "Sigo até a próxima abertura e olho o que há do outro lado antes de cruzar.";
+    return sanitizeAutoAction("Sigo até a próxima abertura e olho o outro lado antes de cruzar.");
   }
 
   const recent = (camp?.msgs || [])
@@ -168,7 +211,7 @@ export function buildLocalAutoAction(camp, lastGmText) {
     return !recent.some((previous) => previous.includes(opening));
   });
   const usable = pool.length ? pool : profile.actions;
-  return usable[Math.floor(Math.random() * usable.length)];
+  return sanitizeAutoAction(usable[Math.floor(Math.random() * usable.length)]);
 }
 
 export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
@@ -200,7 +243,7 @@ export async function resolveAutoAction(camp, lastGmText, options, apiFetch) {
       }),
     });
     const data = await res.json();
-    const action = String(data?.action || "").trim();
+    const action = sanitizeAutoAction(data?.action);
     if (action) return action;
   } catch (error) {
     console.warn("Auto action API falhou, usando heurística local:", error);

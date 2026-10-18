@@ -7,6 +7,15 @@ function isPlayerSpeaker(speaker, playerName) {
   return Boolean(playerName) && name.toLowerCase() === String(playerName).toLowerCase();
 }
 
+function isStageDirection(text, neighborsHaveDialogue) {
+  if (!neighborsHaveDialogue) return false;
+  const line = String(text || "").trim();
+  if (!line) return false;
+  if (line.length > 110) return false;
+  if (line.includes("\n")) return false;
+  return true;
+}
+
 export default function NarrativeContent({ text, playerName }) {
   const blocks = parseNarrativeBlocks(text);
   const hasDialogue = blocks.some((block) => block.type === "dialogue");
@@ -18,7 +27,7 @@ export default function NarrativeContent({ text, playerName }) {
   }
 
   return (
-    <div className="narrative-content">
+    <div className="narrative-content narrative-conversation" role="group" aria-label="Conversa na cena">
       {blocks.map((block, index) => {
         if (block.type === "dialogue") {
           const isPlayer = isPlayerSpeaker(block.speaker, playerName);
@@ -37,8 +46,12 @@ export default function NarrativeContent({ text, playerName }) {
             </div>
           );
         }
+        const stage = isStageDirection(block.text, true);
         return (
-          <p key={`nar-${index}`} className="narrative-prose">
+          <p
+            key={`nar-${index}`}
+            className={stage ? "narrative-prose scene-stage" : "narrative-prose"}
+          >
             {block.text}
           </p>
         );

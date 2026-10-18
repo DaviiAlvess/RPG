@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import Head from "next/head";
 import SpecialAbilitySettings from "../components/SpecialAbilitySettings";
-import { normalizeSpecialAbility, specialAbilityDirection } from "../lib/special-ability.mjs";
+import { normalizeSpecialAbility, specialAbilitiesAreValid, specialAbilityDirection, listActiveSpecialAbilities } from "../lib/special-ability.mjs";
 import { gmRequestError, requestJson, GM_CLIENT_TIMEOUT_MS } from "../lib/api-client.mjs";
 import { normalizeSkipIntent, buildSkipMessage, createSkipEvent } from "../lib/time-skip-intent.mjs";
 import { applyMasterAgreements, applyMasterChatReply, buildMasterBeatMessage, isMasterBeatMessage, listMasterAgreements, masterBeatDisplay, masterChatPrompt, masterGuidance, masterInterventionContext } from "../lib/master-chat.mjs";
@@ -11,7 +11,7 @@ import { parseExperience, addExperience, canLevelUp, applyLevelUp, parseComplete
 import { parseHpDelta, applyHpDelta, stripHpTags, hpChangeToast } from "../lib/vitals.mjs";
 import { parseRelationships } from "../lib/relationships.mjs";
 import { applyManualIdentity, identityPromptLines, identityTagList, parseIdentityTags, stripIdentityTags } from "../lib/identity.mjs";
-import { buildCharacterNamingDirection } from "../lib/character-names.mjs";
+import { buildCharacterNamingDirection, buildNpcPersonalityDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
 import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
@@ -34,8 +34,8 @@ import {
   shouldShowTimeSeparator,
   formatGameTimeLong,
 } from "../lib/timeSystem";
-import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction } from "../lib/autoMode";
-import { normalizeDialogueText } from "../lib/dialogueFormat";
+import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
+import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -287,24 +287,26 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas, sons molhados/abafados/estridentes — chegam pelo corpo do jogador, não por um plano que segue um NPC. São tipos de detalhe, não um cardápio fixo: se a resposta anterior já usou um, escolha outro objeto e outro sentido. Não monte lista decorativa de cinco sentidos nem vista panorâmica. "Menos é mais" é recusar tour e adjetivo de juízo, não encolher a cena a um resumo turístico.`,
     ``,
     `REGRA 3 — O CORPO, NÃO A ALMA ROTULADA.`,
-    `Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Ancoragem biológica obrigatória: respiração presa, dor aguda, calafrio na espinha, mãos tremendo, batimento abafado, suor. Corpo observável é obrigatório; emoção rotulada, não. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta. Não feche toda resposta com "Como você reage?".`,
+    `Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Sob tensão: Ancoragem biológica (respiração presa, dor aguda, calafrio, mãos tremendo, batimento, suor). Em calma: um sinal no corpo basta — a cena pode respirar. Corpo observável; emoção rotulada, não. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta. Não feche toda resposta com "Como você reage?".`,
     ``,
-    `REGRA 4 — NPCs TÊM VIDA PRÓPRIA.`,
-    `Cada NPC quer algo específico. Mentem, omitem, têm pressa, guardam rancor. Voz distinta: o soldado corta frases, a curandeira fala em provérbios, o nobre ri alto demais. Mostre o que fazem enquanto falam — só pelo olhar do jogador. A cena orbita o jogador: NPCs entram a partir de você (À sua frente…, no canto do olho…), reagem a ele, nunca como herói do parágrafo ("O subordinado faz X. Ele…"). Um cartão/aparte rotulado pode ser terceira pessoa; a narração principal, não.`,
+    `REGRA 4 — NPCs TÊM VIDA E PERSONALIDADE.`,
+    `Cada NPC quer algo específico. Mentem, omitem, têm pressa, guardam rancor. Cada um tem jeito de falar e um gesto estável — não são fantoches iguais. Respeite a atitude já registrada (Hostil, Suspeito, Neutral, Amigável) no tom e na distância — não recomece do zero a cada turno. Mostre o que fazem enquanto falam — só pelo olhar do jogador. A cena orbita o jogador: NPCs entram a partir de você (À sua frente…, no canto do olho…), reagem a ele, nunca como herói do parágrafo ("O subordinado faz X. Ele…"). Um cartão/aparte rotulado pode ser terceira pessoa; a narração principal, não.`,
+    `ELENCO: use só pessoas da cena, dos relacionamentos ou da memória. Nunca importe capataz, mensageiro, marujo, curandeira ou subordinado genérico só porque apareceu num exemplo — a menos que já existam NESTA aventura.`,
     ``,
-    `REGRA 5 — FORMATO DE DIÁLOGO (SÓ NPCs).`,
-    `Fala em linha própria neste formato: Nome: "fala entre aspas"`,
-    `Narração e diálogo se alternam em linhas separadas.`,
-    `Marujo: "Você não devia estar aqui a esta hora."`,
-    `Curandeira: "Sente-se. Antes de curar, preciso saber o que você esconde."`,
+    `REGRA 5 — A MESA É CONVERSA (SÓ NPCs FALAM NA NARRAÇÃO).`,
+    `Com gente na cena, a resposta principal são falas — não um relatório do narrador. Formato obrigatório, uma linha por fala:`,
+    `NomeDaPessoa: "fala entre aspas"`,
+    `Ritmo: fala → gesto curto → fala. Duas ou três falas curtas vencem um bloco explicativo. Quem ouviu o jogador responde em fala na primeira linha.`,
+    `Só de FORMATO (não são personagens da sua história): Nome: "Uma frase." Outro: "Outra frase."`,
+    `Se um segundo NPC já presente está na cena, ele pode cortar ou apoiar em uma linha — depois o olhar volta para você.`,
     `NUNCA escreva diálogo, pensamento ou decisão do personagem do jogador — ele fala por si.`,
-    `PROIBIDO: "disse ele" / "sussurrou"; fala dentro do parágrafo; aspas sem o nome na linha; inventar a voz do jogador.`,
+    `PROIBIDO: "disse ele" / "sussurrou"; fala dentro do parágrafo; aspas sem o nome na linha; inventar a voz do jogador; "ele explica que…" no lugar da fala; inventar elenco de exemplo.`,
     ``,
     `REGRA 6 — AÇÕES TÊM PESO E O MUNDO REAGE.`,
-    `Decisões importam. Descuido gera consequência: aliado some, porta fecha, oportunidade se perde. Não avise antes. Mostre o mundo reagindo à ação — vitórias e erros devem pesar.`,
+    `Decisões importam. A próxima cena começa pelo preço ou ganho da última ação do jogador. Descuido gera consequência: aliado some, porta fecha, oportunidade se perde. Não avise antes. Vitórias e erros devem pesar.`,
     ``,
     `REGRA 7 — CADA CENA TEM UM CONFLITO, MESMO PEQUENO.`,
-    `Não existe cena neutra. Uma conversa simples tem subtexto: alguém quer o que o outro não dá, esconde um fato, tem pressa. Deixe o conflito respirar.`,
+    `Uma aposta visível por vez. Uma conversa simples tem subtexto: alguém quer o que o outro não dá, esconde um fato, tem pressa. Não empilhe três crises no mesmo turno. Deixe o conflito respirar.`,
     ``,
     `REGRA 8 — PAUSA É NARRAÇÃO; TERMINE COM SITUAÇÃO VIVA.`,
     `Silêncio, um olhar, um gesto ou um som distante podem ser a resposta. NUNCA ofereça menus numerados ("1. Entrar 2. Fugir 3. Negociar"). Encerre numa situação viva — oferta, obstáculo, descoberta ou pausa — e varie o fechamento. Não imponha cliffhanger nem "Como você reage?" em toda resposta.`,
@@ -341,10 +343,13 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral trava global: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|atitude e fatos conhecidos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
-  lines.push(buildNarrationDirection(c.narration, c.disp || c.msgs));
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral trava global: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|função; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(buildNarrationDirection(c.narration, c.disp || c.msgs, {
+    voices: recentSpeakers(c.disp || c.msgs, c.charName),
+  }));
   lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
+  lines.push(buildNpcPersonalityDirection(c));
   lines.push(specialAbilityDirection(c.specialAbility));
   return lines.filter(Boolean).join("\n");
 };
@@ -1142,13 +1147,14 @@ export default function RPG() {
         setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
         setPendingTest(null);
         setShowRollButton(false);
-        sendMsgRef.current?.(reply.text, currentMsgs, currentDisp, camp, lore, true);
+        const withRoll = [...(currentDisp || []), formatRollDisplay(step.test, reply)];
+        sendMsgRef.current?.(reply.text, currentMsgs, withRoll, camp, lore, true);
         return;
       }
 
       const lastGmText = getLastGmText(currentDisp, currentMsgs);
       const chosen = await resolveAutoAction(camp, lastGmText, safeOptions, apiFetch);
-      const action = String(chosen || "").trim() || buildLocalAutoAction(camp, lastGmText);
+      const action = sanitizeAutoAction(chosen) || buildLocalAutoAction(camp, lastGmText);
       sendMsgRef.current?.(action, currentMsgs, currentDisp, camp, lore, true);
     };
     timerRef.current = setTimeout(fire, Math.max(250, autoDelay * 1000));
@@ -1284,7 +1290,7 @@ export default function RPG() {
       return;
     }
     if (!form.world.trim() || !form.charName.trim()) return;
-    if (form.specialAbility?.enabled && (!form.specialAbility.name?.trim() || !form.specialAbility.description?.trim())) { showNotification("Descreva o nome e o funcionamento da habilidade especial.", "warning"); return; }
+    if (!specialAbilitiesAreValid(form.specialAbility)) { showNotification("Descreva o nome e o funcionamento de pelo menos uma habilidade especial.", "warning"); return; }
     if (form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim()) {
       showNotification("Diga em que momento da história quer começar.", "warning");
       return;
@@ -1316,16 +1322,18 @@ export default function RPG() {
       ...stripTemplateCampaignId(form),
       id,
       lore,
-      memory: "", memoryUntil: 0, worldState: {},
+      memory: "", memoryUntil: 0,
+      worldState: form.worldState && typeof form.worldState === "object" ? form.worldState : {},
       msgs: [],
       disp: [],
       img: null,
       hp: 100,
       missions: [],
-      plots: parsePlotTags(lore, []),
+      plots: parsePlotTags(lore, asPlotList(form.plots)),
       saves: [],
       items: [],
       relationships: form.relationships || {},
+      specialAbility: normalizeSpecialAbility(form.specialAbility),
       level: 1,
       experience: 0,
       attributes: { ...DEFAULT_ATTRIBUTES },
@@ -1365,9 +1373,10 @@ export default function RPG() {
     setDiceHistory((prev) => [{ die: "d20", val: roll }, ...prev].slice(0, 12));
     if (pendingTest) {
       const reply = buildAutoTestReply(pendingTest, attributes, roll, skills);
+      const withRoll = [...(disp || []), formatRollDisplay(pendingTest, reply)];
       setPendingTest(null);
       setShowRollButton(false);
-      sendMsg(reply.text, msgs, disp, active, campLore, Boolean(autoRef.current));
+      sendMsg(reply.text, msgs, withRoll, active, campLore, Boolean(autoRef.current));
     } else {
       sendMsg(
         `Tento realizar uma ação e rolo um dado de 20 faces. (Resultado: ${roll}/20)`,
@@ -1411,13 +1420,17 @@ export default function RPG() {
     const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
     const isMasterBeat = isMasterBeatMessage(text);
     const isStartBeat = isStartBeatMessage(text);
+    const isTestResult = /^Resultado do teste\b/i.test(text.trim());
+    const playerDisplay = formatPlayerTurnDisplay(text, camp?.charName);
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
     const newDisp = [
       ...baseDisp,
-      {
-        type: isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
-        text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : text,
-      },
+      ...(isTestResult
+        ? []
+        : [{
+            type: isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
+            text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
+          }]),
     ];
     setMsgs(newMsgs); setDisp(newDisp);
     let retryCamp = camp;
@@ -2099,7 +2112,12 @@ export default function RPG() {
                 <h3>{preset.charName}</h3>
                 <p>{preset.hook}</p>
                 <span className="preset-role">{preset.charTitle} · {preset.genre}</span>
-                <button type="button" className="btn-primary" onClick={() => { setForm({ ...stripTemplateCampaignId(preset), appearance: { ...DEFAULT_APP }, relationships: {} }); setStep(2); setView("create"); }}>Revisar ficha</button>
+                {listActiveSpecialAbilities(preset.specialAbility).length ? (
+                  <span className="preset-role">
+                    Poder: {listActiveSpecialAbilities(preset.specialAbility).map((ability) => ability.name).join(" · ")}
+                  </span>
+                ) : null}
+                <button type="button" className="btn-primary" onClick={() => { setForm({ ...stripTemplateCampaignId(preset), appearance: { ...DEFAULT_APP }, relationships: preset.relationships || {}, worldState: preset.worldState || {}, specialAbility: normalizeSpecialAbility(preset.specialAbility), plots: Array.isArray(preset.plots) ? preset.plots : [] }); setStep(2); setView("create"); }}>Revisar ficha</button>
               </article>)}
             </div>
           </section></main>
@@ -2329,10 +2347,10 @@ export default function RPG() {
         onSpecialAbilityChange={value => {
           if (!active || sending.current || autoRef.current) return;
           const specialAbility = normalizeSpecialAbility(value);
-          if (specialAbility.enabled && (!specialAbility.name || !specialAbility.description)) { showNotification("Preencha o nome e o funcionamento da habilidade.", "warning"); return; }
+          if (!specialAbilitiesAreValid(specialAbility)) { showNotification("Preencha o nome e o funcionamento de pelo menos uma habilidade.", "warning"); return; }
           const updated = { ...active, specialAbility };
           setActive(updated); saveCamp(active.id, updated);
-          showNotification("Habilidade especial atualizada.", "info");
+          showNotification("Habilidades especiais atualizadas.", "info");
         }}
         onEconomyChange={economyMode => {
           if (!active || sending.current || autoRef.current) return;

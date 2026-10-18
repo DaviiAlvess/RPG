@@ -159,6 +159,80 @@ export function hasDialogueBlocks(text) {
   return parseNarrativeBlocks(text).some((block) => block.type === "dialogue");
 }
 
+/** Cena em que a fala carrega a batida — a mesa deve ler como conversa. */
+export function isDialogueHeavy(text) {
+  const blocks = parseNarrativeBlocks(text);
+  if (!blocks.length) return false;
+  const dialogues = blocks.filter((block) => block.type === "dialogue");
+  if (!dialogues.length) return false;
+  const dialogueChars = dialogues.reduce((sum, block) => sum + String(block.text || "").length, 0);
+  const narrativeChars = blocks
+    .filter((block) => block.type === "narrative")
+    .reduce((sum, block) => sum + String(block.text || "").length, 0);
+  return dialogues.length >= 2 || dialogueChars >= narrativeChars;
+}
+
+/** Últimos falantes da cena (NPCs), para o Mestre não trocar o elenco à toa. */
+export function recentSpeakers(messages, playerName, limit = 3) {
+  const name = String(playerName || "").trim().toLowerCase();
+  const found = [];
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0 && found.length < limit; i -= 1) {
+    const entry = list[i];
+    const kind = entry?.type || entry?.role;
+    if (!['gm', 'assistant'].includes(kind)) continue;
+    const text = String(entry?.text || entry?.content || "");
+    const blocks = parseNarrativeBlocks(text).filter((block) => block.type === "dialogue");
+    for (let j = blocks.length - 1; j >= 0 && found.length < limit; j -= 1) {
+      const speaker = String(blocks[j].speaker || "").trim();
+      if (!speaker) continue;
+      if (/^você$/i.test(speaker)) continue;
+      if (name && speaker.toLowerCase() === name) continue;
+      if (found.some((item) => item.toLowerCase() === speaker.toLowerCase())) continue;
+      found.push(speaker);
+    }
+  }
+  return found;
+}
+
+const PLAYER_SPEECH_VERBS = /^(digo|falo|respondo|pergunto|ordeno|grito|sussurro|exclamo)$/i;
+
+/**
+ * Mostra a jogada do personagem como fala na mesa quando ele está falando,
+ * para a conversa ler como diálogo entre pessoas.
+ */
+export function formatPlayerTurnDisplay(text, charName) {
+  const raw = String(text || "").trim();
+  const name = String(charName || "Você").trim() || "Você";
+  if (!raw) return raw;
+
+  const onlyQuote = raw.match(/^[«""'](.+)[»""']$/s);
+  if (onlyQuote) return `${name}: "${stripOuterQuotes(onlyQuote[1])}"`;
+
+  const verbSpeech = raw.match(
+    /^(digo|falo|respondo|pergunto|ordeno|grito|sussurro|exclamo)\s*:?\s*[«""'](.+)[»""']\s*$/is
+  );
+  if (verbSpeech) return `${name}: "${stripOuterQuotes(verbSpeech[2])}"`;
+
+  const digoQue = raw.match(/^(digo|falo|respondo|pergunto|ordeno)\s+que\s+(.+)$/is);
+  if (digoQue && String(digoQue[2]).length <= 160) {
+    return `${name}: "${stripOuterQuotes(digoQue[2])}"`;
+  }
+
+  const lineAsVerb = raw.match(DIALOGUE_LINE_RE);
+  if (lineAsVerb && PLAYER_SPEECH_VERBS.test(cleanSpeaker(lineAsVerb[1]))) {
+    return `${name}: "${stripOuterQuotes(lineAsVerb[2])}"`;
+  }
+
+  const actionAndQuote = raw.match(/^(.+?)\s+[«""'](.+)[»""']\s*$/s);
+  if (actionAndQuote && String(actionAndQuote[1]).length < 90) {
+    return `${actionAndQuote[1].trim()}\n${name}: "${stripOuterQuotes(actionAndQuote[2])}"`;
+  }
+
+  if (hasDialogueBlocks(raw)) return normalizeDialogueText(raw);
+  return raw;
+}
+
 export const DIALOGUE_TONE_COUNT = 6;
 
 /** Stable 0–5 index from the speaker name (case-insensitive). */

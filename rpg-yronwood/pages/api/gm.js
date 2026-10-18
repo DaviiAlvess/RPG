@@ -426,9 +426,10 @@ export default async function handler(req, res) {
           parts: [{
             text: [
               "Você decide a próxima ação de um personagem de RPG em primeira pessoa.",
-              "Responda APENAS com 1 ou 2 frases curtas em português descrevendo o que o personagem faz ou diz agora.",
-              "Não narre consequências, não use aspas, não explique raciocínio, não liste opções.",
-              "A ação deve ser coerente com personalidade, história, tramas abertas e habilidades do personagem.",
+              "Responda APENAS com 1 frase curta (no máximo 2) em português: o que o personagem FAZ agora.",
+              "Prefira gesto físico. Se precisar falar, uma fala curta — sem discurso, sem monólogo, sem aspas longas.",
+              "Não narre consequências, não explique raciocínio, não liste opções.",
+              "A ação deve ser coerente com a personalidade do personagem (jeito, desejo, limites), história, tramas abertas e habilidades — não uma ação genérica que qualquer um faria.",
               "Avance a história: aja sobre o conflito da cena ou sobre uma trama/missão ativa. Não fique só observando.",
               "Não repita o gesto da ação anterior (apoiar a mão, encarar, apertar o mesmo objeto). Faça outra coisa concreta.",
               "Se a cena termina com pergunta ou tensão, reaja como esse personagem reagiria de verdade.",
@@ -444,7 +445,7 @@ export default async function handler(req, res) {
               camp.charPersonality ? `Personalidade: ${camp.charPersonality}` : "",
               camp.charBg ? `História: ${camp.charBg}` : "",
               camp.charSkills ? `Habilidades: ${camp.charSkills}` : "",
-              camp.specialAbility?.enabled ? `Habilidade especial permitida mesmo fora deste universo: ${JSON.stringify(camp.specialAbility)}. Considere seus limites; não revele um poder secreto automaticamente.` : "",
+              camp.specialAbility?.enabled ? `Habilidades especiais permitidas mesmo fora deste universo (até 3): ${JSON.stringify(camp.specialAbility)}. Considere os limites de cada uma; não revele poder secreto automaticamente.` : "",
               camp.gameStyle ? `Estilo de jogo: ${camp.gameStyle}` : "",
               camp.charSituation ? `Situação atual: ${camp.charSituation}` : "",
               Array.isArray(camp.plots) && camp.plots.length ? `Tramas ativas: ${camp.plots.map((plot) => plot.title || plot).join("; ")}` : "",

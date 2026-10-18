@@ -1,12 +1,13 @@
 export const NARRATION_VISION_LOCK = 'A narração principal é SEMPRE a visão do personagem do jogador — câmera magnética, atrás/dentro dos olhos: mão, ombro, o que chega à visão. NPCs falam no formato Nome: "fala".';
 export const NARRATION_VISCERAL_LOCK = [
   'NARRAÇÃO VISCERAL — trava global, não é estilo extra e não é opção da campanha. Vale em TODA mesa (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno, sem recriar. Narre em segunda pessoa ("você"). Nunca fale, pense, escolha ou decida pelo jogador.',
-  'ANCORAGEM BIOLÓGICA — corpo involuntário obrigatório: respiração presa, dor aguda, calafrio na espinha, mãos tremendo, batimento abafado, suor. Corpo observável. PROIBIDO rotular emoção ("assustador", "você sente medo").',
-  'SENTIDOS CRUS — ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas/nojentas, sons molhados/abafados/estridentes. Chegam pelo corpo de você, não por panorama.',
-  'VISÃO DE TÚNEL — sob tensão NÃO há vista panorâmica. Só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha). Você não sabe o quadro geral.',
+  'RESPIRAÇÃO DA CENA — sob tensão, perigo, teste ou ferimento use a carga completa abaixo. Em conversa, pausa ou descanso: um detalhe no corpo basta; o estilo escolhido pode respirar sem forçar pânico a cada turno.',
+  'ANCORAGEM BIOLÓGICA — sob tensão, corpo involuntário: respiração presa, dor aguda, calafrio na espinha, mãos tremendo, batimento abafado, suor. Em calma, um sinal leve (ombro, respiração, peso na mão). Corpo observável. PROIBIDO rotular emoção ("assustador", "você sente medo").',
+  'SENTIDOS CRUS — sob tensão: ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas/nojentas, sons molhados/abafados/estridentes. Em calma: um sentido que importa. Chegam pelo corpo de você, não por panorama.',
+  'VISÃO DE TÚNEL — sob tensão NÃO há vista panorâmica. Só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha). Você não sabe o quadro geral. Em calma pode haver um pouco mais de espaço, ainda a partir de você.',
   'ZERO ABSTRAÇÃO — PROIBIDO adjetivos de juízo: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta, objetos que quebram, movimento desajeitado.',
-  'AÇÃO DESAJEITADA — tropeça, coisas caem, a voz falha, comunicação bagunçada. Sem coreografia de filme.',
-  'RITMO CARDÍACO — frases curtas e secas. Alta tensão = muitos pontos, fôlego curto. Sem aparte poético ou filosófico.',
+  'AÇÃO DESAJEITADA — sob pressão: tropeça, coisas caem, a voz falha, comunicação bagunçada. Sem coreografia de filme.',
+  'RITMO CARDÍACO — frases curtas e secas. Alta tensão = muitos pontos, fôlego curto. Calma = frases um pouco mais longas ainda concretas. Sem aparte poético ou filosófico.',
 ].join('\n');
 const NARRATION_POV_LOCK = `Narre em segunda pessoa ("você"); a câmera é o corpo do jogador — magnética, atrás/dentro dos olhos. O primeiro sujeito gramatical é o campo sensorial do jogador (mão, ombro, visão), nunca um NPC. NPCs entram a partir de você ("À sua frente…", "no canto do olho…"). Proibido: "O subordinado aperta… Ele solta um suspiro…" ou abrir com "o transeunte" / "a figura encapuzada" como herói do parágrafo. ${NARRATION_VISION_LOCK} ${NARRATION_VISCERAL_LOCK}`;
 export const NARRATION_STYLES = {
@@ -36,21 +37,21 @@ export const NARRATION_STYLES = {
     "icon": "☀",
     "description": "Aventura calorosa, humor de situação e descobertas.",
     "instruction": `Tom: humor de situação pelo corpo desajeitado — sem ridicularizar o jogador nem virar piada o que é sério. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "À sua frente, a carta. Ele ensaiou a solenidade. Pão cai da manga no seu colo. Você ergue a mão tarde demais. A voz dele falha. Mensageiro: \"A correspondência chegou intacta. O almoço teve complicações.\" Farelo na palma. Mofo no pão."
+    "sample": "À sua frente, a carta. Ele ensaiou a solenidade. Pão cai da manga no seu colo. Você ergue a mão tarde demais. A voz dele falha. Ele: \"A correspondência chegou intacta. O almoço teve complicações.\" Farelo na palma. Mofo no pão."
   },
   "epic": {
     "label": "Épico",
     "icon": "⚑",
     "description": "Decisões marcantes e um mundo maior que o herói.",
     "instruction": `Tom: peso nas escolhas pelo que o corpo alcança — escale aos poucos, sem profecia, sem adjetivo de juízo. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "Sua mão vazia. Os sinos. A carta não toca a mesa. O ar trava. À sua frente, você vê o queixo dele e uma fresta da praça. Mensageiro: \"Há uma cópia para cada portão. Esta é a última.\" Suor nas costas. O selo corta a pele."
+    "sample": "Sua mão vazia. Os sinos. A carta não toca a mesa. O ar trava. À sua frente, você vê o queixo dele e uma fresta da praça. Ele: \"Há uma cópia para cada portão. Esta é a última.\" Suor nas costas. O selo corta a pele."
   },
   "intimate": {
     "label": "Íntimo e dramático",
     "icon": "◇",
     "description": "Relações, silêncios e conversas que importam.",
     "instruction": `Tom: relações e silêncios no espaço entre os corpos — sem rotular emoção do jogador, forçar romance ou falar por ele. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "O envelope na sua mão. Papel áspero. À sua frente, o olhar dele no retrato da lareira. A voz falha. Mensageiro: \"Você ainda guarda isso?\" O papel entre os dois. Suas mãos tremem no envelope."
+    "sample": "O envelope na sua mão. Papel áspero. À sua frente, o olhar dele no retrato da lareira. A voz falha. Ele: \"Você ainda guarda isso?\" O papel entre os dois. Suas mãos tremem no envelope."
   }
 };
 export const NARRATION_LENGTHS = { short: { label: 'Curta', instruction: 'Cerca de 80–140 palavras; uma cena focada. Mesmo curto: ancoragem biológica, sentidos crus, visão de túnel, frases curtas. Menos frases, não menos corpo.' }, balanced: { label: 'Equilibrada', instruction: 'Cerca de 200–320 palavras, com espaço para diálogo. Ritmo cardíaco: frases curtas e secas; alta tensão = muitos pontos.' }, rich: { label: 'Detalhada', instruction: 'Cerca de 300–450 palavras, sem avançar além de decisões do jogador. Detalhe é micro (centímetros), não panorama.' } };
@@ -68,12 +69,14 @@ export const NARRATION_PRESENCE = [
   'Narração principal = olhos do jogador. Um cartão/aparte rotulado (fora do fluxo da cena) pode usar terceira pessoa; nunca substitua a cena principal.',
   'PRESENÇA — o jogador está dentro da cena.',
   'Comece no instante da última ação do jogador; nunca abra com clima genérico ou tour ("O sol se põe", "Você está em…").',
-  'Narre a partir do corpo involuntário e dos sentidos crus: o que chega aos olhos, ouvidos, pele, olfato e gosto de onde o personagem está — microdetalhes, não panorama.',
+  'Mostre o preço ou o ganho concreto dessa ação — o mundo reage. Em calma um detalhe sensorial; sob tensão, corpo involuntário e sentidos crus (microdetalhes, não panorama).',
   'A cena muda por causa dessa ação; NPCs olham, esperam ou interrompem o jogador com agenda própria — sempre vistos de você.',
-  'Um conflito na sua cara neste instante: alguém quer o que você carrega ou espera a sua palavra.',
-  'Corpo observável é obrigatório (respiração presa, suor, tremor, dor aguda); nunca rotule emoção ("você sente medo", "assustador") e nunca fale, pense ou decida pelo jogador.',
+  'MESA COMO CONVERSA — com gente na cena, a resposta vive em falas Nome: "…" e reações curtas, não em resumo do narrador. Quem está à frente quer algo e responde ao que você fez ou disse.',
+  'ELENCO SÓ DA CENA — fale apenas por pessoas já presentes nesta história (cena atual, relacionamentos, memória). PROIBIDO inventar capataz, mensageiro, marujo, curandeira ou qualquer cargo de exemplo se eles não estiverem aqui. Exemplos de formato no prompt NÃO são personagens da mesa.',
+  'Um conflito na sua cara — uma aposta visível por vez: alguém quer algo, espera a sua palavra, ou um obstáculo concreto está na sua frente. Não empilhe três crises no mesmo turno.',
+  'Corpo observável sem rotular emoção ("você sente medo", "assustador"); nunca fale, pense ou decida pelo jogador. Sob tensão: respiração presa, suor, tremor. Em calma: um sinal basta.',
   'Nunca invente diálogo para o personagem do jogador.',
-  'Sentidos crus e visão de túnel: ferrugem, mofo, pólvora, trinco, bota — não lista decorativa nem vista panorâmica.',
+  'Sentidos crus e visão de túnel sob tensão: ferrugem, mofo, pólvora, trinco, bota — não lista decorativa nem vista panorâmica.',
   'Feche frases e o turno: situação viva que o jogador pode responder. Não corte no meio ("sob o…"). Sem menus numerados; não faça cliffhanger em toda resposta.',
   'Não repita a abertura, metáfora ou estrutura da resposta anterior. O exemplo sensorial (suor, ferrugem, palma, cera) é tipo de detalhe, não um cardápio para usar de novo.'
 ].join('\n');
@@ -85,6 +88,65 @@ function visibleLine(entry) {
   const kind = entry?.type || entry?.role;
   if (kind && !['gm', 'assistant', 'auto', 'user'].includes(kind)) return '';
   return String(entry?.text || entry?.content || '');
+}
+
+function lastPlayerLine(messages) {
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const entry = list[i];
+    const kind = entry?.type || entry?.role;
+    if (!['user', 'auto'].includes(kind)) continue;
+    const clean = visibleLine(entry).replace(/\[[^\]]+\]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (clean.length < 12) continue;
+    if (/^resultado do teste/i.test(clean)) continue;
+    return clean;
+  }
+  return '';
+}
+
+function playerIsSpeaking(text) {
+  const line = String(text || '');
+  if (/[«""']/.test(line)) return true;
+  if (/:\s*[«""']/.test(line)) return true;
+  return /^(digo|falo|respondo|pergunto|ordeno|grito|sussurro|exclamo)\b/i.test(line);
+}
+
+/** Última ação do jogador → o Mestre deve narrar a consequência, não um novo tour. */
+export function consequenceDirection(messages) {
+  const clean = lastPlayerLine(messages);
+  if (!clean) return '';
+  if (playerIsSpeaking(clean)) {
+    return [
+      'CONSEQUÊNCIA DA FALA.',
+      `O jogador disse: "${clean.slice(0, 160)}".`,
+      'Responda primeiro com a fala de quem ouviu (Nome: "…") — tom, pausa, pergunta ou recusa. Depois um gesto curto. Não ignore a fala. Uma aposta visível por vez.',
+    ].join(' ');
+  }
+  return [
+    'CONSEQUÊNCIA DA AÇÃO.',
+    `A última jogada foi: "${clean.slice(0, 160)}".`,
+    'Comece pela reação do mundo a isso — ganho, preço ou mudança concreta. Se alguém está na cena, essa pessoa reage ou fala. Não ignore a ação. Uma aposta visível por vez.',
+  ].join(' ');
+}
+
+/** Empurra a mesa para conversa viva entre personagens, não relatório. */
+export function conversationDirection(messages, voices = []) {
+  const clean = lastPlayerLine(messages);
+  const speaking = clean && playerIsSpeaking(clean);
+  const cast = (Array.isArray(voices) ? voices : []).filter(Boolean).slice(0, 3);
+  return [
+    'IMERSÃO POR CONVERSA.',
+    'Com NPCs na cena, a batida principal é diálogo: linhas Nome: "fala". Entre falas, só um gesto curto visto por você — nunca um parágrafo de resumo no lugar da pessoa.',
+    'Ritmo de conversa: alguém fala → reação breve → outra fala ou silêncio carregado. Duas ou três falas curtas valem mais que um bloco explicativo.',
+    'Cada voz carrega a personalidade gravada daquela pessoa (desejo, jeito de falar, tique). Atitude (Hostil/Suspeito/Neutral/Amigável) muda distância e cortesia — não apaga quem ela é.',
+    cast.length
+      ? `Continue só com quem já está nesta conversa: ${cast.join(', ')}. Não troque o elenco sem motivo e não traga cargos de exemplo.`
+      : 'Se ainda não há falante nomeado, use alguém coerente com ESTE mundo e ESTA cena — nunca um capataz/mensageiro/marujo genérico por hábito do prompt.',
+    speaking
+      ? 'O jogador falou agora — a PRIMEIRA linha da resposta é a fala de quem ouviu (alguém já presente). Depois, se fizer sentido, outro NPC presente pode cortar ou apoiar em uma linha. Feche esperando a palavra do jogador.'
+      : 'Se a cena é social, abra ou feche com alguém da cena falando, perguntando ou calando de propósito. Feche na fala ou no olhar de quem espera a sua palavra.',
+    'Proibido monólogo do narrador no lugar das pessoas. Proibido inventar a fala do jogador. Proibido "ele explica que…". Proibido importar elenco de outra história ou dos exemplos do sistema.',
+  ].filter(Boolean).join(' ');
 }
 
 /** Nomes concretos do que as últimas falas já usaram, para o turno seguinte trocar de detalhe. */
@@ -108,19 +170,22 @@ export function repetitionDirection(messages) {
   ].filter(Boolean).join(' ');
 }
 
-export function buildNarrationDirection(value, recent) {
+export function buildNarrationDirection(value, recent, options = {}) {
   const n = normalizeNarration(value);
   const style = NARRATION_STYLES[n.style];
+  const voices = options.voices || [];
   return [
     'DIREÇÃO DE NARRAÇÃO — estas preferências prevalecem sobre instruções anteriores de estilo, tamanho e ritmo, mas nunca alteram regras de dados, fatos, canon ou agência do jogador. A NARRAÇÃO VISCERAL é trava global: prevalece sobre tom literário, leve ou "épico" do seletor.',
     NARRATION_PRESENCE,
     style.instruction, NARRATION_LENGTHS[n.length].instruction, NARRATION_PACES[n.pace].instruction,
-    `MODELO DE VOZ — copie só o ritmo (frase curta, câmera em você). Não copie a cena do exemplo (carta, cera, palma, pão, selo) se ela não estiver acontecendo agora. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética:\n${style.sample}`,
+    `MODELO DE VOZ — copie só o ritmo (frase curta, câmera em você). Não copie a cena do exemplo (carta, cera, palma, pão, selo) nem o elenco dele. Capataz, mensageiro e cargos de exemplo NÃO entram se não estiverem nesta história. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética:\n${style.sample}`,
+    consequenceDirection(recent),
+    conversationDirection(recent, voices),
     repetitionDirection(recent),
-    'Uma falha muda a situação, não deve apenas repetir o mesmo bloqueio. Ação desajeitada: coisas caem, a voz falha, o corpo atrapalha.',
+    'Uma falha muda a situação, não deve apenas repetir o mesmo bloqueio. Ação desajeitada sob pressão: coisas caem, a voz falha, o corpo atrapalha.',
     'Cada cena deve servir a uma intenção ou pergunta concreta, sem inventar objetivos para o jogador.',
     'Ritmo cardíaco: frases curtas e secas. Alta tensão = muitos pontos, fôlego curto. Sem aparte poético ou filosófico.',
-    'Nos diálogos, cada NPC quer algo específico. Mostre subtexto por uma pausa, gesto ou resposta indireta quando fizer sentido; evite que todos falem por enigmas.',
+    'Nos diálogos, cada NPC quer algo específico. Mostre subtexto por uma pausa, gesto ou resposta indireta quando fizer sentido; evite que todos falem por enigmas. A mesa deve parecer uma conversa entre pessoas.',
     'As escolhas devem produzir diferenças reconhecíveis. Mostre os riscos que o personagem poderia perceber pelo corpo; não transforme toda surpresa em punição arbitrária. Dê resolução a perguntas antigas antes de acumular mistérios novos.',
     'Reutilize fatos, nomes e relações já estabelecidos antes de criar novos. A imagem do turno anterior não se reaproveita: outro objeto, outro sentido, outro gesto. NPCs têm objetivos e limites de conhecimento; não adivinham segredos.',
     'Evite elogios automáticos e frases genéricas de destino. Proibido: assustador, aterrorizante, caótico, épico, horrível.',
@@ -138,6 +203,24 @@ export function isStartBeatMessage(text) {
 export function startBeatDisplay() {
   return 'A aventura começa.';
 }
+
+function startAbilityNote(camp = {}) {
+  const bundle = camp?.specialAbility;
+  if (!bundle || bundle.enabled !== true) return '';
+  const list = Array.isArray(bundle.abilities) && bundle.abilities.length
+    ? bundle.abilities
+    : [bundle];
+  const active = list.filter((ability) => String(ability?.name || '').trim() && String(ability?.description || '').trim());
+  if (!active.length) return '';
+  const lines = active.map((ability, index) => {
+    const name = String(ability.name || '').trim();
+    const description = String(ability.description || '').trim();
+    const limits = String(ability.limits || '').trim();
+    const secret = ability.secret !== false ? 'secreta' : 'sem segredo obrigatório';
+    return `${index + 1}) ${name} (${secret}) — ${description}${limits ? ` Limites: ${limits}.` : ''}`;
+  });
+  return `Habilidades especiais já escolhidas: ${lines.join(' ')} Não negue; não revele sem ação do jogador.`;
+}
 export function sanitizeStartDisplay(disp = []) {
   return (Array.isArray(disp) ? disp : []).map((message) => {
     if (!message || (message.type !== 'user' && message.type !== 'auto')) return message;
@@ -153,16 +236,14 @@ export function buildStartPrompt(camp = {}) {
   const parts = [START_BEAT_PREFIX];
 
   if (moment) {
+    parts.push(
+      `CENA INICIAL OBRIGATÓRIA — entre DENTRO deste instante, não o resuma nem troque por outro prólogo: ${moment}`,
+      'O jogador já está no conflito: alguém pede, ameaça ou espera a palavra dele AGORA. Não abra com tour, clima genérico ou "há muitos anos".'
+    );
     if (camp.isExistingChar) {
-      parts.push(
-        `A aventura começa neste instante da história canônica — narre de dentro dele, não o resuma: ${moment}`,
-        `Posicione ${name} exatamente neste momento do universo "${world}", respeitando o lore oficial.`
-      );
+      parts.push(`Posicione ${name} exatamente neste momento do universo "${world}", respeitando o lore e o canon oficial da obra.`);
     } else {
-      parts.push(
-        `A aventura começa neste instante do canon — narre de dentro dele, não o resuma: ${moment}`,
-        `${name} é um personagem original (não faz parte da obra) inserido no universo de "${world}". Posicione-o de forma coerente com o lore, sem substituir figuras canônicas.`
-      );
+      parts.push(`${name} é personagem original em "${world}" — coerente com o lore e o canon, sem substituir protagonistas canônicos.`);
     }
   } else if (camp.isKnownIP && !camp.isExistingChar) {
     parts.push(
@@ -177,10 +258,19 @@ export function buildStartPrompt(camp = {}) {
     );
   }
 
+  if (camp.charPersonality) {
+    parts.push(`Personalidade do jogador (já vaza na postura e nas reações dos outros): ${camp.charPersonality}`);
+  }
+  if (camp.supportingCast) {
+    parts.push(`Elenco já na abertura — use estas vozes, não invente capataz genérico: ${camp.supportingCast}`);
+  }
+  const abilityNote = startAbilityNote(camp);
+  if (abilityNote) parts.push(abilityNote);
+
   if (camp.isKnownIP) {
     parts.push(
       `Permaneça na física, nos lugares nomeados e no sistema de poder de "${world}". Inventar só extras locais; se não souber um fato canônico, fique no genérico-local.`,
-      `Abra o jogador na margem de uma trama deste universo (conflito ou arco estabelecido). Se o briefing trouxer [TRAMA:...], use uma delas; senão pesquise um arco atual e registre [TRAMA:título|gancho]. Não o coloque no lugar do protagonista da obra.`
+      `Abra o jogador na margem de uma trama deste universo. Se já houver trama na ficha, use-a; senão registre [TRAMA:título|gancho]. Não o coloque no lugar do protagonista da obra.`
     );
   } else {
     parts.push(
@@ -189,7 +279,11 @@ export function buildStartPrompt(camp = {}) {
   }
 
   if (camp.ordinaryCharacter) {
-    parts.push('O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes não estabelecidos.');
+    parts.push(
+      abilityNote
+        ? 'O jogador é pessoa comum no mundo EXCETO pela habilidade especial escolhida acima — sem linhagem secreta extra nem protagonismo canônico.'
+        : 'O jogador é uma pessoa comum: sem profecia, linhagem secreta ou poderes não estabelecidos.'
+    );
   }
 
   parts.push(
@@ -199,8 +293,9 @@ export function buildStartPrompt(camp = {}) {
     'NPCs aparecem a partir de você ("À sua frente…", "no canto do olho…"). Proibido abrir com "O subordinado…", "O transeunte desfila…" ou "A figura encapuzada…" sem âncora no jogador.',
     'Narre a partir do corpo involuntário: respiração presa, suor, tremor, o que chega aos olhos, ouvidos, pele ou olfato de onde o personagem está. Sentidos crus. Visão de túnel.',
     'Microdetalhes a centímetros, não panorama. Um conflito na sua cara neste instante: um NPC ou o mundo já quer algo do jogador.',
+    'INÍCIO VIVO — nas primeiras batidas alguém da cena fala no formato Nome: "fala", com personalidade (desejo + tique). Grave [NPC:Nome|função; personalidade; local; fatos]. Proibido prólogo robótico, lista de cenário ou "Bem-vindo à aventura".',
     'Nunca abra com "Você está em…". Nunca invente diálogo, pensamento ou decisão para o personagem do jogador. Sem menus numerados. Sem adjetivos de juízo (assustador, aterrorizante, caótico, épico, horrível). Frases curtas e secas.',
-    'Feche frases e o turno numa situação viva que o jogador pode responder. Não corte no meio.'
+    'Feche o turno na fala ou no olhar de quem espera a sua palavra — o jogador precisa se envolver agora. Não corte no meio.'
   );
 
   return parts.join(' ');

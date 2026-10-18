@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
 import { economyPrompt } from '../lib/economy.mjs';
-import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, START_BEAT_PREFIX, buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, repetitionDirection, sanitizeStartDisplay, startBeatDisplay } from '../lib/narration.mjs';
+import { NARRATION_PRESENCE, NARRATION_STYLES, NARRATION_VISION_LOCK, NARRATION_VISCERAL_LOCK, START_BEAT_PREFIX, buildNarrationDirection, buildStartPrompt, consequenceDirection, conversationDirection, isStartBeatMessage, normalizeNarration, repetitionDirection, sanitizeStartDisplay, startBeatDisplay } from '../lib/narration.mjs';
 
 const PLAYER_CAMERA_MARKERS = ['sujeito gramatical', 'subordinado', 'canto do olho', 'dentro dos olhos', 'a partir de você', 'save antigo'];
 const VISCERAL_MARKERS = [
@@ -210,7 +210,8 @@ test('Câmera do jogador vale em save antigo, preset, Westeros, Bleach e mundo c
   }
   const source = await readFile(new URL('../pages/index.js', import.meta.url), 'utf8');
   assert.ok(source.includes('systemPrompt: buildPrompt('));
-  assert.ok(source.includes('buildNarrationDirection(c.narration, c.disp || c.msgs)'));
+  assert.ok(source.includes('buildNarrationDirection(c.narration, c.disp || c.msgs'));
+  assert.ok(source.includes('recentSpeakers'));
   assert.ok(source.includes('O subordinado aperta'));
   assert.ok(source.includes('sujeito gramatical'));
   assert.ok(source.includes('sem toggle'));
@@ -267,6 +268,48 @@ test('O turno seguinte aponta a abertura repetida e pede outro detalhe', () => {
   const prompt = buildNarrationDirection({ style: 'dark' }, [{ type: 'gm', text: 'A palma da mão pulsa. Cera e suor no pergaminho de novo.' }]);
   assert.match(prompt, /NÃO REPITA O TURNO ANTERIOR/);
   assert.match(prompt, /copie só o ritmo/);
+});
+test('A cena respira e a próxima narração cobra a consequência da ação', () => {
+  assert.match(NARRATION_VISCERAL_LOCK, /RESPIRAÇÃO DA CENA/);
+  assert.match(NARRATION_VISCERAL_LOCK, /Em conversa, pausa ou descanso/);
+  assert.match(NARRATION_PRESENCE, /aposta visível por vez/i);
+  const beat = consequenceDirection([
+    { type: 'gm', text: 'O capataz espera a sua palavra.' },
+    { type: 'user', text: 'Empurro o pergaminho de volta pela mesa.' },
+  ]);
+  assert.match(beat, /CONSEQUÊNCIA DA AÇÃO/);
+  assert.match(beat, /Empurro o pergaminho/);
+  const prompt = buildNarrationDirection({ style: 'cinematic' }, [
+    { type: 'user', text: 'Empurro o pergaminho de volta pela mesa.' },
+  ]);
+  assert.match(prompt, /CONSEQUÊNCIA DA AÇÃO/);
+  assert.match(prompt, /Empurro o pergaminho/);
+});
+test('Fala do jogador puxa resposta em diálogo e a mesa vira conversa', () => {
+  assert.match(NARRATION_PRESENCE, /MESA COMO CONVERSA/);
+  const speech = consequenceDirection([
+    { type: 'user', text: 'Digo: "Dobre os estoques até o anoitecer."' },
+  ]);
+  assert.match(speech, /CONSEQUÊNCIA DA FALA/);
+  assert.match(speech, /Nome:/);
+  const talk = conversationDirection([{ type: 'user', text: '"Quem mandou a carta?"' }], ['Lysa']);
+  assert.match(talk, /IMERSÃO POR CONVERSA/);
+  assert.match(talk, /jogador falou agora/i);
+  assert.match(talk, /Lysa/);
+  assert.match(talk, /PRIMEIRA linha/);
+  assert.match(NARRATION_PRESENCE, /ELENCO SÓ DA CENA/);
+  assert.match(NARRATION_PRESENCE, /PROIBIDO inventar capataz/i);
+  const prompt = buildNarrationDirection({ style: 'intimate' }, [
+    { type: 'user', text: '"Quem mandou a carta?"' },
+  ], { voices: ['Lysa'] });
+  assert.match(prompt, /IMERSÃO POR CONVERSA/);
+  assert.match(prompt, /CONSEQUÊNCIA DA FALA/);
+  assert.match(prompt, /Lysa/);
+  assert.match(prompt, /não invente capataz|NÃO entram|ELENCO SÓ DA CENA/i);
+  const emptyCast = conversationDirection([{ type: 'user', text: 'Olho em volta.' }], []);
+  assert.match(emptyCast, /nunca um capataz/i);
+  const start = buildStartPrompt({ charName: 'Edric', world: 'Dorne' });
+  assert.match(start, /Nome: "fala"/);
 });
 test('O briefing de início vai ao Mestre, não vaza no chat do jogador', async () => {
   const start = buildStartPrompt({ charName: 'Edric', world: 'Westeros', isKnownIP: true });

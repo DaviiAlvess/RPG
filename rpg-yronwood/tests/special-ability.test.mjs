@@ -76,3 +76,18 @@ test('No bate-papo a escolha da habilidade monta o texto de uso', () => {
   assert.equal(prepareAbilityInput('Uso Eco para ouvir a porta', 'Faísca Curta'), 'Uso Faísca Curta para ouvir a porta');
   assert.equal(prepareAbilityInput('  olho o corredor  ', 'Véu Baixo'), 'Uso Véu Baixo para olho o corredor');
 });
+
+test('Ao digitar, espaços no meio e no fim não são apagados', () => {
+  const drafting = normalizeSpecialAbilities({
+    enabled: true,
+    abilities: [{ name: 'Véu ', description: 'Esconde o corpo ', limits: 'cansaço ', secret: true }],
+  });
+  assert.equal(drafting.abilities[0].name, 'Véu ');
+  assert.equal(drafting.abilities[0].description, 'Esconde o corpo ');
+  assert.equal(drafting.abilities[0].limits, 'cansaço ');
+
+  const saved = normalizeSpecialAbility(drafting);
+  assert.equal(saved.abilities[0].name, 'Véu');
+  assert.equal(saved.abilities[0].description, 'Esconde o corpo');
+  assert.equal(saved.abilities[0].limits, 'cansaço');
+});

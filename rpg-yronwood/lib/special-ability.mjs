@@ -4,16 +4,31 @@ export const ABILITY_DESCRIPTION_MAX = 6000;
 export const ABILITY_LIMITS_MAX = 3000;
 
 export function normalizeOneSpecialAbility(entry = {}) {
+  // Sem trim aqui: o formulário normaliza a cada tecla e trim impedia digitar espaços.
   return {
-    name: String(entry?.name || '').trim().slice(0, ABILITY_NAME_MAX),
-    description: String(entry?.description || '').trim().slice(0, ABILITY_DESCRIPTION_MAX),
-    limits: String(entry?.limits || '').trim().slice(0, ABILITY_LIMITS_MAX),
+    name: String(entry?.name || '').slice(0, ABILITY_NAME_MAX),
+    description: String(entry?.description || '').slice(0, ABILITY_DESCRIPTION_MAX),
+    limits: String(entry?.limits || '').slice(0, ABILITY_LIMITS_MAX),
     secret: entry?.secret !== false,
   };
 }
 
 function isCompleteAbility(ability) {
-  return Boolean(ability?.name && ability?.description);
+  return Boolean(String(ability?.name || '').trim() && String(ability?.description || '').trim());
+}
+
+/** Limpa bordas só ao persistir / enviar ao mestre — não usar no onChange do formulário. */
+export function finalizeSpecialAbilities(value = {}) {
+  const bundle = normalizeSpecialAbilities(value);
+  return decorateLegacyFields({
+    enabled: bundle.enabled === true,
+    abilities: bundle.abilities.map((ability) => ({
+      name: String(ability.name || '').trim().slice(0, ABILITY_NAME_MAX),
+      description: String(ability.description || '').trim().slice(0, ABILITY_DESCRIPTION_MAX),
+      limits: String(ability.limits || '').trim().slice(0, ABILITY_LIMITS_MAX),
+      secret: ability.secret !== false,
+    })),
+  });
 }
 
 /** Aceita o formato antigo (um objeto) ou até 3 habilidades em `abilities`. */
@@ -55,13 +70,13 @@ function decorateLegacyFields(bundle) {
   };
 }
 
-/** Compatível com saves antigos — sempre devolve o pacote com `abilities`. */
+/** Compatível com saves antigos — limpa bordas para persistir / abrir campanha. */
 export function normalizeSpecialAbility(value = {}) {
-  return normalizeSpecialAbilities(value);
+  return finalizeSpecialAbilities(value);
 }
 
 export function listActiveSpecialAbilities(value) {
-  const bundle = normalizeSpecialAbilities(value);
+  const bundle = finalizeSpecialAbilities(value);
   if (!bundle.enabled) return [];
   return bundle.abilities.filter(isCompleteAbility).slice(0, MAX_SPECIAL_ABILITIES);
 }

@@ -1,4 +1,7 @@
 import { specialAbilityDirection } from "./special-ability.mjs";
+import { appearanceForGm } from './appearance.mjs';
+import { gmBriefLines } from './gm-brief.mjs';
+import { storyProgressLines } from './story-progress.mjs';
 import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
 import { buildNarrationDirection } from './narration.mjs';
 import { recentSpeakers } from './dialogueFormat.js';
@@ -26,13 +29,15 @@ export function economyPrompt(c, lore, calendar) {
   return [
     `Mestre de RPG em ${c.world}. Narre em português, segunda pessoa. Estilo de jogo: ${c.gameStyle || 'aventura'}.`,
     c.isKnownIP ? knownIpFidelityRule(c.world) : '',
-    `PERSONAGEM: ${JSON.stringify({ name: c.charName, title: c.charTitle, originTitle: c.charOriginTitle || '', situation: c.charSituation || '', age: c.charAge, background: c.charBg, personality: c.charPersonality, abilities: c.charSkills, appearance: c.charAppearanceNote || c.appearance })}`,
+    `PERSONAGEM: ${JSON.stringify({ name: c.charName, title: c.charTitle, originTitle: c.charOriginTitle || '', situation: c.charSituation || '', age: c.charAge, background: c.charBg, personality: c.charPersonality, abilities: c.charSkills, appearance: appearanceForGm(c).join(' ') })}`,
     `MUNDO: ${worldBlock}\nCONTEXTO DO PERSONAGEM: ${c.charLore || ''}`,
     `PREMISSA INICIAL (começo, não o status atual): ${c.storyStartPoint || ''}\nELENCO: ${c.supportingCast || ''}`,
+    ...gmBriefLines(c, { short: true }),
     identityPromptLines(c).join('\n'),
     `MEMÓRIA: ${c.memory || ''}\nDATA: ${calendar}`,
     `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, plots: c.plots, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
     plotPromptLines(c.plots),
+    ...storyProgressLines(c, { short: true }),
     plotDirection(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote, { short: true }),

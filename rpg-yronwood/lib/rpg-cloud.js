@@ -1,4 +1,4 @@
-import { get, ref, remove, runTransaction } from "firebase/database";
+import { get, ref, remove, runTransaction, set } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { ensureFirebaseReady } from "./firebase-browser";
 import { cloudWriteIsStale, interpretSaveTransaction, prepareCampaignForRtdb } from "./rtdb-util";
@@ -153,5 +153,46 @@ export async function cloudHealthCheck() {
       };
     }
     return { ok: false, error: err.message };
+  }
+}
+
+// ─── Histórias criadas pelo jogador (modelos) ─────────────────────────
+function templatesRef(db, userId, id) {
+  return ref(db, id ? `users/${userId}/templates/${String(id)}` : `users/${userId}/templates`);
+}
+
+export async function cloudSaveTemplate(template) {
+  const { db, user, error } = await getClient();
+  if (error) return { ok: false, error };
+  if (!template?.id) return { ok: false, error: "Modelo sem ID." };
+  try {
+    await set(templatesRef(db, user.uid, template.id), JSON.parse(JSON.stringify(template)));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || "Erro ao salvar a história." };
+  }
+}
+
+export async function cloudListTemplates() {
+  const { db, user, error } = await getClient();
+  if (error) return { ok: false, error, data: [] };
+  try {
+    const snap = await get(templatesRef(db, user.uid));
+    const data = snap.exists() ? Object.values(snap.val() || {}) : [];
+    data.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err.message, data: [] };
+  }
+}
+
+export async function cloudDeleteTemplate(id) {
+  const { db, user, error } = await getClient();
+  if (error) return { ok: false, error };
+  try {
+    await remove(templatesRef(db, user.uid, id));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || "Erro ao apagar a história." };
   }
 }

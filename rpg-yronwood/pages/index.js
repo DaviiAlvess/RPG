@@ -36,6 +36,12 @@ import {
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
+import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
+import { gmBriefLines } from "../lib/gm-brief.mjs";
+import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote } from "../lib/story-progress.mjs";
+import CreateWizard from "../components/CreateWizard";
+import PresetLibrary from "../components/PresetLibrary";
+import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 const extractImagePrompt = (text) => {
@@ -53,7 +59,7 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  stripIdentityTags(
+  stripStoryTags(stripIdentityTags(
     normalizeDialogueText(
       stripTimeSkipTags(
         stripHpTags(
@@ -62,11 +68,7 @@ const cleanText = (t) =>
         )
       )
     )
-  ).trim();
-const generateImage = (prompt, world) => {
-  const full = `${prompt}, ${world || "fantasy"} setting, cinematic, dramatic lighting, photorealistic, 8k, no text, no people`;
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(full)}?width=900&height=360&nologo=true&seed=${Math.floor(Math.random() * 99999)}`;
-};
+  )).trim();
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
@@ -107,30 +109,6 @@ const parseItems = (text, current) => {
   }
   return updated;
 };
-
-// ─── Aparência ────────────────────────────────────────────────────────
-const APP_OPTIONS = {
-  body:      ["Magro",       "Atlético",   "Médio",        "Robusto",    "Gordo"],
-  height:    ["Muito baixo", "Baixo",      "Médio",        "Alto",       "Muito alto"],
-  skin:      ["Muito clara", "Clara",      "Morena clara", "Morena",     "Negra"],
-  hairLen:   ["Careca",      "Curto",      "Médio",        "Longo",      "Muito longo"],
-  hairColor: ["Preto",       "Castanho",   "Loiro",        "Ruivo",      "Branco/Grisalho"],
-  hairStyle: ["Liso",        "Ondulado",   "Cacheado",     "Crespo",     "Raspado/Moicano"],
-  eyeColor:  ["Castanhos",   "Verdes",     "Azuis",        "Cinzas",     "Pretos"],
-  eyeShape:  ["Amendoados",  "Redondos",   "Puxados",      "Pequenos",   "Grandes"],
-  face:      ["Oval",        "Quadrada",   "Redonda",      "Triangular", "Alongada"],
-  extras:    ["Nenhum",      "Cicatriz",   "Tatuagem",     "Barba",      "Sardas"],
-};
-const APP_LABELS = {
-  body: "Tipo de corpo", height: "Altura", skin: "Tom de pele",
-  hairLen: "Comprimento do cabelo", hairColor: "Cor do cabelo", hairStyle: "Estilo do cabelo",
-  eyeColor: "Cor dos olhos", eyeShape: "Formato dos olhos", face: "Formato do rosto", extras: "Marca especial",
-};
-const DEFAULT_APP = Object.fromEntries(Object.keys(APP_OPTIONS).map((k) => [k, APP_OPTIONS[k][2]]));
-const HAIR_COLORS = { "Preto": "#0a0a0a", "Castanho": "#5c3317", "Loiro": "#c8a84b", "Ruivo": "#8b2500", "Branco/Grisalho": "#a0a0a0" };
-const EYE_COLORS  = { "Castanhos": "#5c3317", "Verdes": "#2d6a4f", "Azuis": "#1a4a7a", "Cinzas": "#607080", "Pretos": "#0a0a14" };
-const buildAppearance = (a) =>
-  `Aparência: corpo ${a.body?.toLowerCase()}, estatura ${a.height?.toLowerCase()}, pele ${a.skin?.toLowerCase()}, cabelo ${a.hairLen?.toLowerCase()} ${a.hairColor?.toLowerCase()} ${a.hairStyle?.toLowerCase()}, olhos ${a.eyeColor?.toLowerCase()} ${a.eyeShape?.toLowerCase()}, rosto ${a.face?.toLowerCase()}${a.extras && a.extras !== "Nenhum" ? `, marca especial: ${a.extras?.toLowerCase()}` : ""}.`;
 
 // ─── Preset ───────────────────────────────────────────────────────────
 const PRESET = {
@@ -184,10 +162,12 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     c.isKnownIP ? knownIpFidelityRule(c.world) : "",
     c.ordinaryCharacter ? `PERSONAGEM COADJUVANTE ORIGINAL: iniciou como pessoa comum. Sem profecia, linhagem secreta ou poderes exclusivos. Sem intimidade gratuita com protagonistas — EXCETO quando INTERVENÇÃO DO MESTRE ou um acordo da mesa pedir explicitamente atração ou relação: nesse caso obedeça o Mestre. Cargo, treino e influência acompanham a campanha (CONDIÇÃO ATUAL). A origem e o começo permanecem em ORIGEM E COMEÇO e na MEMÓRIA. Eventos e personagens desta aventura são ficção original dentro do cenário, não canon oficial. Esta regra prevalece sobre a regra de exceção de poderes, mas não sobre um pedido explícito em Falar com o Mestre.` : "",
     c.supportingCast ? `ELENCO LOCAL ORIGINAL: ${c.supportingCast}` : "",
+    ...gmBriefLines(c),
     c.storyStartPoint ? `PREMISSA INICIAL (começo da campanha, não o status atual): ${c.storyStartPoint}` : "",
     `MEMÓRIA DA CAMPANHA: ${c.memory || "A aventura está começando."}`,
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, plots: c.plots, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
     plotPromptLines(c.plots),
+    ...storyProgressLines(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
@@ -202,9 +182,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
       ? `- Idade: ${calculateAge(c.charInitialAge, gt.totalDaysElapsed)} anos`
       : c.charAge ? `- Idade: ${c.charAge} anos` : "",
     c.charPersonality ? `- Personalidade: ${c.charPersonality}`   : "",
-    c.charAppearanceNote
-      ? `- Aparência canônica: ${c.charAppearanceNote}`
-      : c.appearance ? `- ${buildAppearance(c.appearance)}`      : "",
+    ...appearanceForGm(c).map((line) => `- ${line}`),
     ...identityPromptLines(c),
     ``,
     `══════════════════════════════════════════`,
@@ -415,6 +393,10 @@ export default function RPG() {
   const [loading, setLoading]   = useState(false);
   const [statusText, setStatus] = useState("");
   const [sceneImg, setSceneImg] = useState(null);
+  const [userTemplates, setUserTemplates] = useState([]);
+  const [recap, setRecap] = useState(null);
+  const [showEnding, setShowEnding] = useState(false);
+  const [sharedTemplate, setSharedTemplate] = useState(null);
   const [imgOk, setImgOk]       = useState(false);
   const [showChar, setShowChar] = useState(false);
   const [campLore, setCampLore] = useState("");
@@ -633,6 +615,9 @@ export default function RPG() {
       if (!userId) return;
       await migrateLocalCampaigns(userId);
       await reloadCampaigns(userId);
+      const { cloudListTemplates } = await import("../lib/rpg-cloud");
+      const tpl = await cloudListTemplates();
+      if (tpl.ok) setUserTemplates(tpl.data);
       const { cloudHealthCheck } = await import("../lib/rpg-cloud");
       const h = await cloudHealthCheck();
       setCloudOk(h.ok);
@@ -648,7 +633,11 @@ export default function RPG() {
   useEffect(() => { autoRef.current = autoMode; }, [autoMode]);
   useEffect(() => { pendingRef.current = pendingOptions; }, [pendingOptions]);
   useEffect(() => { if (view !== "play") { clearAuto(); } }, [view]);
-  useEffect(() => { setClientReady(true); }, []);
+  useEffect(() => {
+    setClientReady(true);
+    const shared = readSharedFromHash(window.location.hash);
+    if (shared) setSharedTemplate(shared);
+  }, []);
   useEffect(() => {
     if (typeof document !== "undefined") {
       document.documentElement.setAttribute("data-theme", theme);
@@ -995,6 +984,9 @@ export default function RPG() {
       charBg: save.charBg ?? active.charBg,
       storyStartPoint: save.storyStartPoint ?? active.storyStartPoint,
       pendingMasterNote: save.pendingMasterNote || "",
+      clues: save.clues || [],
+      tension: save.tension ?? 0,
+      ending: save.ending || null,
     };
     setActive(updated);
     pendingMasterNoteRef.current = updated.pendingMasterNote || "";
@@ -1218,7 +1210,25 @@ export default function RPG() {
     setPlayPanel("narrator");
     setAutoMode(false); setAutoWaiting(false); setPending([]); autoRef.current = false; pendingRef.current = [];
     setView("play");
-    if (!pinned.msgs?.length) doStart(pinned, pinned.lore || "");
+    setShowEnding(false);
+    if (!pinned.msgs?.length) { setRecap(null); doStart(pinned, pinned.lore || ""); return; }
+    setRecap(buildRecap(pinned));
+    const note = returnNote(pinned);
+    if (note) pendingLevelNoteRef.current = [pendingLevelNoteRef.current, note].filter(Boolean).join(" ");
+  };
+
+  const narrateRecap = async () => {
+    if (!active || !recap || recap.narrated || recap.loading) return;
+    setRecap((r) => r && { ...r, loading: true, error: "" });
+    try {
+      const req = recapRequest(active);
+      const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.text) throw new Error(data.error || "O Mestre não respondeu agora.");
+      setRecap((r) => r && { ...r, loading: false, narrated: cleanText(data.text) });
+    } catch (error) {
+      setRecap((r) => r && { ...r, loading: false, error: error.message || "Não foi possível narrar o resumo." });
+    }
   };
 
   const delCamp = async (id, e) => {
@@ -1475,6 +1485,11 @@ export default function RPG() {
       const updatedPlots = parsePlotTags(raw, lists.plots);
       const updatedRelationships = parseRelationships(raw, camp.relationships || {});
       const updatedIdentity = parseIdentityTags(raw, camp);
+      const clueResult = parseClues(raw, camp.clues || []);
+      const nextTension = parseTension(raw, camp.tension ?? 0);
+      const newEnding = detectEnding(raw, camp, updatedPlots);
+      clueResult.added.forEach((clue) => showNotification(`Nova pista: ${clue.text}`, "info", { duration: 8000 }));
+      if (nextTension > (camp.tension ?? 0)) showNotification("A tensão aumentou.", "warning", { duration: 4000 });
       setMissions(updatedMissions);
 
       const currentXp = Number(camp.experience ?? experience) || 0;
@@ -1559,7 +1574,7 @@ export default function RPG() {
       let newImg = camp.img || null;
       if (imgPrompt) {
         setImgOk(false);
-        newImg = generateImage(imgPrompt, camp.world);
+        newImg = sceneImageUrl(imgPrompt, camp.world, readWorldState(raw, camp.worldState).location);
         setSceneImg(newImg);
         if (imgPrompt.toLowerCase().includes("rain") || imgPrompt.toLowerCase().includes("storm")) {
           document.body.classList.add("rain-overlay");
@@ -1591,9 +1606,13 @@ export default function RPG() {
         charInitialAge: camp.charInitialAge ?? charInitialAge,
         timelineEvents: nextTimelineEvents,
         pendingMasterNote: "",
+        clues: clueResult.clues,
+        tension: nextTension,
+        ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
       };
       setActive(updated);
+      if (newEnding) setTimeout(() => setShowEnding(true), 1200);
       saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
@@ -1674,6 +1693,7 @@ export default function RPG() {
       items: [],
       hp: 100,
       gameTime: defaultTime,
+      clues: [], tension: 0, ending: null,
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
     };
@@ -1686,7 +1706,6 @@ export default function RPG() {
     await saveCamp(active.id, updated); doStart(updated, campLore);
   };
 
-  const setApp = (key, val) => setForm(f => ({ ...f, appearance: { ...f.appearance, [key]: val } }));
 
   // ─── Inventário ───────────────────────────────────────────────────
   const addItem = useCallback(async (itemName, options = {}) => {
@@ -1787,13 +1806,71 @@ export default function RPG() {
     setPlayPanel(panelId);
   }, []);
 
-  const handleUpdateCharacter = (updatedCharacter) => {
+  // ─── Histórias do jogador e compartilhadas ─────────────────────────
+  const pickPreset = (preset) => {
+    setForm({
+      ...stripTemplateCampaignId(preset),
+      appearance: { ...DEFAULT_APP, ...(preset.appearance || {}) },
+      relationships: preset.relationships || {},
+      worldState: preset.worldState || {},
+      specialAbility: normalizeSpecialAbility(preset.specialAbility),
+      plots: Array.isArray(preset.plots) ? preset.plots : [],
+      worldBg: preset.worldBg || "",
+      storyStartPoint: preset.storyStartPoint || "",
+      charAppearanceNote: preset.charAppearanceNote || "",
+    });
+    setStep(2);
+    setView("create");
+  };
+  const dismissShared = () => {
+    setSharedTemplate(null);
+    if (typeof window !== "undefined" && window.location.hash) history.replaceState(null, "", window.location.pathname);
+  };
+  const saveTemplate = async (template) => {
+    const { cloudSaveTemplate } = await import("../lib/rpg-cloud");
+    const toSave = { ...template, id: template.id?.startsWith("link-") ? `u${Date.now().toString(36)}` : template.id, shared: false, createdAt: template.createdAt || new Date().toISOString() };
+    const res = await cloudSaveTemplate(toSave);
+    if (!res.ok) { showNotification(res.error || "Não foi possível salvar a história.", "warning"); return false; }
+    setUserTemplates((list) => [toSave, ...list.filter((t) => t.id !== toSave.id)]);
+    if (template.shared) dismissShared();
+    showNotification(`"${toSave.charName}" está em Minhas histórias.`, "success");
+    return true;
+  };
+  const deleteTemplate = async (template) => {
+    if (typeof window !== "undefined" && !window.confirm(`Apagar a história "${template.charName}"? Campanhas já iniciadas não são afetadas.`)) return;
+    const { cloudDeleteTemplate } = await import("../lib/rpg-cloud");
+    const res = await cloudDeleteTemplate(template.id);
+    if (!res.ok) { showNotification(res.error || "Não foi possível apagar.", "warning"); return; }
+    setUserTemplates((list) => list.filter((t) => t.id !== template.id));
+  };
+  const shareTemplate = async (template) => {
+    const url = shareUrl(template, window.location.origin);
+    if (!url) { showNotification("Esta história não pôde virar link.", "warning"); return; }
+    try {
+      if (navigator.share && /Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+        await navigator.share({ title: `${template.charName} — ${template.world}`, text: template.hook || "Uma aventura para você jogar", url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        showNotification("Link copiado. Quem abrir joga a mesma história do começo.", "success");
+      }
+    } catch {
+      window.prompt("Copie o link da história:", url);
+    }
+  };
+  const saveActiveAsTemplate = async () => {
+    if (!active) return;
+    const template = campaignToTemplate(active, user?.displayName || (user?.email || "").split("@")[0]);
+    if (!template) { showNotification("Falta mundo ou nome do personagem para salvar como história.", "warning"); return; }
+    await saveTemplate(template);
+  };
+
+  const handleUpdateCharacter = (updatedCharacter, message = 'Condição da história atualizada.') => {
     if (!active) return;
     const identity = applyManualIdentity(active, updatedCharacter || {});
     const updated = { ...active, ...updatedCharacter, ...identity };
     setActive(updated);
     saveCamp(active.id, updated);
-    showNotification('Condição da história atualizada.', 'info');
+    if (message) showNotification(message, 'info');
   };
 
   const handleCombatEnd = (victory, enemy = null) => {
@@ -2078,6 +2155,12 @@ export default function RPG() {
               </div>
             ))}
           </div>
+          {sharedTemplate ? (
+            <button type="button" className="shared-banner" onClick={() => setView("presets")}>
+              <i className="ti ti-gift" aria-hidden="true" />
+              <span><strong>Você recebeu uma história:</strong> {sharedTemplate.charName} em {sharedTemplate.world}. Toque para ver.</span>
+            </button>
+          ) : null}
           <div className="shell-foot">
             <button className="btn-primary" type="button" onClick={() => setView("presets")}>Abrir RPGs prontos</button>
             <button className="btn-secondary" type="button" onClick={startCreate}>Criar o meu</button>
@@ -2091,242 +2174,38 @@ export default function RPG() {
 
   // ═══ CREATE ════════════════════════════════════════════════════════
   if (view === "presets") return (
-    <><div className="rpg-shell">
-      <Head><title>RPGs prontos — Forja de Mundos</title></Head>
-      <div className="cr-head"><button className="btn-ghost" type="button" onClick={() => setView("home")}>← Voltar</button><span className="shell-eyebrow">RPGS PRONTOS</span></div>
-      <main className="cr-body"><section className="preset-library" aria-labelledby="preset-title">
-            <h2 id="preset-title">Personagens originais em mundos conhecidos</h2>
-            <p className="settings-hint">Cada carta é um ponto de partida. Você revisa a ficha no passo Começar, antes da primeira cena.</p>
-            <div className="preset-grid">
-              <article className="preset-card preset-card-featured">
-                <div className="preset-card-copy">
-                  <span className="preset-world">Westeros · Clássico</span>
-                  <h3>Edric Yronwood</h3>
-                  <p className="preset-role">Lorde de Pedra Sangrenta · 26 anos</p>
-                  <p>A casa ainda cheira a cal e sangue velho. Um emissário de Porto Real espera no pátio com uma lista de cabeças dornesas.</p>
-                </div>
-                <button type="button" className="btn-primary" onClick={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}>Jogar como Edric</button>
-              </article>
-              {ADVENTURE_PRESETS.map(preset => <article className="preset-card preset-card-compact" key={preset.id}>
-                <span className="preset-world">{preset.world}</span>
-                <h3>{preset.charName}</h3>
-                <p>{preset.hook}</p>
-                <span className="preset-role">{preset.charTitle} · {preset.genre}</span>
-                {listActiveSpecialAbilities(preset.specialAbility).length ? (
-                  <span className="preset-role">
-                    Poder: {listActiveSpecialAbilities(preset.specialAbility).map((ability) => ability.name).join(" · ")}
-                  </span>
-                ) : null}
-                <button type="button" className="btn-primary" onClick={() => { setForm({ ...stripTemplateCampaignId(preset), appearance: { ...DEFAULT_APP }, relationships: preset.relationships || {}, worldState: preset.worldState || {}, specialAbility: normalizeSpecialAbility(preset.specialAbility), plots: Array.isArray(preset.plots) ? preset.plots : [] }); setStep(2); setView("create"); }}>Revisar ficha</button>
-              </article>)}
-            </div>
-          </section></main>
-    </div><ToastContainer toasts={toasts} onDismiss={dismissToast} /></>
+    <>
+    <PresetLibrary
+      presets={ADVENTURE_PRESETS}
+      edric={PRESET}
+      onPickEdric={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}
+      onPick={pickPreset}
+      onBack={() => setView("home")}
+      userTemplates={userTemplates}
+      sharedTemplate={sharedTemplate}
+      onSaveShared={saveTemplate}
+      onDismissShared={dismissShared}
+      onDeleteTemplate={deleteTemplate}
+      onShareTemplate={shareTemplate}
+    />
+    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 
   if (view === "create") return (
     <>
-    <div className="rpg-shell">
-      <Head><title>Novo Personagem</title></Head>
-      <div className="cr-head">
-        <button className="btn-ghost" onClick={() => step > 0 ? setStep(s => s - 1) : setView("home")}>← Voltar</button>
-        <nav className="cr-steps" aria-label="Etapas da criação">
-          {CREATE_STEPS.map((name, i) => (
-            <span key={name} className={`cr-step ${step === i ? "current" : ""} ${step > i ? "done" : ""}`}>
-              <span className={`cr-dot ${step >= i ? "on" : ""}`} />
-              <span className="cr-step-name">{name}</span>
-            </span>
-          ))}
-        </nav>
-        {step === 0
-          ? <button className="btn-ghost" type="button" onClick={() => setView("presets")}>RPGs prontos</button>
-          : <div style={{ width: 56 }} />}
-      </div>
-
-      <div className="cr-body">
-        {step === 0 && <>
-          <div className="cr-lbl">O mundo</div>
-
-          <F label="Nome do mundo *" value={form.world} set={(v) => setForm(f => ({ ...f, world: v }))} placeholder="ex: Naruto, One Piece, Dark Souls, Mundo Original..." />
-          <Toggle title="Universo existente?"
-            desc={form.isKnownIP ? "A IA pesquisa um briefing canônico (era, facções, regras de poder). Revise os fatos importantes antes de jogar." : "Mundo original — você define o contexto abaixo"}
-            value={form.isKnownIP} onChange={() => setForm(f => ({ ...f, isKnownIP: !f.isKnownIP, storyStartPoint: "" }))} />
-          {!form.isKnownIP && <F label="Lore / Contexto *" value={form.worldBg} set={(v) => setForm(f => ({ ...f, worldBg: v }))} placeholder="Época, conflitos, facções, regras do mundo..." ta rows={5} />}
-          {form.isKnownIP && form.world.trim() && (
-            <div className="ip-hint">A IA vai pesquisar um briefing fiel de <strong>{form.world}</strong>: era, lugares, facções, regras de poder e o que não inventar.</div>
-          )}
-          <Toggle title="Gerar imagens de cena?"
-            desc={form.useImages ? "Uma imagem por cena — mais imersivo, mais lento" : "Sem imagens — mais rápido e barato"}
-            value={form.useImages} onChange={() => setForm(f => ({ ...f, useImages: !f.useImages }))} />
-          <div style={{ marginBottom: 14 }}>
-            <div className="wizard-section-label">Estilo de jogo</div>
-            <div className="style-pick">
-              {Object.entries(GAME_STYLES).map(([key, s]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`style-opt ${form.gameStyle === key ? "on" : ""}`}
-                  onClick={() => setForm(f => ({ ...f, gameStyle: key }))}
-                >
-                  <span className="style-opt-title">{s.label}</span>
-                  <span className="style-opt-desc">{s.desc}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <button type="button" className="btn-primary" disabled={!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())} onClick={() => setStep(1)}>Próximo</button>
-          {(!form.world.trim() || (!form.isKnownIP && !form.worldBg.trim())) ? (
-            <p className="field-needed">{!form.world.trim() ? "Falta o nome do mundo." : "Descreva o contexto do mundo original para continuar."}</p>
-          ) : null}
-        </>}
-
-        {step === 1 && <>
-          <div className="cr-lbl">O personagem</div>
-          {form.isKnownIP && (
-            <div style={{ marginBottom: 14 }}>
-              <div className="wizard-section-label">Quem você vai jogar?</div>
-              <div className="style-pick">
-                <button
-                  type="button"
-                  className={`style-opt ${form.isExistingChar ? "on" : ""}`}
-                  onClick={() => setForm(f => ({ ...f, isExistingChar: true, storyStartPoint: "" }))}
-                >
-                  <span className="style-opt-title">Personagem da obra</span>
-                  <span className="style-opt-desc">Jogo como Naruto, Geralt, Jon Snow... — busco a ficha e você escolhe onde começar na história</span>
-                </button>
-                <button
-                  type="button"
-                  className={`style-opt ${!form.isExistingChar ? "on" : ""}`}
-                  onClick={() => setForm(f => ({ ...f, isExistingChar: false, charLore: "", charAppearanceNote: "", storyStartPoint: "" }))}
-                >
-                  <span className="style-opt-title">Personagem original</span>
-                  <span className="style-opt-desc">Crio meu próprio personagem neste universo — não precisa existir na obra</span>
-                </button>
-              </div>
-            </div>
-          )}
-          {form.isExistingChar && form.isKnownIP && (
-            <div className="ip-hint">
-              Digite o nome do personagem e clique em <strong>Buscar ficha</strong>. A ficha será preenchida automaticamente — no próximo passo você só escolhe <strong>em que momento da história</strong> quer começar.
-            </div>
-          )}
-          {form.isKnownIP && !form.isExistingChar && (
-            <div className="ip-hint">
-              Seu personagem <strong>não precisa existir na obra</strong> — você define quem é e como entra no universo de <strong>{form.world || "esta história"}</strong>.
-            </div>
-          )}
-          <F label="Nome *" value={form.charName} set={(v) => setForm(f => ({ ...f, charName: v }))} placeholder={form.isExistingChar ? "ex: Naruto, Geralt, Jon Snow..." : "ex: seu personagem..."} />
-          {!form.isExistingChar && <>
-            <F label="Título / Cargo" value={form.charTitle} set={(v) => setForm(f => ({ ...f, charTitle: v }))} placeholder="ex: Hokage, Witcher, Lorde..." />
-            <F label="Idade" value={form.charAge} set={(v) => setForm(f => ({ ...f, charAge: v }))} placeholder="ex: 17" />
-            <F label="História / Background" value={form.charBg} set={(v) => setForm(f => ({ ...f, charBg: v }))} placeholder="Origem, motivações, eventos marcantes..." ta rows={4} />
-            <F label="Personalidade" value={form.charPersonality} set={(v) => setForm(f => ({ ...f, charPersonality: v }))} placeholder="ex: Impulsivo, corajoso, leal..." />
-            <F label="Habilidades / Poderes" value={form.charSkills} set={(v) => setForm(f => ({ ...f, charSkills: v }))} placeholder="ex: espada, liderança... ou um poder único (geralmente secreto no mundo)" />
-            {form.isKnownIP && (
-              <F label="Quando na história? (opcional)"
-                value={form.storyStartPoint}
-                set={(v) => setForm(f => ({ ...f, storyStartPoint: v }))}
-                placeholder="ex: Durante o Exame Chunin / Após a Batalha de Winterfell / Era dos Piratas..."
-                ta rows={2} />
-            )}
-          </>}
-          <button type="button" className="btn-primary" disabled={!form.charName.trim() || charSearchLoading} onClick={handleStep1Next}>
-            {charSearchLoading ? "Buscando ficha..." : form.isExistingChar && form.isKnownIP ? "Buscar ficha" : "Próximo"}
-          </button>
-          {!form.charName.trim() && !charSearchLoading ? <p className="field-needed">Digite o nome do personagem para continuar.</p> : null}
-        </>}
-
-        {step === 2 && form.isExistingChar && form.isKnownIP && <>
-          <div className="cr-lbl">Onde começar</div>
-          <F label="Contexto gerado pela IA — revise antes de jogar" value={form.charLore} set={(v) => setForm(f => ({ ...f, charLore: v }))} ta rows={5} />
-          <div className="ficha-card">
-            <div className="ficha-name">{form.charName}</div>
-            {form.charTitle && <div className="ficha-row"><span>Cargo</span><span>{form.charTitle}{form.charAge ? ` · ${form.charAge} anos` : ""}</span></div>}
-            {form.charBg && <div className="ficha-row"><span>História</span><span>{form.charBg}</span></div>}
-            {form.charPersonality && <div className="ficha-row"><span>Personalidade</span><span>{form.charPersonality}</span></div>}
-            {form.charSkills && <div className="ficha-row"><span>Habilidades</span><span>{form.charSkills}</span></div>}
-            {form.charAppearanceNote && <div className="ficha-row"><span>Aparência</span><span>{form.charAppearanceNote}</span></div>}
-            {!form.charBg && !form.charPersonality && form.charLore && (
-              <div className="ficha-row"><span>Lore</span><span>{form.charLore}</span></div>
-            )}
-            {form.relationships && Object.keys(form.relationships).length > 0 && (
-              <div className="ficha-row">
-                <span>Relações</span>
-                <span>{Object.entries(form.relationships).slice(0, 6).map(([n, a]) => `${n} (${a})`).join(" · ")}</span>
-              </div>
-            )}
-          </div>
-          <F label="Onde na história quer começar? *"
-            value={form.storyStartPoint}
-            set={(v) => setForm(f => ({ ...f, storyStartPoint: v }))}
-            placeholder="ex: Início do anime / Arco do Exame Chunin / Após a Batalha de Winterfell / Depois que vira Hokage..."
-            ta rows={3} />
-          <div className="ip-hint">Descreva o momento exato da obra em que a aventura começa. O Mestre posicionará seu personagem nesse ponto do canon.</div>
-        </>}
-
-        {step === 2 && !(form.isExistingChar && form.isKnownIP) && <>
-          <div className="cr-lbl">Revise e comece</div>
-          {form.ordinaryCharacter ? <section className="starter-card"><span className="preset-world">{form.world} · Personagem original</span><h2>{form.charName}</h2><p>{form.charTitle}</p><F label="Nome" value={form.charName} set={v => setForm(f => ({ ...f, charName: v }))} /><F label="História" value={form.charBg} set={v => setForm(f => ({ ...f, charBg: v }))} ta rows={3} /><F label="Personalidade" value={form.charPersonality} set={v => setForm(f => ({ ...f, charPersonality: v }))} /><F label="Habilidades" value={form.charSkills} set={v => setForm(f => ({ ...f, charSkills: v }))} ta rows={2} /><F label="Cena inicial" value={form.storyStartPoint} set={v => setForm(f => ({ ...f, storyStartPoint: v }))} ta rows={3} /><p>Personagens ao seu redor: {form.supportingCast}</p></section> : null}
-          <details className="wizard-fold">
-            <summary>
-              <span>Aparência</span>
-              <span className="wizard-fold-preview">{form.appearance.height} · cabelo {form.appearance.hairColor} · olhos {form.appearance.eyeColor}</span>
-            </summary>
-            <p className="settings-hint">Opcional. O Mestre usa estes traços se você quiser; dá para começar como está.</p>
-            <div className="app-preview">
-              <div className="app-avatar">
-                <div className="av-hair" style={{ background: HAIR_COLORS[form.appearance.hairColor] || "#4a2a00" }} />
-                <div className="av-body">{form.appearance.body?.[0]}</div>
-                <div className="av-eyes">
-                  <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-                  <div className="av-eye" style={{ background: EYE_COLORS[form.appearance.eyeColor] || "#5a3a10" }} />
-                </div>
-              </div>
-              <div className="app-summary">
-                {Object.entries(APP_LABELS).map(([k, label]) => (
-                  <div key={k} className="app-sum-row">
-                    <span className="app-sum-key">{label}:</span>
-                    <span className="app-sum-val">{form.appearance[k]}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {Object.entries(APP_OPTIONS).map(([key, opts]) => (
-              <div key={key} className="app-section">
-                <div className="app-section-label" id={`app-${key}`}>{APP_LABELS[key]}</div>
-                <div className="chips" role="group" aria-labelledby={`app-${key}`}>
-                  {opts.map(opt => (
-                    <button key={opt} type="button" className={`chip ${form.appearance[key] === opt ? "on" : ""}`} aria-pressed={form.appearance[key] === opt} onClick={() => setApp(key, opt)}>{opt}</button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </details>
-        </>}
-
-        {step === 2 && <>
-          <details className="wizard-fold">
-            <summary>
-              <span>Ajustes da mesa</span>
-              <span className="wizard-fold-preview">{form.economyMode ? "economia ligada" : "economia desligada"}</span>
-            </summary>
-            <p className="settings-hint">Opcional. Depois você muda isso em Ajustes, durante o jogo.</p>
-            <label className="economy-setting"><input type="checkbox" checked={Boolean(form.economyMode)} onChange={e => setForm(f => ({ ...f, economyMode: e.target.checked }))} /><span><strong>Modo economia</strong><small>Respostas curtas, instruções compactas e menos chamadas no automático.</small></span></label>
-            <SpecialAbilitySettings value={form.specialAbility} onChange={specialAbility => setForm(f => ({ ...f, specialAbility }))} />
-            <NarrationSettings value={form.narration} onChange={narration => setForm(f => ({ ...f, narration }))} />
-          </details>
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim()}
-            onClick={finishCreate}
-          >Começar aventura</button>
-          {form.isExistingChar && form.isKnownIP && !form.storyStartPoint.trim() ? (
-            <p className="field-needed">Diga em que momento da história a aventura começa.</p>
-          ) : null}
-        </>}
-      </div>
-    </div>
+    <CreateWizard
+      form={form}
+      setForm={setForm}
+      step={step}
+      setStep={setStep}
+      setView={setView}
+      charSearchLoading={charSearchLoading}
+      handleStep1Next={handleStep1Next}
+      finishCreate={finishCreate}
+      gameStyles={GAME_STYLES}
+      steps={CREATE_STEPS}
+    />
     <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -2438,35 +2317,16 @@ export default function RPG() {
       toggleMission={toggleMission}
       intervene={intervene}
       onUpdateCharacter={handleUpdateCharacter}
+      onSaveAsTemplate={saveActiveAsTemplate}
+      recap={recap}
+      onCloseRecap={() => setRecap(null)}
+      onNarrateRecap={narrateRecap}
+      showEnding={showEnding}
+      onOpenEnding={() => setShowEnding(true)}
+      onCloseEnding={() => setShowEnding(false)}
+      onExitToHome={() => { setShowEnding(false); clearAuto(); setView("home"); }}
     />
     <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
-  );
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────
-function F({ label, value, set, placeholder, ta, rows }) {
-  const id = "field-" + String(label).toLowerCase().replace(/[^a-z0-9]+/g, "-");
-  return (
-    <div className="field">
-      <label className="field-label" htmlFor={id}>{label}</label>
-      {ta
-        ? <textarea id={id} className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} rows={rows || 4} />
-        : <input id={id} className="field-input" value={value} onChange={(e) => set(e.target.value)} placeholder={placeholder} />}
-    </div>
-  );
-}
-
-function Toggle({ title, desc, value, onChange }) {
-  return (
-    <div className="toggle-row">
-      <div className="toggle-info">
-        <div className="toggle-title">{title}</div>
-        <div className="toggle-desc">{desc}</div>
-      </div>
-      <button type="button" className={`toggle-btn ${value ? "on" : ""}`} onClick={onChange} aria-pressed={value}>
-        {value ? "Sim" : "Não"}
-      </button>
-    </div>
   );
 }

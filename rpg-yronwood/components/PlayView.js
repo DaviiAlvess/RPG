@@ -9,6 +9,10 @@ import { useState, useEffect } from "react";
 import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
 import NarrativeContent from "./NarrativeContent";
+import AppearanceCreator, { PortraitImage } from "./AppearanceCreator";
+import { RecapModal, EndingScreen, TensionMeter, AmbienceControl } from "./StoryModals";
+import { npcPortraitUrl } from "../lib/appearance.mjs";
+import { asClueList } from "../lib/story-progress.mjs";
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 import {
@@ -121,6 +125,27 @@ function LevelUpChoice({ attributes, skills, onConfirm, onCancel }) {
       ) : null}
       <button type="button" className="btn-cancel" onClick={onCancel} style={{ marginTop: 8 }}>Cancelar</button>
     </div>
+  );
+}
+
+const APPEARANCE_FIELDS = ["appearance", "appearanceCustomized", "charOutfit", "charAppearanceNote", "portraitSeed", "portraitUrl", "portraitStyle"];
+function AppearanceEditor({ campaign, onSave, disabled }) {
+  const c = campaign || {};
+  const pick = () => Object.fromEntries(APPEARANCE_FIELDS.map((k) => [k, c[k]]));
+  const [draft, setDraft] = useState(pick);
+  useEffect(() => { setDraft(pick()); }, [c.id, c.portraitUrl, c.charOutfit, c.charAppearanceNote, c.appearance]);
+  const dirty = APPEARANCE_FIELDS.some((k) => JSON.stringify(draft[k]) !== JSON.stringify(c[k]));
+  return (
+    <section className="play-section card-box" aria-labelledby="sheet-appearance">
+      <h3 id="sheet-appearance" className="play-section-title">Aparência</h3>
+      <AppearanceCreator value={{ ...c, ...draft }} onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))} disabled={disabled} />
+      {dirty ? (
+        <div className="ac-save-row">
+          <button type="button" className="btn-ghost" onClick={() => setDraft(pick())}>Desfazer</button>
+          <button type="button" className="btn-primary" disabled={disabled} onClick={() => onSave && onSave(draft, "Aparência salva. O Mestre usa a partir da próxima resposta.")}>Salvar aparência</button>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -283,6 +308,14 @@ export default function PlayView(props) {
     toggleMission,
     intervene,
     onUpdateCharacter,
+    onSaveAsTemplate,
+    recap,
+    onCloseRecap,
+    onNarrateRecap,
+    showEnding,
+    onOpenEnding,
+    onCloseEnding,
+    onExitToHome,
   } = props;
 
   const c = active || {};
@@ -392,6 +425,11 @@ export default function PlayView(props) {
           <div className="sidebar-spacer" />
 
           <div className="char-mini">
+            {c.portraitUrl ? (
+              <button type="button" className="char-mini-portrait" onClick={() => setPlayPanel("sheet")} aria-label="Abrir ficha e aparência">
+                <PortraitImage src={c.portraitUrl} alt={`Retrato de ${c.charName || "seu personagem"}`} size={64} />
+              </button>
+            ) : null}
             <div className="char-mini-name">{c.charName || "Aventureiro"}</div>
             <div className="char-mini-class">{c.charTitle || styleMeta?.label || "Em jornada"}</div>
             <div className="hp-bar-wrap">
@@ -466,6 +504,22 @@ export default function PlayView(props) {
             </button>
           </div>
 
+          <div className="story-strip">
+            {c.gmBrief || (c.tension ?? 0) > 0 ? <TensionMeter value={c.tension ?? 0} /> : null}
+            {asClueList(c.clues).length ? (
+              <button type="button" className="story-chip" onClick={() => setPlayPanel("missions")} title="Ver pistas descobertas">
+                <i className="ti ti-search" /> {asClueList(c.clues).length} {asClueList(c.clues).length === 1 ? "pista" : "pistas"}
+              </button>
+            ) : null}
+            {c.ending ? (
+              <button type="button" className="story-chip story-chip-ending" onClick={onOpenEnding}>
+                <i className="ti ti-crown" /> Ver final
+              </button>
+            ) : null}
+            <span className="story-strip-spacer" />
+            <AmbienceControl campaign={c} tension={c.tension ?? 0} />
+          </div>
+
           {playPanel === "narrator" && c.useImages && sceneImg ? (
             <div className="scene-banner">
               <img
@@ -516,7 +570,7 @@ export default function PlayView(props) {
                     <span className="scene-stake-text">{sceneStake}</span>
                   </div>
                 ) : null}
-                {c.worldState && <details className="journey-recap"><summary>Diário de pessoas e segredos</summary>{Object.entries(c.worldState.npcs || {}).map(([name, facts]) => <p key={name}><strong>{name}</strong> — {facts}</p>)}{(c.worldState.secrets || []).map((secret, i) => <p key={i}>Segredo: {secret}</p>)}{!Object.keys(c.worldState.npcs || {}).length && !c.worldState.secrets?.length ? <p>As pessoas conhecidas e os segredos registrados pelo Mestre aparecerão aqui.</p> : null}</details>}
+                {c.worldState && <details className="journey-recap"><summary>Diário de pessoas e segredos</summary>{Object.entries(c.worldState.npcs || {}).map(([name, facts]) => <div key={name} className="npc-row">{c.useImages !== false ? <img className="npc-portrait" src={npcPortraitUrl(name, facts, c.world, c.portraitStyle)} alt="" width={44} height={44} loading="lazy" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} /> : null}<p><strong>{name}</strong> — {facts}</p></div>)}{(c.worldState.secrets || []).map((secret, i) => <p key={i}>Segredo: {secret}</p>)}{!Object.keys(c.worldState.npcs || {}).length && !c.worldState.secrets?.length ? <p>As pessoas conhecidas e os segredos registrados pelo Mestre aparecerão aqui.</p> : null}</details>}
                 {lastScene && !loading ? <details className="journey-recap"><summary>Sua jornada até aqui</summary><p>{c.worldState?.location ? `Local: ${c.worldState.location}` : c.world}</p><p>{activeMissionList[0]?.text ? `Objetivo: ${activeMissionList[0].text}` : "Explore a cena e escolha seu próximo passo."}</p><p>{lastScene.text.slice(0, 420)}{lastScene.text.length > 420 ? "…" : ""}</p>{c.worldState?.promises?.length ? <p>Promessas: {c.worldState.promises.join(" · ")}</p> : null}</details> : null}
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
@@ -562,9 +616,15 @@ export default function PlayView(props) {
                       className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""} ${talky ? "scene-talk" : ""}`}
                     >
                       {talky ? null : (
-                        <div className={`msg-avatar ${isUser ? "" : "narrator"}`}>
-                          <i className={isUser ? "ti ti-user" : "ti ti-sparkles"} />
-                        </div>
+                        isUser && c?.portraitUrl ? (
+                          <div className="msg-avatar has-portrait">
+                            <img src={c.portraitUrl} alt="" width={34} height={34} />
+                          </div>
+                        ) : (
+                          <div className={`msg-avatar ${isUser ? "" : "narrator"}`}>
+                            <i className={isUser ? "ti ti-user" : "ti ti-sparkles"} />
+                          </div>
+                        )
                       )}
                       <div className={talky ? "msg-scene" : undefined}>
                         {isUser && c?.charName && !hasDialogueBlocks(message?.text) ? (
@@ -750,6 +810,8 @@ export default function PlayView(props) {
             </div>
 
             <StoryConditionEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
+
+            <AppearanceEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
 
             <section className="play-section game-time-card" aria-labelledby="sheet-timeline">
               <h3 id="sheet-timeline" className="play-section-title">Linha do tempo</h3>
@@ -1034,6 +1096,17 @@ export default function PlayView(props) {
             </div>
 
             <div className="card-box">
+              <div className="section-label">Pistas descobertas</div>
+              {asClueList(c.clues).length ? (
+                <ol className="clue-list">
+                  {asClueList(c.clues).map((clue) => <li key={clue.id}><i className="ti ti-search" aria-hidden="true" /> {clue.text}</li>)}
+                </ol>
+              ) : (
+                <div className="panel-sub">Nada ainda. Investigue, pergunte e observe — o Mestre registra aqui o que você descobrir de verdade.</div>
+              )}
+            </div>
+
+            <div className="card-box">
               <div className="section-label">Tramas desta história</div>
               <div className="mission-list">
                 {(Array.isArray(c.plots) ? c.plots : []).length ? (
@@ -1212,6 +1285,12 @@ export default function PlayView(props) {
                 <i className="ti ti-bookmark-plus" />
                 <span>Criar save slot</span>
               </button>
+              {onSaveAsTemplate ? (
+                <button className="settings-action" onClick={onSaveAsTemplate} type="button" title="Guarda o começo desta aventura em Minhas histórias para jogar de novo ou mandar a um amigo">
+                  <i className="ti ti-share" />
+                  <span>Salvar como história para compartilhar</span>
+                </button>
+              ) : null}
               {saveList.length ? (
                 <div className="equip-list">
                   {saveList.map((save) => (
@@ -1287,6 +1366,10 @@ export default function PlayView(props) {
       </div>
 
       {masterChatOpen ? <MasterChat key={c.id} campaign={c} busy={props.masterBusy} onAsk={props.onAskMaster} onSaveAgreements={props.onSaveMasterAgreements} onClose={() => setMasterChatOpen(false)} /> : null}
+      {recap ? <RecapModal recap={recap} campaign={c} onClose={onCloseRecap} onNarrate={onNarrateRecap} /> : null}
+      {showEnding && c.ending ? (
+        <EndingScreen campaign={{ ...c, level, missions }} onClose={onCloseEnding} onSaveAsTemplate={onSaveAsTemplate} onExport={exportToBook} onExit={onExitToHome} />
+      ) : null}
       {showTimeSkipModal ? (
         <div className="modal-overlay" onClick={() => setShowTimeSkipModal(false)}>
           <div className="modal-content" onClick={(event) => event.stopPropagation()}>

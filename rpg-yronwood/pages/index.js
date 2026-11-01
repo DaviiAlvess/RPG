@@ -38,7 +38,9 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
 import { gmBriefLines } from "../lib/gm-brief.mjs";
-import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote } from "../lib/story-progress.mjs";
+import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
+import { buildBookHtml } from "../lib/book-export.mjs";
+import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
 import CreateWizard from "../components/CreateWizard";
 import PresetLibrary from "../components/PresetLibrary";
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
@@ -485,6 +487,7 @@ export default function RPG() {
   const cdRef     = useRef(null);
   const sendMsgRef = useRef(null);
   const authTokenRef = useRef(null);
+  const firebaseUserRef = useRef(null);
   const pendingRef = useRef([]);
   const skipNextTimeParseRef = useRef(false);
   const pendingLevelNoteRef = useRef("");
@@ -499,9 +502,13 @@ export default function RPG() {
     setAutoWaiting(false);
   }
 
-  const apiFetch = useCallback((url, options = {}) => {
+  const apiFetch = useCallback(async (url, options = {}) => {
     const { timeoutMs, retryOnce, ...fetchOptions } = options;
     const headers = { "Content-Type": "application/json", ...(fetchOptions.headers || {}) };
+    // Token renovado a cada pedido: o do Firebase vence em 1 hora.
+    try {
+      if (firebaseUserRef.current) authTokenRef.current = await firebaseUserRef.current.getIdToken();
+    } catch {}
     if (authTokenRef.current) {
       headers.Authorization = `Bearer ${authTokenRef.current}`;
     }
@@ -590,6 +597,7 @@ export default function RPG() {
         }
 
         unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+          firebaseUserRef.current = firebaseUser || null;
           authTokenRef.current = firebaseUser ? await firebaseUser.getIdToken() : null;
           setUser(firebaseUser);
         });
@@ -860,6 +868,7 @@ export default function RPG() {
       if (auth) await signOut(auth);
     } catch {}
     authTokenRef.current = null;
+    firebaseUserRef.current = null;
     setUser(null);
     setIdx([]);
     setActive(null);
@@ -987,6 +996,12 @@ export default function RPG() {
       clues: save.clues || [],
       tension: save.tension ?? 0,
       ending: save.ending || null,
+      choices: save.choices || [],
+      chapters: save.chapters || [],
+      turn: save.turn || 0,
+      lastOffscreenTurn: save.lastOffscreenTurn || 0,
+      places: save.places || [],
+      achievements: active.achievements || save.achievements || [],
     };
     setActive(updated);
     pendingMasterNoteRef.current = updated.pendingMasterNote || "";
@@ -1043,53 +1058,8 @@ export default function RPG() {
 
   // ─── Export to Book ───────────────────────────────────────────────
   const exportToBook = () => {
-    const bookContent = disp.map(m => {
-      if (m.type === "gm") {
-        return `<p style="margin-bottom:24px;line-height:1.9;font-size:16px;text-align:justify;color:#111;">${m.text.replace(/\n/g, "<br/>")}</p>`;
-      }
-      if (m.type === "user" || m.type === "auto") {
-        return `<div style="text-align:right;margin-bottom:24px;"><span style="font-style:italic;font-size:15px;color:#444;border-bottom:1px solid #ccc;padding-bottom:2px;">— ${m.text}</span></div>`;
-      }
-      return "";
-    }).join("");
-
-    const missionsHtml = missions.length
-      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
-          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">MISSÕES</h3>
-          ${missions.map(m => `<p style="font-size:13px;color:${m.completed ? '#888' : '#111'};text-decoration:${m.completed ? 'line-through' : 'none'};margin-bottom:6px;">${m.completed ? "✓" : "◦"} ${m.text}</p>`).join("")}
-        </div>`
-      : "";
-
-    const itemsHtml = active?.items?.length
-      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
-          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">MOCHILA</h3>
-          ${active.items.map((item, i) => `<p style="font-size:13px;color:#111;margin-bottom:6px;">${i + 1}. ${item}</p>`).join("")}
-        </div>`
-      : "";
-
-    const relationshipsHtml = active?.relationships && Object.keys(active.relationships).length
-      ? `<div style="margin:40px 0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;padding:20px 0;">
-          <h3 style="font-size:14px;letter-spacing:3px;color:#555;margin-bottom:14px;">RELACIONAMENTOS</h3>
-          ${Object.entries(active.relationships).map(([npc, attitude]) => `<p style="font-size:13px;color:#111;margin-bottom:6px;"><strong>${npc}:</strong> ${attitude}</p>`).join("")}
-        </div>`
-      : "";
-
-    const html = `<!DOCTYPE html><html lang="pt"><head><meta charset="UTF-8"><title>As Crônicas de ${active.charName}</title>
-      <style>body{font-family:'Georgia',serif;padding:40px;color:#000;background:#fff;max-width:800px;margin:0 auto}@media print{body{padding:0;margin:0}@page{margin:2cm}}</style></head>
-      <body>
-        <div style="text-align:center;margin-bottom:80px;margin-top:50px;">
-          <h1 style="font-size:38px;color:#000;letter-spacing:2px;">AS CRÔNICAS DE<br/>${active.charName.toUpperCase()}</h1>
-          <h2 style="font-size:20px;font-weight:normal;color:#555;margin-bottom:30px;">${active.world}</h2>
-          <div style="width:80px;height:2px;background:#000;margin:0 auto;"></div>
-        </div>
-        ${missionsHtml}
-        ${itemsHtml}
-        ${relationshipsHtml}
-        ${bookContent}
-        <div style="text-align:center;margin-top:60px;font-size:18px;"><strong>FIM.</strong></div>
-        <script>window.onload=function(){window.print();}<\/script>
-      </body></html>`;
-
+    if (!active) return;
+    const html = buildBookHtml({ ...active, level }, { disp, missions });
     const w = window.open("", "_blank");
     if (w) { w.document.write(html); w.document.close(); }
     else alert("Permita pop-ups neste site para gerar o livro.");
@@ -1488,6 +1458,12 @@ export default function RPG() {
       const clueResult = parseClues(raw, camp.clues || []);
       const nextTension = parseTension(raw, camp.tension ?? 0);
       const newEnding = detectEnding(raw, camp, updatedPlots);
+      const nextTurn = (Number(camp.turn) || 0) + 1;
+      const offscreenUsed = isOffscreenDue(camp);
+      const choiceResult = parseChoices(raw, camp.choices || [], nextTurn);
+      const newChapter = parseChapter(raw, camp.chapters || [], nextTurn);
+      if (choiceResult.added.length) showNotification("Sua decisão foi registrada. Ela pode voltar mais tarde.", "info", { duration: 4500 });
+      if (newChapter) showNotification(`Capítulo ${newChapter.number}: ${newChapter.title}`, "success", { duration: 5000 });
       clueResult.added.forEach((clue) => showNotification(`Nova pista: ${clue.text}`, "info", { duration: 8000 }));
       if (nextTension > (camp.tension ?? 0)) showNotification("A tensão aumentou.", "warning", { duration: 4000 });
       setMissions(updatedMissions);
@@ -1569,6 +1545,7 @@ export default function RPG() {
       const finalDisp = [...newDisp];
       if (timeSeparator) finalDisp.push(timeSeparator);
       finalDisp.push({ type: "gm", text: clean });
+      if (newChapter) finalDisp.push({ type: "chapter", text: newChapter.title, number: newChapter.number });
       setMsgs(finalMsgs); setDisp(finalDisp);
 
       let newImg = camp.img || null;
@@ -1583,10 +1560,12 @@ export default function RPG() {
         }
       }
 
+      const nextWorldState = readWorldState(raw, camp.worldState);
       const updated = {
         ...camp,
         memory, memoryUntil,
-        worldState: readWorldState(raw, camp.worldState),
+        worldState: nextWorldState,
+        places: trackPlace(camp.places || (camp.worldState?.location ? [{ name: camp.worldState.location, turn: 0 }] : []), nextWorldState.location, (Number(camp.turn) || 0) + 1),
         msgs: finalMsgs,
         disp: finalDisp,
         img: newImg,
@@ -1608,9 +1587,21 @@ export default function RPG() {
         pendingMasterNote: "",
         clues: clueResult.clues,
         tension: nextTension,
+        choices: choiceResult.choices,
+        chapters: newChapter ? [...(camp.chapters || []), newChapter] : (camp.chapters || []),
+        turn: nextTurn,
+        lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
         ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
       };
+      const unlocked = newAchievements(updated);
+      if (unlocked.length) {
+        updated.achievements = [...(updated.achievements || []), ...unlocked];
+        unlocked.forEach((a) => {
+          const def = ACHIEVEMENTS.find((x) => x.id === a.id);
+          if (def) showNotification(`Conquista: ${def.title} — ${def.desc}`, "success", { duration: 6000 });
+        });
+      }
       setActive(updated);
       if (newEnding) setTimeout(() => setShowEnding(true), 1200);
       saveCamp(camp.id, updated);
@@ -1693,7 +1684,7 @@ export default function RPG() {
       items: [],
       hp: 100,
       gameTime: defaultTime,
-      clues: [], tension: 0, ending: null,
+      clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, places: [], achievements: [],
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
     };

@@ -10,6 +10,9 @@ const load = async path => {
   if (source.includes('gemini-keys.mjs')) {
     const keysHref = pathToFileURL(fileURLToPath(new URL('../lib/gemini-keys.mjs', import.meta.url))).href;
     source = source.replaceAll('../../lib/gemini-keys.mjs', keysHref);
+    const authHref = pathToFileURL(fileURLToPath(new URL('../lib/verify-id-token.mjs', import.meta.url))).href;
+    source = source.replaceAll('../../lib/verify-id-token.mjs', authHref);
+    if (process.env.GM_REQUIRE_AUTH === undefined) process.env.GM_REQUIRE_AUTH = '0';
   }
   return import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
 };

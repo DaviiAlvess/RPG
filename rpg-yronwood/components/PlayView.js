@@ -13,6 +13,9 @@ import AppearanceCreator, { PortraitImage } from "./AppearanceCreator";
 import { RecapModal, EndingScreen, TensionMeter, AmbienceControl } from "./StoryModals";
 import { npcPortraitUrl } from "../lib/appearance.mjs";
 import { asClueList } from "../lib/story-progress.mjs";
+import { suggestActions } from "../lib/codex.mjs";
+import CodexPanel from "./CodexPanel";
+import VoiceControl, { ListenButton } from "./VoiceControl";
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 import {
@@ -30,6 +33,7 @@ const PANEL_META = {
   dice: { label: "Dados", icon: "ti ti-dice-5" },
   inventory: { label: "Itens", icon: "ti ti-backpack" },
   missions: { label: "Missões", icon: "ti ti-flag-3" },
+  codex: { label: "Códice", icon: "ti ti-book-2" },
   settings: { label: "Ajustes", icon: "ti ti-settings" },
 };
 
@@ -214,6 +218,7 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
   if (panel === "missions") return "Acompanhe objetivos ativos e concluídos.";
   if (panel === "inventory") return "Itens carregados pelo personagem.";
   if (panel === "dice") return "Role dados manuais a qualquer momento.";
+  if (panel === "codex") return "Tudo o que esta história já registrou.";
   return c?.world || "A aventura continua.";
 }
 
@@ -382,6 +387,7 @@ export default function PlayView(props) {
     { id: "dice", badge: null },
     { id: "inventory", badge: itemList.length || null },
     { id: "missions", badge: activeMissionList.length || missionTotal || null },
+    { id: "codex", badge: null },
     { id: "settings", badge: null },
   ];
 
@@ -517,6 +523,7 @@ export default function PlayView(props) {
               </button>
             ) : null}
             <span className="story-strip-spacer" />
+            <VoiceControl disp={disp} />
             <AmbienceControl campaign={c} tension={c.tension ?? 0} />
           </div>
 
@@ -575,6 +582,15 @@ export default function PlayView(props) {
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
                 {(disp || []).map((message, index) => {
+                  if (message?.type === "chapter") {
+                    return (
+                      <div key={message?.id || `chapter-${index}`} className="chat-chapter" role="separator">
+                        <span className="chat-chapter-num">Capítulo {message?.number || ""}</span>
+                        <span className="chat-chapter-title">{message?.text}</span>
+                      </div>
+                    );
+                  }
+
                   if (message?.type === "time_sep") {
                     return (
                       <div key={message?.id || `time-${index}`} className="chat-time-separator">
@@ -637,7 +653,12 @@ export default function PlayView(props) {
                             <NarrativeContent text={message?.text} playerName={c?.charName} />
                           )}
                         </div>
-                        {timeLabel ? <div className="msg-time">{timeLabel}</div> : null}
+                        {timeLabel || (!isUser && !isError) ? (
+                          <div className="msg-time">
+                            {!isUser && !isError ? <ListenButton text={message?.text} /> : null}
+                            {timeLabel}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   );
@@ -798,7 +819,7 @@ export default function PlayView(props) {
                   )}
                   <button type="button" className="idea-help" onClick={() => { setPlayPanel("settings"); setAbilityOpen(false); }}>Configurar habilidades</button>
                 </section> : null}
-                {ideasOpen ? <div className="action-ideas">{[{ label: "Falar", text: "\"" }, { label: "Conversar", text: "Me aproximo e digo: \"" }, { label: "Investigar", text: "Examino " }, { label: "Agir", text: "Tento " }].map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Fale entre aspas ou complete a intenção. Nada é enviado sozinho.</span></div> : null}
+                {ideasOpen ? <div className="action-ideas">{suggestActions(c).map(idea => <button key={idea.label} type="button" disabled={loading || autoWaiting || Boolean(input.trim())} onClick={() => { setInput(idea.text); taRef.current?.focus(); }}>{idea.label}</button>)}<span>Fale entre aspas ou complete a intenção. Nada é enviado sozinho.</span></div> : null}
               </div>
             </div>
           </div>
@@ -1174,6 +1195,14 @@ export default function PlayView(props) {
                 )}
               </div>
             </div>
+          </div>
+
+          <div className={`panel ${playPanel === "codex" ? "active" : ""}`}>
+            <div>
+              <div className="panel-title">Códice</div>
+              <div className="panel-sub">Capítulos, pessoas, lugares, pistas, decisões e conquistas desta história.</div>
+            </div>
+            {playPanel === "codex" ? <CodexPanel campaign={c} /> : null}
           </div>
 
           <div className={`panel ${playPanel === "settings" ? "active" : ""}`}>

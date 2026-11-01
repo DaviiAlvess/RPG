@@ -7,6 +7,7 @@ import {
   parseUsageTokens,
   recordKeyUsage,
 } from "../../lib/gemini-keys.mjs";
+import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
 const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
@@ -56,12 +57,25 @@ export default async function handler(req, res) {
     if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
     return res.status(error.status || 500).json({ error: error.message, code: error.code || "API_ERROR", retryAfter: error.retryAfter || null });
   };
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // Sem CORS aberto: só o próprio site chama esta rota.
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
+
+  // Só quem está logado usa as chaves do Gemini. GM_REQUIRE_AUTH=0 desliga (emergência).
+  if (process.env.GM_REQUIRE_AUTH !== "0") {
+    try {
+      const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "siterpg32";
+      const { uid } = await verifyIdToken(bearerToken(req), { projectId });
+      const limit = Number(process.env.GM_RATE_LIMIT_PER_MIN) || 30;
+      const rate = takeRateLimit(uid, { limit });
+      if (!rate.ok) {
+        res.setHeader("Retry-After", String(rate.retryAfter));
+        return res.status(429).json({ error: "Muitos pedidos seguidos ao Mestre. Espere alguns segundos.", code: "RATE_LIMIT", retryAfter: rate.retryAfter });
+      }
+    } catch (error) {
+      return res.status(error.status || 401).json({ error: error.message, code: error.code || "AUTH_REQUIRED" });
+    }
+  }
 
   const requestBody = readGmRequestBody(req.body);
   if (requestBody == null) {

@@ -7,7 +7,7 @@ import { asPlotList } from "./plots.mjs";
 const clip = (v, max) => String(v || "").replace(/\s+/g, " ").trim().slice(0, max);
 const clueId = () => `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-export const STORY_TAG_PATTERN = /\[(PISTA|TENSAO|TENSÃO|FINAL):[^\]]*\]/gi;
+export const STORY_TAG_PATTERN = /\[(PISTA|TENSAO|TENSÃO|FINAL|ESCOLHA|CAPITULO|CAPÍTULO):[^\]]*\]/gi;
 export const stripStoryTags = (text) => String(text || "").replace(STORY_TAG_PATTERN, "");
 
 // ── Pistas ──
@@ -92,7 +92,7 @@ export function endingSummary(camp = {}) {
   return {
     title: e.title || camp.charName || "Fim",
     epilogue: e.epilogue || "",
-    choices: e.choices || [],
+    choices: (e.choices && e.choices.length ? e.choices : asChoiceList(camp.choices).slice(-5).map((c) => c.text)),
     plots: asPlotList(camp.plots),
     allies: rel.filter(([, a]) => a === "Amigável").map(([n]) => n),
     enemies: rel.filter(([, a]) => a === "Hostil").map(([n]) => n),
@@ -113,6 +113,16 @@ export function storyProgressLines(c = {}, { short = false } = {}) {
     "RESPIRO: depois de duas ou três cenas tensas seguidas, ofereça uma cena calma com um aliado (refeição, curativo, conversa à noite) em que ele revele algo pessoal. Isso cria vínculo; não resolva a trama nela.",
     "FINAL: só quando a trama principal estiver resolvida de vez, narre um desfecho e emita [FINAL:título que o personagem ganhou|epílogo em uma ou duas frases|escolha marcante 1; escolha marcante 2; escolha marcante 3]. Nunca antes.",
   ];
+  lines.push(
+    "ESCOLHAS: quando o jogador tomar uma decisão que muda a história (poupar, trair, prometer, revelar, escolher um lado), emita [ESCOLHA:o que ele decidiu, em poucas palavras]. Não registre ações comuns.",
+    "CAPÍTULOS: quando um arco curto se fechar e a história virar a página (mudança de lugar, de objetivo ou depois de uma revelação), emita [CAPITULO:título evocativo de 2 a 5 palavras] no fim da resposta. No máximo um a cada várias cenas.",
+  );
+  const choices = asChoiceList(c.choices).slice(-6);
+  if (choices.length) {
+    lines.push(`DECISÕES JÁ TOMADAS PELO JOGADOR: ${choices.map((x) => x.text).join(" | ")}. A cada poucas cenas, traga UMA delas de volta como consequência concreta (alguém lembra, cobra, agradece, se vinga, uma porta abre ou fecha). Não resolva todas de uma vez.`);
+  }
+  const living = livingWorldLine(c);
+  if (living) lines.push(living);
   if (c.ending) lines.push(`A história principal já terminou (${c.ending.title}). O jogo segue como epílogo livre: novas tramas só se o jogador buscar.`);
   return short ? [lines.join(" ")] : lines;
 }
@@ -179,4 +189,77 @@ export function returnNote(camp = {}, now = Date.now()) {
   const days = daysAway(camp.updatedAt, now);
   if (days < 2 || !Array.isArray(camp.msgs) || !camp.msgs.length) return "";
   return `O jogador voltou depois de ${days} dias reais sem jogar. Na próxima resposta, mostre que o mundo não ficou parado esperando: um NPC agiu de acordo com o que quer, ou o relógio da história deu um passo pequeno, percebido de forma concreta na cena (um recado, um rastro, uma mudança no lugar). Não avance o calendário, não puna de forma desproporcional e não fale pelo jogador.`;
+}
+
+// ── Escolhas marcantes ──
+export function asChoiceList(value) {
+  return Array.isArray(value)
+    ? value.map((c) => (typeof c === "string" ? { id: clueId(), text: clip(c, 160) } : c && c.text ? { id: c.id || clueId(), text: clip(c.text, 160), at: c.at, turn: c.turn } : null)).filter(Boolean)
+    : [];
+}
+
+/** Lê [ESCOLHA:texto] e devolve { choices, added }. */
+export function parseChoices(text, current = [], turn = 0, at = Date.now()) {
+  const choices = asChoiceList(current);
+  const added = [];
+  for (const m of String(text || "").matchAll(/\[ESCOLHA:([^\]]+)\]/gi)) {
+    const t = clip(m[1], 160);
+    if (!t || choices.some((c) => c.text.toLowerCase() === t.toLowerCase())) continue;
+    const choice = { id: clueId(), text: t, at, turn };
+    choices.push(choice);
+    added.push(choice);
+  }
+  return { choices: choices.slice(-40), added };
+}
+
+// ── Capítulos ──
+export function asChapterList(value) {
+  return Array.isArray(value)
+    ? value.map((c) => (c && c.title ? { title: clip(c.title, 60), at: c.at, turn: c.turn } : null)).filter(Boolean)
+    : [];
+}
+
+/** Lê [CAPITULO:título]; devolve o novo capítulo (ou null). Ignora título repetido. */
+export function parseChapter(text, current = [], turn = 0, at = Date.now()) {
+  const m = String(text || "").match(/\[CAP(?:I|Í)TULO:([^\]]+)\]/i);
+  if (!m) return null;
+  const title = clip(m[1], 60);
+  if (!title) return null;
+  const list = asChapterList(current);
+  if (list.some((c) => c.title.toLowerCase() === title.toLowerCase())) return null;
+  return { title, at, turn, number: list.length + 2 };
+}
+
+// ── Mundo vivo ──
+export const OFFSCREEN_EVERY = 6;
+
+function lastScene(c) {
+  const disp = Array.isArray(c.disp) ? c.disp : [];
+  for (let i = disp.length - 1; i >= 0; i--) if (disp[i]?.type === "gm") return String(disp[i].text || "");
+  return "";
+}
+
+/** NPC conhecido que não apareceu na última cena, em rodízio pelo número do turno. */
+export function offscreenNpc(c = {}) {
+  const names = Object.keys(c.worldState?.npcs || {});
+  if (!names.length) return "";
+  const scene = lastScene(c).toLowerCase();
+  const absent = names.filter((n) => !scene.includes(n.toLowerCase()));
+  const pool = absent.length ? absent : names;
+  return pool[(Number(c.turn) || 0) % pool.length];
+}
+
+/** Já é hora de um NPC agir fora de cena? */
+export function isOffscreenDue(c = {}) {
+  if (c.ending) return false;
+  const turn = Number(c.turn) || 0;
+  const last = Number(c.lastOffscreenTurn) || 0;
+  return turn >= OFFSCREEN_EVERY && turn - last >= OFFSCREEN_EVERY && Boolean(offscreenNpc(c));
+}
+
+export function livingWorldLine(c = {}) {
+  if (!isOffscreenDue(c)) return "";
+  const npc = offscreenNpc(c);
+  const facts = clip(c.worldState?.npcs?.[npc], 200);
+  return `MUNDO VIVO (só neste turno): ${npc} não está na cena, mas não ficou parado${facts ? ` (${facts})` : ""}. Mostre UM sinal concreto de que essa pessoa avançou o que quer — um recado, um rastro, um boato, alguém que a viu, algo que mudou de lugar. Sem tirar a cena do jogador e sem narrar de fora: o jogador percebe pelos próprios sentidos.`;
 }

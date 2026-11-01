@@ -80,3 +80,14 @@ Falhas 500/502/503, resposta vazia e modelo 404 também são repetidos de forma 
 Timeout numa única chave não é repetido (a chamada pode ter consumido tokens);
 com várias chaves, tenta a seguinte se ainda houver prazo.
 Guia do provedor: https://ai.google.dev/gemini-api/docs/troubleshooting
+
+## Segurança da rota do Mestre
+
+A rota `/api/gm` só atende quem está logado: o app envia o token do Firebase
+(renovado a cada pedido) e o servidor confere a assinatura antes de usar as chaves
+do Gemini. Também há um limite de pedidos por conta.
+
+- `GM_RATE_LIMIT_PER_MIN`: pedidos por minuto por conta (padrão 30).
+- `GM_REQUIRE_AUTH=0`: desliga a exigência de login. Use só em emergência:
+  sem ela, qualquer pessoa pode gastar a sua cota do Gemini.
+- `FIREBASE_PROJECT_ID`: opcional; por padrão usa `NEXT_PUBLIC_FIREBASE_PROJECT_ID` ou `siterpg32`.

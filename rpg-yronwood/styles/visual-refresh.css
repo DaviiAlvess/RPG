@@ -473,3 +473,49 @@ button:disabled { cursor: not-allowed; }
   .ending-stats { grid-template-columns: repeat(2, 1fr); }
   .recap-facts { grid-template-columns: 1fr; }
 }
+
+/* ─── Capítulos no chat ───────────────────────────────────────────── */
+.chat-chapter { display: grid; justify-items: center; gap: 4px; margin: 28px 0 18px; text-align: center; }
+.chat-chapter::before, .chat-chapter::after { content: ""; width: 60px; height: 1px; background: var(--purple-mid); opacity: .6; }
+.chat-chapter-num { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--purple); }
+.chat-chapter-title { font: 400 22px Georgia, serif; color: var(--text-primary); }
+
+/* ─── Códice ──────────────────────────────────────────────────────── */
+.codex { display: grid; gap: 14px; }
+.codex-section { display: grid; gap: 10px; }
+.codex-chapters, .codex-places { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.codex-chapters li { display: flex; gap: 10px; align-items: baseline; font: 400 16px Georgia, serif; color: var(--text-primary); }
+.codex-chapters span { font: 600 11px system-ui, sans-serif; color: var(--purple); min-width: 18px; }
+.codex-places li { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--text-secondary); }
+.codex-places li.here { color: var(--text-primary); font-weight: 600; }
+.codex-here { font-size: 10px; font-weight: 600; color: var(--purple); border: 1px solid var(--purple-mid); border-radius: 999px; padding: 1px 7px; }
+.codex-people { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.codex-person { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border: 1px solid var(--border); border-radius: 12px; }
+.codex-person img { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; flex-shrink: 0; border: 1px solid var(--border-md); background: var(--bg-tertiary); }
+.codex-person p { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.codex-person-name { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-weight: 600; font-size: 14px; color: var(--text-primary); }
+.codex-attitude { font-size: 10px; font-weight: 600; border-radius: 999px; padding: 1px 7px; border: 1px solid var(--border-md); color: var(--text-secondary); }
+.codex-attitude.ally { color: #8cc58f; border-color: rgba(140, 197, 143, .4); }
+.codex-attitude.enemy { color: #e4806f; border-color: rgba(228, 128, 111, .4); }
+.codex-attitude.wary { color: #d8b06a; border-color: rgba(216, 176, 106, .4); }
+.codex-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.codex-list { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; line-height: 1.55; color: var(--text-primary); }
+.codex-achievements { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.codex-achievement { display: flex; gap: 10px; align-items: center; padding: 10px; border-radius: 12px; border: 1px dashed var(--border-md); opacity: .55; }
+.codex-achievement.on { opacity: 1; border-style: solid; border-color: var(--purple-mid); background: var(--purple-light); }
+.codex-achievement i { font-size: 22px; color: var(--purple); }
+.codex-achievement div { display: grid; }
+.codex-achievement strong { font-size: 13px; color: var(--text-primary); }
+.codex-achievement span { font-size: 11px; color: var(--text-secondary); line-height: 1.4; }
+
+/* ─── Narração por voz ────────────────────────────────────────────── */
+.voice-control { position: relative; }
+.voice-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; width: min(300px, 86vw); display: grid; gap: 12px; padding: 14px; border-radius: 14px; border: 1px solid var(--border-md); background: var(--bg-secondary); box-shadow: var(--shadow); }
+.voice-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+.voice-row input { margin-top: 2px; accent-color: var(--purple-mid); }
+.voice-field { display: grid; gap: 6px; font-size: 12px; color: var(--text-secondary); }
+.voice-field select { padding: 8px 10px; font-size: 13px; }
+.voice-field input[type="range"] { accent-color: var(--purple-mid); }
+.voice-actions .btn-ghost { min-height: 36px; display: inline-flex; gap: 6px; align-items: center; }
+.listen-btn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-right: 6px; border-radius: 6px; color: var(--text-secondary); opacity: .6; vertical-align: middle; }
+.listen-btn:hover { opacity: 1; color: var(--purple); background: var(--bg-secondary); }

@@ -50,6 +50,11 @@ export function sanitizeTemplate(src = {}) {
     const a = src.specialAbility;
     t.specialAbility = { enabled: Boolean(a.enabled), name: str(a.name, 80), description: str(a.description, 600), limits: str(a.limits, 400), secret: a.secret !== false };
   }
+  if (src.gameSystem && typeof src.gameSystem === "object" && src.gameSystem.enabled) {
+    const shop = (Array.isArray(src.gameSystem.shop) ? src.gameSystem.shop : []).slice(0, 20).map((i) => ({ id: str(i.id || i.name, 40), name: str(i.name, 60), desc: str(i.desc, 240), cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once) })).filter((i) => i.name);
+    const chestPool = (Array.isArray(src.gameSystem.chestPool) ? src.gameSystem.chestPool : []).slice(0, 12).map((i) => ({ name: str(i.name, 60), desc: str(i.desc, 240), kind: str(i.kind, 20) })).filter((i) => i.name);
+    t.gameSystem = { enabled: true, name: str(src.gameSystem.name || "Sistema", 40), points: 0, shop, ...(chestPool.length ? { chestPool } : {}), generated: true };
+  }
   const brief = normalizeGmBrief(src.gmBrief);
   if (brief) t.gmBrief = brief;
   return t;

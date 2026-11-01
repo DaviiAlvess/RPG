@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import TraitAvatar from "./TraitAvatar";
 import {
   APP_OPTIONS,
   APP_LABELS,
@@ -14,29 +15,42 @@ import {
  * Retrato do personagem. Mostra estado de carregamento e erro, porque o
  * gerador de imagem pode levar alguns segundos.
  */
-export function PortraitImage({ src, alt, size = 160, className = "" }) {
+export function PortraitImage({ src, alt, size = 160, className = "", fallback = null }) {
   const [state, setState] = useState(src ? "loading" : "empty");
   const [attempt, setAttempt] = useState(0);
+  const imgRef = useRef(null);
   useEffect(() => { setState(src ? "loading" : "empty"); setAttempt(0); }, [src]);
   const shown = src && attempt ? `${src}&r=${attempt}` : src;
+  // Imagem em cache pode terminar de carregar antes do onLoad; e o gerador às vezes demora demais.
+  useEffect(() => {
+    if (!shown) return undefined;
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth > 0) setState("ready");
+    const t = setTimeout(() => setState((st) => (st === "loading" ? "slow" : st)), 45000);
+    return () => clearTimeout(t);
+  }, [shown]);
+  const showFallback = fallback && state !== "ready";
   return (
     <div className={`portrait-frame ${className} is-${state}`} style={{ width: size, height: size }}>
+      {showFallback ? <div className="portrait-fallback">{fallback}</div> : null}
       {src ? (
         <img
+          ref={imgRef}
           key={shown}
           src={shown}
           alt={alt}
           width={size}
           height={size}
+          referrerPolicy="no-referrer"
           onLoad={() => setState("ready")}
           onError={() => setState("error")}
         />
       ) : null}
-      {state === "empty" ? <i className="ti ti-user portrait-placeholder" aria-hidden="true" /> : null}
+      {state === "empty" && !fallback ? <i className="ti ti-user portrait-placeholder" aria-hidden="true" /> : null}
       {state === "loading" ? <div className="portrait-status"><span className="portrait-spinner" />Pintando…</div> : null}
-      {state === "error" ? (
+      {state === "error" || state === "slow" ? (
         <button type="button" className="portrait-status portrait-retry" onClick={() => { setState("loading"); setAttempt((n) => n + 1); }}>
-          <i className="ti ti-refresh" /> Tentar de novo
+          <i className="ti ti-refresh" /> {state === "slow" ? "Demorando — tentar de novo" : "Tentar de novo"}
         </button>
       ) : null}
     </div>
@@ -64,7 +78,9 @@ export default function AppearanceCreator({ value, onChange, disabled = false })
   return (
     <div className="appearance-creator">
       <div className="ac-portrait-col">
-        <PortraitImage src={c.portraitUrl} alt={`Retrato de ${c.charName || "seu personagem"}`} size={168} />
+        {c.portraitUrl && !outdated
+          ? <PortraitImage src={c.portraitUrl} alt={`Retrato de ${c.charName || "seu personagem"}`} size={168} fallback={<TraitAvatar appearance={appearance} size={168} />} />
+          : <div className="portrait-frame is-live" style={{ width: 168, height: 168 }}><TraitAvatar appearance={appearance} size={168} /></div>}
         {outdated ? <p className="ac-outdated">Você mudou a aparência. Atualize o retrato para ver.</p> : null}
         <div className="ac-portrait-actions">
           <button type="button" className="btn-ghost ac-btn-main" disabled={disabled || current} onClick={() => generate(false)}>

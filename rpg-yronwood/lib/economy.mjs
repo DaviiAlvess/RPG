@@ -2,6 +2,7 @@ import { specialAbilityDirection } from "./special-ability.mjs";
 import { appearanceForGm } from './appearance.mjs';
 import { gmBriefLines } from './gm-brief.mjs';
 import { storyProgressLines } from './story-progress.mjs';
+import { systemPromptLines } from './game-system.mjs';
 import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
 import { buildNarrationDirection } from './narration.mjs';
 import { recentSpeakers } from './dialogueFormat.js';
@@ -38,6 +39,7 @@ export function economyPrompt(c, lore, calendar) {
     `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, plots: c.plots, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
     plotPromptLines(c.plots),
     ...storyProgressLines(c, { short: true }),
+    ...systemPromptLines(c, { short: true }),
     plotDirection(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote, { short: true }),

@@ -41,6 +41,7 @@ import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
 import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
+import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem } from "../lib/game-system.mjs";
 import CreateWizard from "../components/CreateWizard";
 import PresetLibrary from "../components/PresetLibrary";
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
@@ -61,7 +62,7 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  stripStoryTags(stripIdentityTags(
+  stripSystemTags(stripStoryTags(stripIdentityTags(
     normalizeDialogueText(
       stripTimeSkipTags(
         stripHpTags(
@@ -70,7 +71,7 @@ const cleanText = (t) =>
         )
       )
     )
-  )).trim();
+  ))).trim();
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
@@ -170,6 +171,7 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, plots: c.plots, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
     plotPromptLines(c.plots),
     ...storyProgressLines(c),
+    ...systemPromptLines(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
     `ESTILO DE JOGO: ${GAME_STYLES[style].label.toUpperCase()} — ${GAME_STYLES[style].desc}`,
@@ -1001,6 +1003,7 @@ export default function RPG() {
       turn: save.turn || 0,
       lastOffscreenTurn: save.lastOffscreenTurn || 0,
       places: save.places || [],
+      gameSystem: save.gameSystem || active.gameSystem,
       achievements: active.achievements || save.achievements || [],
     };
     setActive(updated);
@@ -1297,9 +1300,21 @@ export default function RPG() {
       lore = "";
       showNotification(`${error.message} A aventura segue sem o briefing da busca.`, "warning");
     }
+    let gameSystem = form.gameSystem;
+    if (gameSystem?.enabled && !gameSystem.generated && !gameSystem.chestPool) {
+      try {
+        setStatus("O Sistema está preparando a loja deste mundo...");
+        const req = systemGenRequest(form);
+        const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
+        const data = await res.json().catch(() => ({}));
+        const gen = res.ok ? parseGeneratedSystem(data.text) : null;
+        if (gen) gameSystem = { ...gameSystem, shop: gen.shop, ...(gen.chest.length ? { chestPool: gen.chest } : {}), generated: true };
+      } catch {}
+    }
     const id = uid();
     const camp = {
       ...stripTemplateCampaignId(form),
+      ...(gameSystem ? { gameSystem } : {}),
       id,
       lore,
       memory: "", memoryUntil: 0,
@@ -1462,6 +1477,14 @@ export default function RPG() {
       const offscreenUsed = isOffscreenDue(camp);
       const choiceResult = parseChoices(raw, camp.choices || [], nextTurn);
       const newChapter = parseChapter(raw, camp.chapters || [], nextTurn);
+      const systemResult = applySystemTags(raw, camp.gameSystem);
+      systemResult.events.forEach((ev) => {
+        const name = systemResult.system?.name || "Sistema";
+        if (ev.type === "points" && ev.amount > 0) showNotification(`【${name}】 +${ev.amount} pontos${ev.reason ? ` — ${ev.reason}` : ""}`, "success", { duration: 5000 });
+        if (ev.type === "quest") showNotification(`【${name}】 Nova missão: ${ev.quest.text} (+${ev.quest.reward})`, "info", { duration: 7000 });
+        if (ev.type === "quest_done") showNotification(`【${name}】 Missão cumprida: ${ev.quest.text} (+${ev.quest.reward})`, "success", { duration: 7000 });
+        if (ev.type === "rank") showNotification(`【${name}】 Rank ${ev.rank} alcançado.`, "success", { duration: 7000 });
+      });
       if (choiceResult.added.length) showNotification("Sua decisão foi registrada. Ela pode voltar mais tarde.", "info", { duration: 4500 });
       if (newChapter) showNotification(`Capítulo ${newChapter.number}: ${newChapter.title}`, "success", { duration: 5000 });
       clueResult.added.forEach((clue) => showNotification(`Nova pista: ${clue.text}`, "info", { duration: 8000 }));
@@ -1590,6 +1613,7 @@ export default function RPG() {
         choices: choiceResult.choices,
         chapters: newChapter ? [...(camp.chapters || []), newChapter] : (camp.chapters || []),
         turn: nextTurn,
+        ...(systemResult.system ? { gameSystem: systemResult.system } : {}),
         lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
         ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
@@ -1685,6 +1709,7 @@ export default function RPG() {
       hp: 100,
       gameTime: defaultTime,
       clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, places: [], achievements: [],
+      gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
     };
@@ -1853,6 +1878,28 @@ export default function RPG() {
     const template = campaignToTemplate(active, user?.displayName || (user?.email || "").split("@")[0]);
     if (!template) { showNotification("Falta mundo ou nome do personagem para salvar como história.", "warning"); return; }
     await saveTemplate(template);
+  };
+
+  const buySystemItem = (itemId) => {
+    if (!active || sending.current) return;
+    const r = buyItem(active.gameSystem, itemId);
+    if (!r.ok) { showNotification(r.error, "warning"); return; }
+    const updated = { ...active, gameSystem: r.system };
+    setActive(updated);
+    saveCamp(active.id, updated);
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item)].filter(Boolean).join(" ");
+    showNotification(`【${r.system.name}】 Comprado: ${r.item.name}. Aparece na próxima cena.`, "success");
+  };
+
+  const openSystemChest = () => {
+    if (!active || sending.current) return null;
+    const r = openChest(active.gameSystem);
+    if (!r.ok) { showNotification(r.error, "warning"); return null; }
+    const updated = { ...active, gameSystem: r.system };
+    setActive(updated);
+    saveCamp(active.id, updated);
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, chestNote(r.reward)].filter(Boolean).join(" ");
+    return r.reward;
   };
 
   const handleUpdateCharacter = (updatedCharacter, message = 'Condição da história atualizada.') => {
@@ -2309,6 +2356,8 @@ export default function RPG() {
       intervene={intervene}
       onUpdateCharacter={handleUpdateCharacter}
       onSaveAsTemplate={saveActiveAsTemplate}
+      onBuySystemItem={buySystemItem}
+      onOpenChest={openSystemChest}
       recap={recap}
       onCloseRecap={() => setRecap(null)}
       onNarrateRecap={narrateRecap}

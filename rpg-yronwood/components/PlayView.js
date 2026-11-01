@@ -15,6 +15,8 @@ import { npcPortraitUrl } from "../lib/appearance.mjs";
 import { asClueList } from "../lib/story-progress.mjs";
 import { suggestActions } from "../lib/codex.mjs";
 import CodexPanel from "./CodexPanel";
+import SystemPanel from "./SystemPanel";
+import { chestStatus } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
@@ -34,6 +36,7 @@ const PANEL_META = {
   inventory: { label: "Itens", icon: "ti ti-backpack" },
   missions: { label: "Missões", icon: "ti ti-flag-3" },
   codex: { label: "Códice", icon: "ti ti-book-2" },
+  system: { label: "Sistema", icon: "ti ti-device-gamepad-2" },
   settings: { label: "Ajustes", icon: "ti ti-settings" },
 };
 
@@ -219,6 +222,7 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
   if (panel === "inventory") return "Itens carregados pelo personagem.";
   if (panel === "dice") return "Role dados manuais a qualquer momento.";
   if (panel === "codex") return "Tudo o que esta história já registrou.";
+  if (panel === "system") return "Status, missões e loja que só você vê.";
   return c?.world || "A aventura continua.";
 }
 
@@ -314,6 +318,8 @@ export default function PlayView(props) {
     intervene,
     onUpdateCharacter,
     onSaveAsTemplate,
+    onBuySystemItem,
+    onOpenChest,
     recap,
     onCloseRecap,
     onNarrateRecap,
@@ -387,6 +393,7 @@ export default function PlayView(props) {
     { id: "dice", badge: null },
     { id: "inventory", badge: itemList.length || null },
     { id: "missions", badge: activeMissionList.length || missionTotal || null },
+    ...(c.gameSystem?.enabled ? [{ id: "system", badge: chestStatus(c.gameSystem).ready ? "!" : ((c.gameSystem.quests || []).filter((q) => !q.done).length || null) }] : []),
     { id: "codex", badge: null },
     { id: "settings", badge: null },
   ];
@@ -512,6 +519,11 @@ export default function PlayView(props) {
 
           <div className="story-strip">
             {c.gmBrief || (c.tension ?? 0) > 0 ? <TensionMeter value={c.tension ?? 0} /> : null}
+            {c.gameSystem?.enabled ? (
+              <button type="button" className="story-chip story-chip-sys" onClick={() => setPlayPanel("system")} title="Abrir o Sistema">
+                <i className="ti ti-device-gamepad-2" /> Rank {c.gameSystem.rank || "E"} · {c.gameSystem.points || 0} pts
+              </button>
+            ) : null}
             {asClueList(c.clues).length ? (
               <button type="button" className="story-chip" onClick={() => setPlayPanel("missions")} title="Ver pistas descobertas">
                 <i className="ti ti-search" /> {asClueList(c.clues).length} {asClueList(c.clues).length === 1 ? "pista" : "pistas"}
@@ -1196,6 +1208,16 @@ export default function PlayView(props) {
               </div>
             </div>
           </div>
+
+          {c.gameSystem?.enabled ? (
+            <div className={`panel ${playPanel === "system" ? "active" : ""}`}>
+              <div>
+                <div className="panel-title">{c.gameSystem.name || "Sistema"}</div>
+                <div className="panel-sub">Ganhe pontos com feitos e missões. Gaste na loja.</div>
+              </div>
+              <SystemPanel campaign={c} onBuy={onBuySystemItem} onOpenChest={onOpenChest} disabled={loading || autoMode} />
+            </div>
+          ) : null}
 
           <div className={`panel ${playPanel === "codex" ? "active" : ""}`}>
             <div>

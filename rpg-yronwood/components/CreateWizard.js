@@ -3,6 +3,7 @@ import { F, Toggle } from "./FormBits";
 import AppearanceCreator from "./AppearanceCreator";
 import SpecialAbilitySettings from "./SpecialAbilitySettings";
 import NarrationSettings from "./NarrationSettings";
+import { defaultSystem } from "../lib/game-system.mjs";
 
 /** Assistente de criação de personagem (Mundo → Personagem → Começar). */
 export default function CreateWizard({ form, setForm, step, setStep, setView, charSearchLoading, handleStep1Next, finishCreate, gameStyles, steps }) {
@@ -164,10 +165,11 @@ export default function CreateWizard({ form, setForm, step, setStep, setView, ch
           <details className="wizard-fold">
             <summary>
               <span>Ajustes da mesa</span>
-              <span className="wizard-fold-preview">{form.economyMode ? "economia ligada" : "economia desligada"}</span>
+              <span className="wizard-fold-preview">{[form.economyMode ? "economia ligada" : "economia desligada", form.gameSystem?.enabled ? "Sistema ligado" : ""].filter(Boolean).join(" · ")}</span>
             </summary>
             <p className="settings-hint">Opcional. Depois você muda isso em Ajustes, durante o jogo.</p>
             <label className="economy-setting"><input type="checkbox" checked={Boolean(form.economyMode)} onChange={e => setForm(f => ({ ...f, economyMode: e.target.checked }))} /><span><strong>Modo economia</strong><small>Respostas curtas, instruções compactas e menos chamadas no automático.</small></span></label>
+            <label className="economy-setting"><input type="checkbox" checked={Boolean(form.gameSystem?.enabled)} onChange={e => setForm(f => ({ ...f, gameSystem: e.target.checked ? (f.gameSystem?.shop?.length ? { ...f.gameSystem, enabled: true } : defaultSystem()) : { ...(f.gameSystem || {}), enabled: false } }))} /><span><strong>Sistema (estilo manhwa)</strong><small>Uma tela que só você vê, com missões, pontos e uma loja de vantagens — como em Solo Leveling.</small></span></label>
             <SpecialAbilitySettings value={form.specialAbility} onChange={specialAbility => setForm(f => ({ ...f, specialAbility }))} />
             <NarrationSettings value={form.narration} onChange={narration => setForm(f => ({ ...f, narration }))} />
           </details>

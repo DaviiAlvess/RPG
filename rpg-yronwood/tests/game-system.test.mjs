@@ -76,3 +76,19 @@ test('Sistema é invisível para os outros personagens', async () => {
   assert.match(purchaseNote({ name: 'X', desc: 'y' }), /invisíveis para todos/);
   assert.match(chestNote({ name: 'X', desc: 'y', kind: 'arma' }), /invisíveis para todos/);
 });
+
+test('recompensas vão para inventário ou habilidades automaticamente', async () => {
+  const { grantReward, rewardKind, systemSkillsLine } = await import('../lib/game-system.mjs');
+  assert.equal(rewardKind({ kind: 'arma', name: 'Sabre' }), 'item');
+  assert.equal(rewardKind({ kind: 'habilidade', name: 'Salto' }), 'habilidade');
+  assert.equal(rewardKind({ name: 'Olhar de Hostilidade', desc: 'Por uma cena, você sabe quem quer ferir você.' }), 'habilidade');
+  assert.equal(rewardKind({ name: 'Bolsa de Denários', desc: 'Moedas de prata.' }), 'item');
+  const camp = { items: ['corda'], systemSkills: [] };
+  const a = grantReward(camp, { name: 'Sabre', desc: 'x', kind: 'arma' });
+  assert.deepEqual(a.patch.items, ['corda', 'Sabre']);
+  const b = grantReward(camp, { name: 'Salto', desc: 'pula alto', kind: 'habilidade' }, 'Baú');
+  assert.deepEqual(b.patch.systemSkills, [{ name: 'Salto', desc: 'pula alto', source: 'Baú' }]);
+  assert.equal(grantReward({ systemSkills: b.patch.systemSkills }, { name: 'salto', kind: 'habilidade' }).duplicate, true);
+  assert.match(systemSkillsLine({ systemSkills: b.patch.systemSkills }), /Salto/);
+  assert.match(systemPromptLines({ gameSystem: base, systemSkills: b.patch.systemSkills }).join(' '), /HABILIDADES DO SISTEMA/);
+});

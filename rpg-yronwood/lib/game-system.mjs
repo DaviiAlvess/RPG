@@ -19,7 +19,7 @@ export function normalizeSystem(sys) {
     earned: Math.max(0, Math.floor(Number(sys.earned) || 0)),
     rank: SYSTEM_RANKS.includes(sys.rank) ? sys.rank : "E",
     shop: (Array.isArray(sys.shop) ? sys.shop : []).map((i) => ({
-      id: clip(i.id || i.name, 40), name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once),
+      id: clip(i.id || i.name, 40), name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once), ...(i.kind ? { kind: clip(i.kind, 20) } : {}),
     })).filter((i) => i.name).slice(0, 20),
     purchased: (Array.isArray(sys.purchased) ? sys.purchased : []).map((p) => ({ id: clip(p.id, 40), name: clip(p.name, 60), at: p.at || 0 })).slice(-60),
     quests: (Array.isArray(sys.quests) ? sys.quests : []).map((q) => ({
@@ -97,7 +97,7 @@ export function buyItem(sys, itemId, now = Date.now()) {
 
 /** Nota interna para o Mestre introduzir a compra na cena seguinte. */
 export function purchaseNote(item) {
-  return `O jogador acabou de comprar na loja do Sistema: "${item.name}" — ${item.desc}. Na próxima resposta, mostre a notificação do Sistema e introduza o efeito de forma coerente com a época e a cena, sem resolver a situação de graça. O Sistema, a loja e o baú são invisíveis para todos: nenhum personagem vê a tela, as notificações ou o item surgindo do nada. O item aparece de forma discreta e plausível (já está na bolsa, no bolso ou à mão quando o jogador procura), e ninguém comenta a origem. Uma habilidade se manifesta como talento do próprio jogador.`;
+  return `O jogador acabou de comprar na loja do Sistema: "${item.name}" — ${item.desc}. O item já está no inventário (ou, se for habilidade, já está na ficha do jogador). Na próxima resposta, mostre a notificação do Sistema e introduza o efeito de forma coerente com a época e a cena, sem resolver a situação de graça. O Sistema, a loja e o baú são invisíveis para todos: nenhum personagem vê a tela, as notificações ou o item surgindo do nada. O item aparece de forma discreta e plausível (já está na bolsa, no bolso ou à mão quando o jogador procura), e ninguém comenta a origem. Uma habilidade se manifesta como talento do próprio jogador.`;
 }
 
 export function systemPromptLines(c = {}, { short = false } = {}) {
@@ -109,7 +109,8 @@ export function systemPromptLines(c = {}, { short = false } = {}) {
     `Estado: Rank ${s.rank}, ${s.points} pontos. Missões abertas: ${open.length ? open.join(" | ") : "nenhuma"}. Itens já comprados: ${s.purchased.map((p) => p.name).join(", ") || "nenhum"}.`,
     "Tags ocultas: conceda pontos por feitos reais com [SISTEMA_PONTOS:+n|motivo] (5–40; nunca por andar ou conversar à toa). Ofereça uma missão do Sistema de vez em quando com [SISTEMA_MISSAO:objetivo concreto|recompensa] (10–100), no máximo duas abertas. Ao cumprir: [SISTEMA_MISSAO_FIM:objetivo]. Missões podem ter prazo e penalidade narrativa, mas nunca obrigam o jogador.",
     "O Sistema não resolve a história: dá vantagens pequenas e cobra caro. Mantenha a tensão da época e as consequências reais.",
-  ];
+    systemSkillsLine(c),
+  ].filter(Boolean);
   return short ? [lines.join(" ")] : lines;
 }
 
@@ -181,13 +182,13 @@ export function openChest(sys, day = 0, rnd = Math.random, now = Date.now()) {
 }
 
 export function chestNote(reward) {
-  return `O jogador abriu o baú semanal do Sistema e ganhou de graça: "${reward.name}" (${reward.kind}) — ${reward.desc}. Na próxima resposta, mostre a notificação do Sistema e faça a recompensa aparecer de forma coerente com o mundo e a cena. O Sistema, a loja e o baú são invisíveis para todos: nenhum personagem vê a tela, as notificações ou o item surgindo do nada. O item aparece de forma discreta e plausível (já está na bolsa, no bolso ou à mão quando o jogador procura), e ninguém comenta a origem. Uma habilidade se manifesta como talento do próprio jogador.`;
+  return `O jogador abriu o baú semanal do Sistema e ganhou de graça: "${reward.name}" (${reward.kind}) — ${reward.desc}. A recompensa já foi guardada no inventário (ou nas habilidades, se for habilidade). Na próxima resposta, mostre a notificação do Sistema e faça a recompensa aparecer de forma coerente com o mundo e a cena. O Sistema, a loja e o baú são invisíveis para todos: nenhum personagem vê a tela, as notificações ou o item surgindo do nada. O item aparece de forma discreta e plausível (já está na bolsa, no bolso ou à mão quando o jogador procura), e ninguém comenta a origem. Uma habilidade se manifesta como talento do próprio jogador.`;
 }
 
 // ── Loja gerada para o mundo ──
 export function systemGenRequest(camp = {}) {
   return {
-    systemPrompt: "Você cria a loja e o baú de recompensas do 'Sistema' (estilo manhwa Solo Leveling) para uma aventura de RPG. Responda só com JSON válido, sem texto fora dele, no formato {\"shop\":[{\"name\":\"\",\"desc\":\"\",\"cost\":0,\"once\":false}],\"chest\":[{\"name\":\"\",\"desc\":\"\",\"kind\":\"arma|habilidade|equipamento|item\"}]}. Seis itens em cada lista, em português. Tudo deve pertencer a ESTE mundo e época (armas, magias, tecnologia, moedas e costumes locais). Vantagens pequenas e com limite claro; nada que resolva a história. Custos de 10 a 60. Descrições de uma frase.",
+    systemPrompt: "Você cria a loja e o baú de recompensas do 'Sistema' (estilo manhwa Solo Leveling) para uma aventura de RPG. Responda só com JSON válido, sem texto fora dele, no formato {\"shop\":[{\"name\":\"\",\"desc\":\"\",\"cost\":0,\"once\":false,\"kind\":\"arma|habilidade|equipamento|item\"}],\"chest\":[{\"name\":\"\",\"desc\":\"\",\"kind\":\"arma|habilidade|equipamento|item\"}]}. Seis itens em cada lista, em português. Tudo deve pertencer a ESTE mundo e época (armas, magias, tecnologia, moedas e costumes locais). Vantagens pequenas e com limite claro; nada que resolva a história. Custos de 10 a 60. Descrições de uma frase.",
     content: JSON.stringify({ mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 1500), personagem: camp.charName, habilidades: camp.charSkills }),
   };
 }
@@ -196,10 +197,45 @@ export function parseGeneratedSystem(text) {
   try {
     const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "");
     const json = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
-    const shop = (json.shop || []).map((i, n) => ({ id: `w${n}-${clip(i.name, 20).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.min(80, Math.max(5, Math.floor(Number(i.cost) || 20))), once: Boolean(i.once) })).filter((i) => i.name && i.desc).slice(0, 8);
+    const shop = (json.shop || []).map((i, n) => ({ id: `w${n}-${clip(i.name, 20).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.min(80, Math.max(5, Math.floor(Number(i.cost) || 20))), once: Boolean(i.once), kind: POOL_KINDS.includes(i.kind) ? i.kind : undefined })).filter((i) => i.name && i.desc).slice(0, 8);
     const chest = (json.chest || []).map((i) => ({ name: clip(i.name, 60), desc: clip(i.desc, 240), kind: POOL_KINDS.includes(i.kind) ? i.kind : "item" })).filter((i) => i.name && i.desc).slice(0, 8);
     return shop.length >= 3 ? { shop, chest } : null;
   } catch {
     return null;
   }
+}
+
+// ── Recompensas vão direto para o inventário ou para as habilidades ──
+const SKILL_HINT = /(por uma cena|uma vez por|aprende|t[ée]cnica|habilidade|olhar|sabe |entende|fala |lembra|move-se|reage|corre |prende a respira|nunca escorrega|detecta|percebe|enxerga|ningu[ée]m lembra|reflexos|instinto|pele resistente|sorte)/i;
+
+/** "habilidade" ou "item" (arma, equipamento e item vão para o inventário). */
+export function rewardKind(reward = {}) {
+  if (reward.kind === "habilidade") return "habilidade";
+  if (["arma", "equipamento", "item"].includes(reward.kind)) return "item";
+  return SKILL_HINT.test(`${reward.name} ${reward.desc}`) ? "habilidade" : "item";
+}
+
+export function asSystemSkills(value) {
+  return Array.isArray(value)
+    ? value.filter((s) => s && s.name).map((s) => ({ name: clip(s.name, 60), desc: clip(s.desc, 240), source: clip(s.source || "Sistema", 30) })).slice(0, 40)
+    : [];
+}
+
+/** Patch da campanha com a recompensa já guardada no lugar certo. */
+export function grantReward(camp = {}, reward = {}, source = "Sistema") {
+  const kind = rewardKind(reward);
+  if (kind === "habilidade") {
+    const skills = asSystemSkills(camp.systemSkills);
+    if (skills.some((s) => s.name.toLowerCase() === String(reward.name).toLowerCase())) return { kind, patch: {}, duplicate: true };
+    return { kind, patch: { systemSkills: [...skills, { name: reward.name, desc: reward.desc, source }] } };
+  }
+  const items = Array.isArray(camp.items) ? camp.items : [];
+  return { kind, patch: { items: [...items, reward.name] } };
+}
+
+export function systemSkillsLine(camp = {}) {
+  const skills = asSystemSkills(camp.systemSkills);
+  return skills.length
+    ? `HABILIDADES DO SISTEMA que o jogador já tem (valem como talento dele, invisíveis aos outros): ${skills.map((s) => `${s.name} — ${s.desc}`).join(" | ")}. Respeite os limites descritos.`
+    : "";
 }

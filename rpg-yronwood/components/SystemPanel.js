@@ -1,4 +1,4 @@
-import { normalizeSystem, SYSTEM_RANKS } from "../lib/game-system.mjs";
+import { normalizeSystem, SYSTEM_RANKS, asSystemSkills } from "../lib/game-system.mjs";
 import TreasureChest from "./TreasureChest";
 
 /** Janela do Sistema: status, missões e loja. */
@@ -35,6 +35,15 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
         {done.length ? <details className="sys-done"><summary>Cumpridas ({done.length})</summary>{done.map((q) => <div key={q.id} className="sys-quest done"><i className="ti ti-check" /> <span>{q.text}</span><b>+{q.reward}</b></div>)}</details> : null}
       </section>
 
+      {asSystemSkills(campaign.systemSkills).length ? (
+        <section className="sys-window">
+          <div className="sys-sub">SUAS HABILIDADES</div>
+          {asSystemSkills(campaign.systemSkills).map((sk) => (
+            <div key={sk.name} className="sys-quest"><i className="ti ti-bolt" aria-hidden="true" /> <span><strong>{sk.name}</strong> — {sk.desc}</span></div>
+          ))}
+        </section>
+      ) : null}
+
       <section className="sys-window">
         <div className="sys-sub">LOJA</div>
         <div className="sys-shop">
@@ -52,7 +61,7 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
             );
           })}
         </div>
-        <p className="sys-empty">O item aparece na próxima cena, do jeito que fizer sentido na época.</p>
+        <p className="sys-empty">Itens e armas vão direto para o inventário; habilidades, para a Ficha. Só você sabe de onde vieram.</p>
       </section>
 
       {s.log.length ? (

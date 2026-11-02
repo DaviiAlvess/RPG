@@ -41,7 +41,7 @@ import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
 import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
-import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem } from "../lib/game-system.mjs";
+import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward } from "../lib/game-system.mjs";
 import CreateWizard from "../components/CreateWizard";
 import PresetLibrary from "../components/PresetLibrary";
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
@@ -1004,6 +1004,7 @@ export default function RPG() {
       lastOffscreenTurn: save.lastOffscreenTurn || 0,
       places: save.places || [],
       gameSystem: save.gameSystem || active.gameSystem,
+      systemSkills: save.systemSkills || [],
       achievements: active.achievements || save.achievements || [],
     };
     setActive(updated);
@@ -1711,6 +1712,7 @@ export default function RPG() {
       hp: 100,
       gameTime: defaultTime,
       clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, places: [], achievements: [],
+      systemSkills: [],
       gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
@@ -1886,18 +1888,21 @@ export default function RPG() {
     if (!active || sending.current) return;
     const r = buyItem(active.gameSystem, itemId);
     if (!r.ok) { showNotification(r.error, "warning"); return; }
-    const updated = { ...active, gameSystem: r.system };
+    const grant = grantReward(active, r.item, "Loja do Sistema");
+    const updated = { ...active, gameSystem: r.system, ...grant.patch };
     setActive(updated);
     saveCamp(active.id, updated);
     pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item)].filter(Boolean).join(" ");
-    showNotification(`【${r.system.name}】 Comprado: ${r.item.name}. Aparece na próxima cena.`, "success");
+    showNotification(`【${r.system.name}】 Comprado: ${r.item.name} — ${grant.kind === "habilidade" ? (grant.duplicate ? "você já tinha essa habilidade" : "nova habilidade na Ficha") : "guardado no inventário"}.`, "success");
   };
 
   const openSystemChest = () => {
     if (!active || sending.current) return null;
     const r = openChest(active.gameSystem, normalizeGameTime(gameTimeRef.current).totalDaysElapsed || 0);
     if (!r.ok) { showNotification(r.error, "warning"); return null; }
-    const updated = { ...active, gameSystem: r.system };
+    const grant = grantReward(active, r.reward, "Baú do Sistema");
+    const updated = { ...active, gameSystem: r.system, ...grant.patch };
+    showNotification(grant.kind === "habilidade" ? `Nova habilidade na Ficha: ${r.reward.name}` : `Guardado no inventário: ${r.reward.name}`, "success", { duration: 6000 });
     setActive(updated);
     saveCamp(active.id, updated);
     pendingLevelNoteRef.current = [pendingLevelNoteRef.current, chestNote(r.reward)].filter(Boolean).join(" ");

@@ -16,7 +16,7 @@ import { asClueList } from "../lib/story-progress.mjs";
 import { suggestActions } from "../lib/codex.mjs";
 import CodexPanel from "./CodexPanel";
 import SystemPanel from "./SystemPanel";
-import { chestStatus } from "../lib/game-system.mjs";
+import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
@@ -845,6 +845,17 @@ export default function PlayView(props) {
             <StoryConditionEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
 
             <AppearanceEditor campaign={c} onSave={onUpdateCharacter} disabled={loading || autoMode} />
+
+            {asSystemSkills(c.systemSkills).length ? (
+              <section className="play-section card-box" aria-labelledby="sheet-sys-skills">
+                <h3 id="sheet-sys-skills" className="play-section-title">Habilidades do Sistema</h3>
+                <ul className="sys-skill-list">
+                  {asSystemSkills(c.systemSkills).map((sk) => (
+                    <li key={sk.name}><strong>{sk.name}</strong><span>{sk.desc}</span><small>{sk.source}</small></li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
 
             <section className="play-section game-time-card" aria-labelledby="sheet-timeline">
               <h3 id="sheet-timeline" className="play-section-title">Linha do tempo</h3>

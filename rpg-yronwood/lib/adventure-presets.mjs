@@ -1462,7 +1462,7 @@ export const ADVENTURE_PRESETS = [
       { name: "Mapa do Tesouro Verdadeiro", desc: "Um mapa real de um esconderijo pirata da região.", kind: "item" },
       { name: "Equilíbrio de Gaivota", desc: "Nunca escorrega ou cai do cordame, nem na tempestade.", kind: "habilidade" },
     ], shop: [
-      { id: "previsao", name: "Leitura do Céu", desc: "Prevê o tempo com precisão para as próximas 48 horas.", cost: 20 },
+      { id: "previsao", name: "Leitura do Céu", desc: "Prevê o tempo com precisão para as próximas 48 horas.", cost: 20, kind: "habilidade", once: true },
       { id: "folego", name: "Fôlego Profundo", desc: "Prende a respiração por até cinco minutos debaixo d'água.", cost: 35, once: true },
       { id: "espada", name: "Esgrima de Convés", desc: "O corpo aprende a lutar com sabre como um pirata veterano.", cost: 40, once: true },
       { id: "remedio", name: "Kit Médico Moderno", desc: "Antisséptico, bandagens e vitamina C contra escorbuto.", cost: 25 },

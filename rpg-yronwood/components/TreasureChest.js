@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { chestStatus, formatWaitDays } from "../lib/game-system.mjs";
+import { chestStatus, formatWaitDays, rewardKind } from "../lib/game-system.mjs";
 
 const KIND_LABEL = { arma: "Arma", habilidade: "Habilidade", equipamento: "Equipamento", item: "Item" };
 
@@ -68,7 +68,7 @@ export default function TreasureChest({ system, gameDay = 0, onOpen, disabled })
           <span className="chest-kind">{KIND_LABEL[reward.kind] || "Recompensa"}</span>
           <strong>{reward.name}</strong>
           <p>{reward.desc}</p>
-          <small>Aparece na próxima cena.</small>
+          <small>{rewardKind(reward) === "habilidade" ? "Nova habilidade adicionada à sua Ficha." : "Guardado no seu inventário."}</small>
         </div>
       ) : status.ready ? (
         <p className="chest-hint">Uma recompensa grátis te espera: arma, habilidade ou item deste mundo. Toque no baú. Um novo baú aparece a cada semana da história.</p>

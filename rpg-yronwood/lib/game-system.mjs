@@ -5,7 +5,7 @@
 const clip = (v, max) => String(v || "").replace(/\s+/g, " ").trim().slice(0, max);
 const sid = () => `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
-export const SYSTEM_TAG_PATTERN = /\[SISTEMA_(PONTOS|MISSAO|MISSÃO|MISSAO_FIM|MISSÃO_FIM|RANK):[^\]]*\]/gi;
+export const SYSTEM_TAG_PATTERN = /\[SISTEMA_(PONTOS|MISSAO|MISSÃO|MISSAO_FIM|MISSÃO_FIM|RANK|ABATE):[^\]]*\]/gi;
 export const stripSystemTags = (text) => String(text || "").replace(SYSTEM_TAG_PATTERN, "");
 
 export const SYSTEM_RANKS = ["E", "D", "C", "B", "A", "S"];
@@ -18,6 +18,8 @@ export function normalizeSystem(sys) {
     points: Math.max(0, Math.floor(Number(sys.points) || 0)),
     earned: Math.max(0, Math.floor(Number(sys.earned) || 0)),
     rank: SYSTEM_RANKS.includes(sys.rank) ? sys.rank : "E",
+    level: Math.max(1, Math.floor(Number(sys.level) || 1)),
+    kills: Math.max(0, Math.floor(Number(sys.kills) || 0)),
     shop: (Array.isArray(sys.shop) ? sys.shop : []).map((i) => ({
       id: clip(i.id || i.name, 40), name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once), ...(i.kind ? { kind: clip(i.kind, 20) } : {}),
     })).filter((i) => i.name).slice(0, 20),
@@ -32,13 +34,38 @@ export function normalizeSystem(sys) {
   };
 }
 
-/** Rank sobe com o total de pontos já ganhos. */
-export function rankFor(earned) {
-  const steps = [0, 50, 150, 350, 700, 1200];
-  let r = 0;
-  steps.forEach((min, i) => { if (earned >= min) r = i; });
-  return SYSTEM_RANKS[r];
+// ── Nível por meta ──
+// A meta conta os pontos GANHOS (não o saldo): gastar na loja nunca tira nível.
+/** Total de pontos ganhos para chegar ao nível `level + 1`: 50, 150, 300, 500, 750… */
+export function metaFor(level) {
+  const l = Math.max(1, Math.floor(Number(level) || 1));
+  return 25 * l * (l + 1);
 }
+
+export function rankForLevel(level) {
+  const l = Math.max(1, Number(level) || 1);
+  return l >= 30 ? "S" : l >= 20 ? "A" : l >= 15 ? "B" : l >= 10 ? "C" : l >= 5 ? "D" : "E";
+}
+
+/** Mantido para saves antigos: rank a partir dos pontos ganhos. */
+export function rankFor(earned) {
+  let level = 1;
+  while (earned >= metaFor(level) && level < 99) level++;
+  return rankForLevel(level);
+}
+
+/** Progresso da meta atual (para a barra). */
+export function metaProgress(sys) {
+  const s = normalizeSystem(sys);
+  if (!s) return null;
+  const prev = s.level > 1 ? metaFor(s.level - 1) : 0;
+  const next = metaFor(s.level);
+  const done = Math.max(0, s.earned - prev);
+  const need = next - prev;
+  return { level: s.level, earned: s.earned, next, done, need, pct: Math.min(100, (done / need) * 100), left: Math.max(0, next - s.earned) };
+}
+
+const KILL_POINTS = { comum: 10, fraco: 5, forte: 25, elite: 40, chefe: 80, boss: 80 };
 
 /** Lê as tags do Sistema numa resposta do Mestre. Devolve { system, events }. */
 export function applySystemTags(text, sys) {
@@ -54,6 +81,16 @@ export function applySystemTags(text, sys) {
     const why = clip(m[2], 80);
     s.log.push(`${n > 0 ? "+" : ""}${n} ${why}`.trim());
     events.push({ type: "points", amount: n, reason: why });
+  }
+  for (const m of raw.matchAll(/\[SISTEMA_ABATE:([^\]|]+)(?:\|\s*([^\]|]+))?(?:\|[^\]]*)?\]/gi)) {
+    const who = clip(m[1], 60);
+    const tier = String(m[2] || "comum").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const n = KILL_POINTS[tier] || (/^\d+$/.test(tier) ? Math.min(150, Number(tier)) : KILL_POINTS.comum);
+    s.points += n;
+    s.earned += n;
+    s.kills += 1;
+    s.log.push(`+${n} abate: ${who}`);
+    events.push({ type: "kill", amount: n, who, tier });
   }
   for (const m of raw.matchAll(/\[SISTEMA_MISS(?:A|Ã)O:([^\]|]+)(?:\|\s*(\d+))?\]/gi)) {
     const t = clip(m[1], 160);
@@ -72,8 +109,14 @@ export function applySystemTags(text, sys) {
     s.log.push(`+${q.reward} missão: ${clip(q.text, 60)}`);
     events.push({ type: "quest_done", quest: q });
   }
+  // Bateu a meta → sobe de nível (pode subir mais de um de uma vez).
+  while (s.earned >= metaFor(s.level) && s.level < 99) {
+    s.level += 1;
+    events.push({ type: "level", level: s.level });
+  }
   const before = s.rank;
-  s.rank = SYSTEM_RANKS.indexOf(rankFor(s.earned)) > SYSTEM_RANKS.indexOf(s.rank) ? rankFor(s.earned) : s.rank;
+  const byLevel = rankForLevel(s.level);
+  if (SYSTEM_RANKS.indexOf(byLevel) > SYSTEM_RANKS.indexOf(s.rank)) s.rank = byLevel;
   if (s.rank !== before) events.push({ type: "rank", rank: s.rank });
   s.log = s.log.slice(-20);
   s.quests = s.quests.slice(-30);
@@ -106,8 +149,10 @@ export function systemPromptLines(c = {}, { short = false } = {}) {
   const open = s.quests.filter((q) => !q.done).map((q) => `${q.text} (+${q.reward})`);
   const lines = [
     `O SISTEMA: só o jogador vê uma interface chamada "${s.name}", no estilo de manhwa (Solo Leveling). Quando algo importante acontecer, mostre uma notificação curta numa linha própria começando com 【${s.name}】, em tom frio e objetivo. Ninguém mais no mundo vê ou ouve o Sistema: a tela, a loja, as missões e o baú existem só para o jogador. NPCs nunca reagem à interface nem sabem que ela existe; itens comprados aparecem de forma discreta e plausível, e habilidades parecem talento natural. Se o jogador falar do Sistema em voz alta, os outros só ouvem alguém falando sozinho.`,
-    `Estado: Rank ${s.rank}, ${s.points} pontos. Missões abertas: ${open.length ? open.join(" | ") : "nenhuma"}. Itens já comprados: ${s.purchased.map((p) => p.name).join(", ") || "nenhum"}.`,
-    "Tags ocultas: conceda pontos por feitos reais com [SISTEMA_PONTOS:+n|motivo] (5–40; nunca por andar ou conversar à toa). Ofereça uma missão do Sistema de vez em quando com [SISTEMA_MISSAO:objetivo concreto|recompensa] (10–100), no máximo duas abertas. Ao cumprir: [SISTEMA_MISSAO_FIM:objetivo]. Missões podem ter prazo e penalidade narrativa, mas nunca obrigam o jogador.",
+    `Estado: Nível ${s.level} (meta: ${metaFor(s.level)} pontos ganhos; já ganhou ${s.earned}), Rank ${s.rank}, ${s.points} pontos para gastar, ${s.kills} abates. Missões abertas: ${open.length ? open.join(" | ") : "nenhuma"}. Itens já comprados: ${s.purchased.map((p) => p.name).join(", ") || "nenhum"}.`,
+    "ABATES: toda vez que o jogador matar ou derrotar de vez um inimigo (pessoa, monstro, fera hostil), emita [SISTEMA_ABATE:quem foi|comum] — use comum, forte, elite ou chefe conforme o perigo. Um abate por inimigo; nunca por inimigo que fugiu, foi poupado ou apenas ferido.",
+    "AÇÕES: conceda pontos por ações e feitos reais (vencer um desafio, salvar alguém, enganar um poderoso, descobrir algo grande) com [SISTEMA_PONTOS:+n|motivo] (5–40; nunca por andar ou conversar à toa). Os pontos são do jogador para gastar na loja como quiser; o nível sobe sozinho quando os pontos GANHOS batem a meta.",
+    "Tags ocultas: Ofereça uma missão do Sistema de vez em quando com [SISTEMA_MISSAO:objetivo concreto|recompensa] (10–100), no máximo duas abertas. Ao cumprir: [SISTEMA_MISSAO_FIM:objetivo]. Missões podem ter prazo e penalidade narrativa, mas nunca obrigam o jogador.",
     "O Sistema não resolve a história: dá vantagens pequenas e cobra caro. Mantenha a tensão da época e as consequências reais.",
     systemSkillsLine(c),
   ].filter(Boolean);

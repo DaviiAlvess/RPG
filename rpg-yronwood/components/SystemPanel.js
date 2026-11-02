@@ -1,4 +1,4 @@
-import { normalizeSystem, SYSTEM_RANKS, asSystemSkills } from "../lib/game-system.mjs";
+import { normalizeSystem, SYSTEM_RANKS, asSystemSkills, metaProgress } from "../lib/game-system.mjs";
 import TreasureChest from "./TreasureChest";
 
 /** Janela do Sistema: status, missões e loja. */
@@ -16,10 +16,18 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
         <div className="sys-title">【{s.name}】</div>
         <div className="sys-status">
           <div><span>Usuário</span><strong>{campaign.charName}</strong></div>
+          <div><span>Nível</span><strong className="sys-rank">{s.level}</strong></div>
           <div><span>Rank</span><strong className="sys-rank">{s.rank}</strong></div>
-          <div><span>Pontos</span><strong>{s.points}</strong></div>
-          <div><span>Total ganho</span><strong>{s.earned}</strong></div>
+          <div><span>Pontos para gastar</span><strong>{s.points}</strong></div>
+          <div><span>Abates</span><strong>{s.kills}</strong></div>
         </div>
+        {(() => { const m = metaProgress(campaign.gameSystem); return m ? (
+          <div className="sys-meta">
+            <div className="sys-meta-head"><span>META DO NÍVEL {m.level + 1}</span><b>{m.earned} / {m.next} pontos ganhos</b></div>
+            <div className="sys-meta-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(m.pct)}><span style={{ width: `${m.pct}%` }} /></div>
+            <small>Faltam {m.left}. Abates e ações dão pontos; gastar na loja não tira nível.</small>
+          </div>
+        ) : null; })()}
         <div className="sys-ranks" aria-label={`Rank ${s.rank}`}>
           {SYSTEM_RANKS.map((r, i) => <span key={r} className={i <= rankIdx ? "on" : ""}>{r}</span>)}
         </div>

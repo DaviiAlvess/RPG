@@ -600,3 +600,9 @@ button:disabled { cursor: not-allowed; }
 .sys-skill-list strong { font-size: 14px; color: var(--text-primary); }
 .sys-skill-list span { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
 .sys-skill-list small { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: #8bbbe8; }
+.sys-meta { display: grid; gap: 6px; }
+.sys-meta-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; letter-spacing: .14em; color: #8bbbe8; }
+.sys-meta-head b { letter-spacing: 0; color: #dcebff; font-weight: 600; }
+.sys-meta-bar { height: 10px; border-radius: 999px; background: rgba(110, 180, 255, .15); overflow: hidden; border: 1px solid rgba(110, 180, 255, .35); }
+.sys-meta-bar span { display: block; height: 100%; background: linear-gradient(90deg, #4fa3ff, #9fd8ff); box-shadow: 0 0 10px rgba(120, 190, 255, .7); transition: width .6s ease; }
+.sys-meta small { font-size: 11px; color: #8bbbe8; }

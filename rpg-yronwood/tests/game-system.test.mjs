@@ -15,12 +15,23 @@ test('pontos, missão e conclusão', () => {
   assert.equal(applySystemTags('[SISTEMA_PONTOS:+5]', null).events.length, 0);
 });
 
-test('rank sobe com pontos ganhos', () => {
+test('abates dão pontos por perigo e a meta sobe o nível', async () => {
+  const { metaFor, metaProgress } = await import('../lib/game-system.mjs');
+  assert.deepEqual([metaFor(1), metaFor(2), metaFor(3)], [50, 150, 300]);
+  let r = applySystemTags('[SISTEMA_ABATE:Bandido|comum] [SISTEMA_ABATE:Capitão|chefe]', base);
+  assert.equal(r.system.points, 90);
+  assert.equal(r.system.kills, 2);
+  assert.equal(r.system.level, 2);
+  assert.ok(r.events.some((e) => e.type === 'level' && e.level === 2));
+  const spent = buyItem(r.system, 'po').system;
+  assert.equal(spent.points, 70);
+  assert.equal(spent.level, 2);
+  assert.equal(metaProgress(spent).next, 150);
+  r = applySystemTags('[SISTEMA_PONTOS:+300|feito]', spent);
+  assert.equal(r.system.level, 4);
+  assert.equal(r.events.filter((e) => e.type === 'level').length, 2);
   assert.equal(rankFor(0), 'E');
-  assert.equal(rankFor(160), 'C');
-  const r = applySystemTags('[SISTEMA_PONTOS:+60|x]', base);
-  assert.equal(r.system.rank, 'D');
-  assert.ok(r.events.some((e) => e.type === 'rank'));
+  assert.equal(stripSystemTags('a [SISTEMA_ABATE:x|forte] b').replace(/\s+/g, ' '), 'a b');
 });
 
 test('loja cobra, bloqueia sem saldo e item único', () => {

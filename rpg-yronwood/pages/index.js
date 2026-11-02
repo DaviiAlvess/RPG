@@ -1487,6 +1487,8 @@ export default function RPG() {
         if (ev.type === "quest") showNotification(`【${name}】 Nova missão: ${ev.quest.text} (+${ev.quest.reward})`, "info", { duration: 7000 });
         if (ev.type === "quest_done") showNotification(`【${name}】 Missão cumprida: ${ev.quest.text} (+${ev.quest.reward})`, "success", { duration: 7000 });
         if (ev.type === "rank") showNotification(`【${name}】 Rank ${ev.rank} alcançado.`, "success", { duration: 7000 });
+        if (ev.type === "kill") showNotification(`【${name}】 Inimigo abatido: ${ev.who} (+${ev.amount})`, "success", { duration: 4500 });
+        if (ev.type === "level") showNotification(`【${name}】 META BATIDA — Nível ${ev.level}!`, "success", { duration: 8000 });
       });
       if (choiceResult.added.length) showNotification("Sua decisão foi registrada. Ela pode voltar mais tarde.", "info", { duration: 4500 });
       if (newChapter) showNotification(`Capítulo ${newChapter.number}: ${newChapter.title}`, "success", { duration: 5000 });
@@ -1621,6 +1623,19 @@ export default function RPG() {
         ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
       };
+      // Meta do Sistema batida → o nível da Ficha sobe junto (com a cura do level up).
+      const systemLevels = systemResult.events.filter((ev) => ev.type === "level").length;
+      if (systemLevels > 0) {
+        const newLevel = (Number(updated.level) || 1) + systemLevels;
+        updated.level = newLevel;
+        updated.experience = Math.max(Number(updated.experience) || 0, (newLevel - 1) * 100);
+        updated.hp = Math.min(100, (Number(updated.hp) || 0) + 25 * systemLevels);
+        setLevel(newLevel);
+        setExperience(updated.experience);
+        setHp(updated.hp);
+        playSound("levelup");
+        pendingLevelNoteRef.current = [pendingLevelNoteRef.current, `O Sistema registrou que o jogador bateu a meta e subiu para o nível ${newLevel}. Mostre a notificação do Sistema em uma linha; o corpo se sente mais forte. Não fale nem decida pelo jogador.`].filter(Boolean).join(" ");
+      }
       const unlocked = newAchievements(updated);
       if (unlocked.length) {
         updated.achievements = [...(updated.achievements || []), ...unlocked];
@@ -1713,7 +1728,7 @@ export default function RPG() {
       gameTime: defaultTime,
       clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, places: [], achievements: [],
       systemSkills: [],
-      gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", purchased: [], quests: [], log: [] } : active.gameSystem,
+      gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", level: 1, kills: 0, purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],
       timelineEvents: [createAdventureStartEvent()],
     };

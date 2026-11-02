@@ -521,7 +521,7 @@ export default function PlayView(props) {
             {c.gmBrief || (c.tension ?? 0) > 0 ? <TensionMeter value={c.tension ?? 0} /> : null}
             {c.gameSystem?.enabled ? (
               <button type="button" className="story-chip story-chip-sys" onClick={() => setPlayPanel("system")} title="Abrir o Sistema">
-                <i className="ti ti-device-gamepad-2" /> Rank {c.gameSystem.rank || "E"} · {c.gameSystem.points || 0} pts
+                <i className="ti ti-device-gamepad-2" /> Nv {c.gameSystem.level || 1} · Rank {c.gameSystem.rank || "E"} · {c.gameSystem.points || 0} pts
               </button>
             ) : null}
             {asClueList(c.clues).length ? (

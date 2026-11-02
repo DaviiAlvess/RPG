@@ -1381,6 +1381,8 @@ export default function RPG() {
   };
 
   const rollDiceSides = (sides) => {
+    // d20 com teste pendente resolve o teste na história, como o botão do chat.
+    if (sides === 20 && pendingTest && !sending.current) { rollD20(); return; }
     const result = Math.floor(Math.random() * sides) + 1;
     setDiceNum(result);
     setDiceLabel(
@@ -1784,7 +1786,7 @@ export default function RPG() {
     setSkills(next.skills);
     setHp(next.hp);
     showNotification(`Você subiu para o nível ${next.level}!`, "success");
-    pendingLevelNoteRef.current = `O personagem subiu para o nível ${next.level}. Não fale nem decida pelo jogador.`;
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, `O personagem subiu para o nível ${next.level}. Não fale nem decida pelo jogador.`].filter(Boolean).join(" ");
     if (active) {
       const updated = {
         ...active,
@@ -1893,7 +1895,7 @@ export default function RPG() {
 
   const openSystemChest = () => {
     if (!active || sending.current) return null;
-    const r = openChest(active.gameSystem);
+    const r = openChest(active.gameSystem, normalizeGameTime(gameTimeRef.current).totalDaysElapsed || 0);
     if (!r.ok) { showNotification(r.error, "warning"); return null; }
     const updated = { ...active, gameSystem: r.system };
     setActive(updated);

@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { chestStatus, formatWait } from "../lib/game-system.mjs";
+import { useState } from "react";
+import { chestStatus, formatWaitDays } from "../lib/game-system.mjs";
 
 const KIND_LABEL = { arma: "Arma", habilidade: "Habilidade", equipamento: "Equipamento", item: "Item" };
 
@@ -40,12 +40,10 @@ export function ChestIcon({ size = 96, open = false }) {
 }
 
 /** Cartão do baú semanal: pronto (brilhando), abrindo (animação) ou aguardando. */
-export default function TreasureChest({ system, onOpen, disabled }) {
+export default function TreasureChest({ system, gameDay = 0, onOpen, disabled }) {
   const [phase, setPhase] = useState("idle");
   const [reward, setReward] = useState(null);
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(t); }, []);
-  const status = chestStatus(system, now);
+  const status = chestStatus(system, gameDay);
 
   const open = () => {
     if (phase !== "idle" || !status.ready || disabled) return;
@@ -73,9 +71,9 @@ export default function TreasureChest({ system, onOpen, disabled }) {
           <small>Aparece na próxima cena.</small>
         </div>
       ) : status.ready ? (
-        <p className="chest-hint">Uma recompensa grátis te espera: arma, habilidade ou item deste mundo. Toque no baú.</p>
+        <p className="chest-hint">Uma recompensa grátis te espera: arma, habilidade ou item deste mundo. Toque no baú. Um novo baú aparece a cada semana da história.</p>
       ) : (
-        <p className="chest-hint"><i className="ti ti-lock" aria-hidden="true" /> Próximo baú em <strong>{formatWait(status.msLeft)}</strong>.</p>
+        <p className="chest-hint"><i className="ti ti-lock" aria-hidden="true" /> Próximo baú em <strong>{formatWaitDays(status.daysLeft)}</strong> no calendário da história.</p>
       )}
     </section>
   );

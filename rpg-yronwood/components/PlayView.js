@@ -393,7 +393,7 @@ export default function PlayView(props) {
     { id: "dice", badge: null },
     { id: "inventory", badge: itemList.length || null },
     { id: "missions", badge: activeMissionList.length || missionTotal || null },
-    ...(c.gameSystem?.enabled ? [{ id: "system", badge: chestStatus(c.gameSystem).ready ? "!" : ((c.gameSystem.quests || []).filter((q) => !q.done).length || null) }] : []),
+    ...(c.gameSystem?.enabled ? [{ id: "system", badge: chestStatus(c.gameSystem, gameTime?.totalDaysElapsed || 0).ready ? "!" : ((c.gameSystem.quests || []).filter((q) => !q.done).length || null) }] : []),
     { id: "codex", badge: null },
     { id: "settings", badge: null },
   ];
@@ -1215,7 +1215,7 @@ export default function PlayView(props) {
                 <div className="panel-title">{c.gameSystem.name || "Sistema"}</div>
                 <div className="panel-sub">Ganhe pontos com feitos e missões. Gaste na loja.</div>
               </div>
-              <SystemPanel campaign={c} onBuy={onBuySystemItem} onOpenChest={onOpenChest} disabled={loading || autoMode} />
+              <SystemPanel campaign={c} gameDay={gameTime?.totalDaysElapsed || 0} onBuy={onBuySystemItem} onOpenChest={onOpenChest} disabled={loading || autoMode} />
             </div>
           ) : null}
 

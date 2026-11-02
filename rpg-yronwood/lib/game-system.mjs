@@ -27,7 +27,7 @@ export function normalizeSystem(sys) {
     })).filter((q) => q.text).slice(-30),
     log: (Array.isArray(sys.log) ? sys.log : []).map((l) => clip(l, 120)).slice(-20),
     chestPool: Array.isArray(sys.chestPool) ? sys.chestPool.slice(0, 12) : undefined,
-    lastChestAt: Number(sys.lastChestAt) || 0,
+    lastChestDay: sys.lastChestDay == null || sys.lastChestDay === "" ? null : Math.max(0, Math.floor(Number(sys.lastChestDay) || 0)),
     generated: Boolean(sys.generated),
   };
 }
@@ -127,8 +127,8 @@ export function defaultSystem() {
   return { enabled: true, name: "Sistema", points: 0, shop: DEFAULT_SYSTEM_SHOP.map((i) => ({ ...i })) };
 }
 
-// ── Baú semanal ──
-export const CHEST_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+// ── Baú semanal (semana do CALENDÁRIO DO JOGO, não da vida real) ──
+export const CHEST_INTERVAL_DAYS = 7;
 
 export const DEFAULT_CHEST_POOL = [
   { name: "Lâmina Afiada do Viajante", desc: "Uma arma simples e muito bem feita, comum neste mundo.", kind: "arma" },
@@ -141,19 +141,19 @@ export const DEFAULT_CHEST_POOL = [
 
 const POOL_KINDS = ["arma", "habilidade", "equipamento", "item"];
 
-export function chestStatus(sys, now = Date.now()) {
+/** `day` = dias corridos na história (gameTime.totalDaysElapsed). */
+export function chestStatus(sys, day = 0) {
   const s = normalizeSystem(sys);
-  if (!s) return { ready: false, msLeft: 0 };
-  const last = Number(sys?.lastChestAt) || 0;
-  if (!last) return { ready: true, msLeft: 0 };
-  const msLeft = Math.max(0, last + CHEST_INTERVAL_MS - now);
-  return { ready: msLeft === 0, msLeft };
+  if (!s) return { ready: false, daysLeft: 0 };
+  const today = Math.max(0, Math.floor(Number(day) || 0));
+  const last = sys?.lastChestDay;
+  if (last == null || last === "") return { ready: true, daysLeft: 0 };
+  const daysLeft = Math.max(0, Number(last) + CHEST_INTERVAL_DAYS - today);
+  return { ready: daysLeft === 0, daysLeft };
 }
 
-export function formatWait(ms) {
-  const h = Math.ceil(ms / 3600000);
-  const d = Math.floor(h / 24);
-  return d ? `${d}d ${h % 24}h` : `${h}h`;
+export function formatWaitDays(days) {
+  return days === 1 ? "1 dia" : `${days} dias`;
 }
 
 function chestPool(sys) {
@@ -163,21 +163,21 @@ function chestPool(sys) {
   return pool.length ? pool : DEFAULT_CHEST_POOL;
 }
 
-/** Abre o baú: sorteia uma recompensa (evitando repetir) e marca a data. */
-export function openChest(sys, now = Date.now(), rnd = Math.random) {
+/** Abre o baú: sorteia uma recompensa (evitando repetir) e marca o dia do jogo. */
+export function openChest(sys, day = 0, rnd = Math.random, now = Date.now()) {
   const s = normalizeSystem(sys);
   if (!s) return { ok: false, error: "Sistema desligado." };
-  const status = chestStatus(sys, now);
-  if (!status.ready) return { ok: false, error: `O próximo baú abre em ${formatWait(status.msLeft)}.` };
+  const status = chestStatus(sys, day);
+  if (!status.ready) return { ok: false, error: `O próximo baú abre em ${formatWaitDays(status.daysLeft)} na história.` };
   const pool = chestPool(sys);
   const got = new Set(s.purchased.map((p) => p.name));
   const fresh = pool.filter((i) => !got.has(i.name));
   const list = fresh.length ? fresh : pool;
   const reward = list[Math.floor(rnd() * list.length) % list.length];
   s.purchased.push({ id: `bau-${now.toString(36)}`, name: reward.name, at: now });
-  s.log.push(`baú: ${reward.name}`);
+  s.log.push(`baú (dia ${Math.floor(Number(day) || 0)}): ${reward.name}`);
   s.log = s.log.slice(-20);
-  return { ok: true, system: { ...s, lastChestAt: now }, reward };
+  return { ok: true, system: { ...s, lastChestDay: Math.floor(Number(day) || 0) }, reward };
 }
 
 export function chestNote(reward) {

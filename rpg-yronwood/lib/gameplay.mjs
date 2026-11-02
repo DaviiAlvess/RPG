@@ -2,11 +2,41 @@ import { skillForAttribute } from './progression.mjs';
 import { asPlotList } from './plots.mjs';
 
 export const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const attributeKeys = { forca: 'strength', destreza: 'dexterity', mente: 'mind', carisma: 'charisma' };
+const attributeKeys = { forca: 'strength', destreza: 'dexterity', mente: 'mind', carisma: 'charisma', strength: 'strength', dexterity: 'dexterity', mind: 'mind', charisma: 'charisma' };
+const ATTRIBUTE_LABEL = { strength: 'Força', dexterity: 'Destreza', mind: 'Mente', charisma: 'Carisma' };
+// Perícias e sinônimos que o Mestre costuma usar → atributo do jogo.
+const ATTRIBUTE_ALIASES = {
+  strength: ['luta', 'combate', 'atletismo', 'constituicao', 'resistencia', 'vigor', 'potencia', 'fisico'],
+  dexterity: ['agilidade', 'furtividade', 'acrobacia', 'reflexos', 'pontaria', 'prestidigitacao', 'esquiva', 'roubo'],
+  mind: ['percepcao', 'inteligencia', 'sabedoria', 'investigacao', 'conhecimento', 'magia', 'sobrevivencia', 'medicina', 'intuicao', 'vontade', 'raciocinio', 'atencao'],
+  charisma: ['persuasao', 'enganacao', 'intimidacao', 'labia', 'diplomacia', 'performance', 'seducao', 'presenca', 'blefe'],
+};
+
+/** Nome do atributo do jogo para o que o Mestre escreveu ("Percepção" → "Mente"). */
+export function canonicalAttribute(raw) {
+  const key = normalize(raw).replace(/[^a-z ]/g, ' ').trim();
+  if (attributeKeys[key]) return ATTRIBUTE_LABEL[attributeKeys[key]];
+  for (const word of key.split(/\s+/)) {
+    if (attributeKeys[word]) return ATTRIBUTE_LABEL[attributeKeys[word]];
+    for (const [attr, list] of Object.entries(ATTRIBUTE_ALIASES)) if (list.includes(word)) return ATTRIBUTE_LABEL[attr];
+  }
+  return null;
+}
+
+/**
+ * Lê o pedido de teste do Mestre. Aceita variações comuns:
+ * [TESTE:Força|DC:12], [TESTE: Destreza | DC: 14], [TESTE:Percepção|CD 15], [TESTE de Mente DC 12].
+ */
 export function parseTest(text) {
-  const match = String(text).match(/\[TESTE:([^\]|]+)(?:\|DC:(\d+))?\]\s*([^\n]*)/i);
-  if (!match || !attributeKeys[normalize(match[1].trim())]) return null;
-  return { attribute: match[1].trim(), description: match[3], difficulty: Math.max(5, Math.min(30, Number(match[2]) || 12)) };
+  const match = String(text).match(/\[\s*TESTE\s*(?:DE\s+)?:?\s*([^\]|]+?)\s*(?:\|\s*(?:DC|CD|DIFICULDADE|DIF)\s*[:=]?\s*(\d+)\s*)?(?:\|[^\]]*)?\]\s*([^\n]*)/i);
+  if (!match) return null;
+  let label = match[1].trim();
+  let dc = match[2];
+  const inline = label.match(/^(.*?)[\s,;]+(?:DC|CD|DIFICULDADE|DIF)\s*[:=]?\s*(\d+)$/i);
+  if (inline) { label = inline[1].trim(); dc = dc || inline[2]; }
+  const attribute = canonicalAttribute(label);
+  if (!attribute) return null;
+  return { attribute, asked: label, description: match[3], difficulty: Math.max(5, Math.min(30, Number(dc) || 12)) };
 }
 export function resolveTest(test, attributes, roll, skills = {}) {
   const attrMod = Math.floor(((Number(attributes[attributeKeys[normalize(test.attribute)]]) || 10) - 10) / 2);

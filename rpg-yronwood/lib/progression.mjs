@@ -29,7 +29,9 @@ function numericExperience(value) {
 }
 
 function xpTagValue(raw) {
-  const n = Number(String(raw || '').trim());
+  // Aceita "10", "+10", "10 XP", "15 pontos": vale o primeiro número inteiro.
+  const m = String(raw || '').match(/^\s*\+?\s*(\d{1,4})/);
+  const n = m ? Number(m[1]) : NaN;
   if (!Number.isFinite(n) || n < XP_PER_TAG_MIN) return 0;
   return Math.min(XP_PER_TAG_MAX, Math.floor(n));
 }

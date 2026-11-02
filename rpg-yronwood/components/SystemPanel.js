@@ -2,7 +2,7 @@ import { normalizeSystem, SYSTEM_RANKS } from "../lib/game-system.mjs";
 import TreasureChest from "./TreasureChest";
 
 /** Janela do Sistema: status, missões e loja. */
-export default function SystemPanel({ campaign, onBuy, onOpenChest, disabled }) {
+export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest, disabled }) {
   const s = normalizeSystem(campaign?.gameSystem);
   if (!s) return null;
   const open = s.quests.filter((q) => !q.done);
@@ -25,7 +25,7 @@ export default function SystemPanel({ campaign, onBuy, onOpenChest, disabled }) 
         </div>
       </section>
 
-      <TreasureChest system={campaign.gameSystem} onOpen={onOpenChest} disabled={disabled} />
+      <TreasureChest system={campaign.gameSystem} gameDay={gameDay} onOpen={onOpenChest} disabled={disabled} />
 
       <section className="sys-window">
         <div className="sys-sub">MISSÕES</div>

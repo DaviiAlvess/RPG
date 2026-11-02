@@ -46,14 +46,16 @@ test('sistema padrão tem loja válida', async () => {
   assert.equal(s.points, 0);
 });
 
-test('baú semanal: abre, bloqueia por 7 dias e não repete', async () => {
-  const { openChest, chestStatus, CHEST_INTERVAL_MS, chestNote } = await import('../lib/game-system.mjs');
+test('baú semanal conta a semana do jogo, não da vida real', async () => {
+  const { openChest, chestStatus, CHEST_INTERVAL_DAYS, chestNote } = await import('../lib/game-system.mjs');
   const sys = { enabled: true, chestPool: [{ name: 'Espada', desc: 'a', kind: 'arma' }, { name: 'Salto', desc: 'b', kind: 'habilidade' }] };
-  assert.equal(chestStatus(sys, 1000).ready, true);
-  const a = openChest(sys, 1000, () => 0);
+  assert.equal(chestStatus(sys, 0).ready, true);
+  const a = openChest(sys, 3, () => 0);
   assert.equal(a.reward.name, 'Espada');
-  assert.equal(openChest(a.system, 2000).ok, false);
-  const b = openChest(a.system, 1000 + CHEST_INTERVAL_MS, () => 0);
+  assert.equal(a.system.lastChestDay, 3);
+  assert.equal(chestStatus(a.system, 9).daysLeft, 1);
+  assert.equal(openChest(a.system, 9).ok, false);
+  const b = openChest(a.system, 3 + CHEST_INTERVAL_DAYS, () => 0);
   assert.equal(b.reward.name, 'Salto');
   assert.match(chestNote(b.reward), /baú semanal/);
   assert.equal(b.system.chestPool.length, 2);

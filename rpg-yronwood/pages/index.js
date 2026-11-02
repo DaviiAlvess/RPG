@@ -2014,7 +2014,17 @@ export default function RPG() {
       if (!response.ok || result.error || typeof result.text !== 'string' || !result.text.trim()) {
         throw gmRequestError(result, response.status, 'O Mestre não conseguiu responder. Sua mensagem foi mantida.');
       }
-      applied = applyMasterChatReply(active, result.text, question);
+      applied = applyMasterChatReply({ ...active, experience, level, hp }, result.text, question);
+      if (applied.progress) {
+        const pp = applied.progress.patch;
+        setExperience(pp.experience);
+        if (pp.level !== level) {
+          setLevel(pp.level);
+          playSound("levelup");
+          pendingLevelNoteRef.current = [pendingLevelNoteRef.current, `O Mestre da mesa ajustou o personagem para o nível ${pp.level}. Não fale nem decida pelo jogador.`].filter(Boolean).join(" ");
+        }
+        if (pp.hp !== hp) setHp(pp.hp);
+      }
       const visible = applied.visible || result.text.trim();
       if (applied.patch.pendingMasterNote) pendingMasterNoteRef.current = applied.patch.pendingMasterNote;
       const updated = {

@@ -320,6 +320,7 @@ export default function PlayView(props) {
     onSaveAsTemplate,
     onBuySystemItem,
     onOpenChest,
+    onSearchShop,
     recap,
     onCloseRecap,
     onNarrateRecap,
@@ -1226,7 +1227,7 @@ export default function PlayView(props) {
                 <div className="panel-title">{c.gameSystem.name || "Sistema"}</div>
                 <div className="panel-sub">Ganhe pontos com feitos e missões. Gaste na loja.</div>
               </div>
-              <SystemPanel campaign={c} gameDay={gameTime?.totalDaysElapsed || 0} onBuy={onBuySystemItem} onOpenChest={onOpenChest} disabled={loading || autoMode} />
+              <SystemPanel campaign={c} gameDay={gameTime?.totalDaysElapsed || 0} onBuy={onBuySystemItem} onOpenChest={onOpenChest} onSearchShop={onSearchShop} disabled={loading || autoMode} />
             </div>
           ) : null}
 

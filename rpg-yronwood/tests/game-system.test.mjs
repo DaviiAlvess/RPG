@@ -103,3 +103,27 @@ test('recompensas vão para inventário ou habilidades automaticamente', async (
   assert.match(systemSkillsLine({ systemSkills: b.patch.systemSkills }), /Salto/);
   assert.match(systemPromptLines({ gameSystem: base, systemSkills: b.patch.systemSkills }).join(' '), /HABILIDADES DO SISTEMA/);
 });
+
+test('rank: desconto, multiplicador, trava de itens e busca', async () => {
+  const m = await import('../lib/game-system.mjs');
+  assert.equal(m.priceFor({ cost: 100 }, 'E'), 100);
+  assert.equal(m.priceFor({ cost: 100 }, 'S'), 70);
+  assert.equal(m.isUnlocked({ tier: 'C' }, 'D'), false);
+  assert.equal(m.isUnlocked({ tier: 'C' }, 'B'), true);
+  const sysC = { enabled: true, rank: 'C', level: 10, earned: 2750, points: 0, shop: [{ id: 'x', name: 'Lança', desc: 'd', cost: 100, tier: 'B' }] };
+  const r = m.applySystemTags('[SISTEMA_ABATE:Orc|comum]', sysC);
+  assert.equal(r.system.points, 12);
+  assert.match(m.buyItem({ ...sysC, points: 999 }, 'x').error, /Requer Rank B/);
+  const found = m.parseShopSearch('{"items":[{"name":"Espada Flamejante","desc":"pega fogo","cost":80,"tier":"C","kind":"arma"},{"name":"Espada Solar","desc":"cega","cost":9999,"tier":"Z"}]}');
+  assert.equal(found.length, 2);
+  assert.equal(found[1].cost, 600);
+  assert.equal(found[1].tier, 'E');
+  const withRes = { ...sysC, points: 200, searchResults: found };
+  const bought = m.buyItem(withRes, found[0].id);
+  assert.equal(bought.ok, true);
+  assert.equal(bought.system.points, 200 - m.priceFor(found[0], 'C'));
+  assert.ok(bought.system.shop.some((i) => i.name === 'Espada Flamejante'));
+  assert.match(m.shopSearchRequest({ world: 'W', gameSystem: sysC }, 'espada').systemPrompt, /Rank C/);
+  const merged = m.mergeShopItems(sysC, [{ name: 'Lança', desc: 'dup' }, { name: 'Escudo', desc: 'novo', tier: 'C' }]);
+  assert.equal(merged.shop.length, 2);
+});

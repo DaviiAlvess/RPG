@@ -10,6 +10,41 @@ export const stripSystemTags = (text) => String(text || "").replace(SYSTEM_TAG_P
 
 export const SYSTEM_RANKS = ["E", "D", "C", "B", "A", "S"];
 
+// ── Itens com rank mínimo ──
+function normalizeShopList(list, max) {
+  return (Array.isArray(list) ? list : []).map((i) => ({
+    id: clip(i.id || i.name, 40), name: clip(i.name, 60), desc: clip(i.desc, 240),
+    cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once),
+    tier: SYSTEM_RANKS.includes(i.tier) ? i.tier : "E",
+    ...(i.kind ? { kind: clip(i.kind, 20) } : {}),
+  })).filter((i) => i.name).slice(0, max);
+}
+
+// ── Bônus de cada rank: desconto na loja e multiplicador de pontos ganhos ──
+export const RANK_BONUS = {
+  E: { discount: 0, mult: 1, label: "Sem bônus — prove seu valor." },
+  D: { discount: 0.05, mult: 1.1, label: "5% de desconto · +10% de pontos" },
+  C: { discount: 0.1, mult: 1.2, label: "10% de desconto · +20% de pontos" },
+  B: { discount: 0.15, mult: 1.35, label: "15% de desconto · +35% de pontos" },
+  A: { discount: 0.2, mult: 1.5, label: "20% de desconto · +50% de pontos" },
+  S: { discount: 0.3, mult: 2, label: "30% de desconto · pontos em dobro" },
+};
+
+export function rankBonus(rank) {
+  return RANK_BONUS[rank] || RANK_BONUS.E;
+}
+
+export function priceFor(item, rank) {
+  return Math.max(1, Math.round((Number(item?.cost) || 1) * (1 - rankBonus(rank).discount)));
+}
+
+export function isUnlocked(item, rank) {
+  return SYSTEM_RANKS.indexOf(item?.tier || "E") <= SYSTEM_RANKS.indexOf(rank || "E");
+}
+
+const boosted = (n, rank) => (n > 0 ? Math.round(n * rankBonus(rank).mult) : n);
+
+
 export function normalizeSystem(sys) {
   if (!sys || typeof sys !== "object" || !sys.enabled) return null;
   return {
@@ -20,9 +55,9 @@ export function normalizeSystem(sys) {
     rank: SYSTEM_RANKS.includes(sys.rank) ? sys.rank : "E",
     level: Math.max(1, Math.floor(Number(sys.level) || 1)),
     kills: Math.max(0, Math.floor(Number(sys.kills) || 0)),
-    shop: (Array.isArray(sys.shop) ? sys.shop : []).map((i) => ({
-      id: clip(i.id || i.name, 40), name: clip(i.name, 60), desc: clip(i.desc, 240), cost: Math.max(1, Math.floor(Number(i.cost) || 1)), once: Boolean(i.once), ...(i.kind ? { kind: clip(i.kind, 20) } : {}),
-    })).filter((i) => i.name).slice(0, 20),
+    shop: normalizeShopList(sys.shop, 40),
+    searchResults: normalizeShopList(sys.searchResults, 6),
+    lastSearch: clip(sys.lastSearch, 80),
     purchased: (Array.isArray(sys.purchased) ? sys.purchased : []).map((p) => ({ id: clip(p.id, 40), name: clip(p.name, 60), at: p.at || 0 })).slice(-60),
     quests: (Array.isArray(sys.quests) ? sys.quests : []).map((q) => ({
       id: q.id || sid(), text: clip(q.text, 160), reward: Math.max(0, Math.floor(Number(q.reward) || 0)), done: Boolean(q.done),
@@ -74,7 +109,7 @@ export function applySystemTags(text, sys) {
   const events = [];
   const raw = String(text || "");
   for (const m of raw.matchAll(/\[SISTEMA_PONTOS:\s*([+-]?\d+)\s*(?:\|([^\]]*))?\]/gi)) {
-    const n = Math.max(-500, Math.min(500, parseInt(m[1], 10) || 0));
+    const n = boosted(Math.max(-500, Math.min(500, parseInt(m[1], 10) || 0)), s.rank);
     if (!n) continue;
     s.points = Math.max(0, s.points + n);
     if (n > 0) s.earned += n;
@@ -85,7 +120,7 @@ export function applySystemTags(text, sys) {
   for (const m of raw.matchAll(/\[SISTEMA_ABATE:([^\]|]+)(?:\|\s*([^\]|]+))?(?:\|[^\]]*)?\]/gi)) {
     const who = clip(m[1], 60);
     const tier = String(m[2] || "comum").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-    const n = KILL_POINTS[tier] || (/^\d+$/.test(tier) ? Math.min(150, Number(tier)) : KILL_POINTS.comum);
+    const n = boosted(KILL_POINTS[tier] || (/^\d+$/.test(tier) ? Math.min(150, Number(tier)) : KILL_POINTS.comum), s.rank);
     s.points += n;
     s.earned += n;
     s.kills += 1;
@@ -104,10 +139,11 @@ export function applySystemTags(text, sys) {
     const q = s.quests.find((x) => !x.done && (x.text.toLowerCase().includes(t) || t.includes(x.text.toLowerCase())));
     if (!q) continue;
     q.done = true;
-    s.points += q.reward;
-    s.earned += q.reward;
-    s.log.push(`+${q.reward} missão: ${clip(q.text, 60)}`);
-    events.push({ type: "quest_done", quest: q });
+    const reward = boosted(q.reward, s.rank);
+    s.points += reward;
+    s.earned += reward;
+    s.log.push(`+${reward} missão: ${clip(q.text, 60)}`);
+    events.push({ type: "quest_done", quest: { ...q, reward } });
   }
   // Bateu a meta → sobe de nível (pode subir mais de um de uma vez).
   while (s.earned >= metaFor(s.level) && s.level < 99) {
@@ -127,15 +163,61 @@ export function applySystemTags(text, sys) {
 export function buyItem(sys, itemId, now = Date.now()) {
   const s = normalizeSystem(sys);
   if (!s) return { ok: false, error: "Sistema desligado." };
-  const item = s.shop.find((i) => i.id === itemId);
+  const item = s.shop.find((i) => i.id === itemId) || s.searchResults.find((i) => i.id === itemId);
   if (!item) return { ok: false, error: "Item não existe." };
+  if (!isUnlocked(item, s.rank)) return { ok: false, error: `Requer Rank ${item.tier}.` };
   if (item.once && s.purchased.some((p) => p.id === item.id)) return { ok: false, error: "Você já comprou isso." };
-  if (s.points < item.cost) return { ok: false, error: `Faltam ${item.cost - s.points} pontos.` };
-  s.points -= item.cost;
+  const price = priceFor(item, s.rank);
+  if (s.points < price) return { ok: false, error: `Faltam ${price - s.points} pontos.` };
+  s.points -= price;
   s.purchased.push({ id: item.id, name: item.name, at: now });
-  s.log.push(`-${item.cost} loja: ${item.name}`);
+  s.log.push(`-${price} loja: ${item.name}`);
   s.log = s.log.slice(-20);
-  return { ok: true, system: s, item };
+  // Item achado na busca passa a ficar na loja.
+  if (!s.shop.some((i) => i.id === item.id)) s.shop = [...s.shop, item].slice(-40);
+  return { ok: true, system: s, item: { ...item, paid: price } };
+}
+
+// ── Busca na loja: o Mestre cria opções para o que o jogador procurou ──
+export function shopSearchRequest(camp = {}, query = "") {
+  const s = normalizeSystem(camp.gameSystem) || { rank: "E", level: 1 };
+  const next = SYSTEM_RANKS[Math.min(SYSTEM_RANKS.length - 1, SYSTEM_RANKS.indexOf(s.rank) + 1)];
+  return {
+    systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador procurou um item. Crie de 3 a 4 opções que combinem com a busca e pertençam a ESTE mundo e época (nada anacrônico, a não ser que o mundo permita). Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"E|D|C|B|A|S","kind":"arma|habilidade|equipamento|item","once":false}]}. O jogador está no nível ${s.level}, Rank ${s.rank}. Faça a maioria das opções do Rank ${s.rank} ou abaixo, com uma versão mais forte do Rank ${next} (trancada, para ele ver o que vem). Quanto maior o rank, mais forte o efeito e mais caro: E 10–40, D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com o efeito e um limite claro. Em português. Se a busca for impossível neste mundo, ofereça o equivalente mais próximo.`,
+    content: JSON.stringify({ busca: clip(query, 80), mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), personagem: camp.charName }),
+  };
+}
+
+export function parseShopSearch(text, prefix = "busca") {
+  try {
+    const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "");
+    const json = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
+    const stamp = Date.now().toString(36);
+    return normalizeShopList((json.items || []).map((i, n) => ({
+      ...i,
+      id: `${prefix}-${stamp}-${n}`,
+      cost: Math.min(600, Math.max(5, Math.floor(Number(i.cost) || 20))),
+      kind: POOL_KINDS.includes(i.kind) ? i.kind : undefined,
+    })).filter((i) => i.name && i.desc), 6);
+  } catch {
+    return [];
+  }
+}
+
+/** Pedido para a loja ganhar itens novos quando o jogador sobe de rank. */
+export function shopExpandRequest(camp = {}, rank = "D") {
+  return {
+    systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador acabou de alcançar o Rank ${rank}. Crie 3 itens NOVOS do Rank ${rank}, mais fortes que os anteriores, que pertençam a ESTE mundo e época: misture arma ou equipamento, habilidade e item. Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"${rank}","kind":"arma|habilidade|equipamento|item","once":false}]}. Custos: D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com efeito e limite claro. Em português.`,
+    content: JSON.stringify({ mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), itensAtuais: (camp.gameSystem?.shop || []).map((i) => i.name) }),
+  };
+}
+
+export function mergeShopItems(sys, items = []) {
+  const s = normalizeSystem(sys);
+  if (!s) return sys;
+  const names = new Set(s.shop.map((i) => i.name.toLowerCase()));
+  const fresh = normalizeShopList(items, 10).filter((i) => !names.has(i.name.toLowerCase()));
+  return { ...s, shop: [...s.shop, ...fresh].slice(-40) };
 }
 
 /** Nota interna para o Mestre introduzir a compra na cena seguinte. */
@@ -149,7 +231,7 @@ export function systemPromptLines(c = {}, { short = false } = {}) {
   const open = s.quests.filter((q) => !q.done).map((q) => `${q.text} (+${q.reward})`);
   const lines = [
     `O SISTEMA: só o jogador vê uma interface chamada "${s.name}", no estilo de manhwa (Solo Leveling). Quando algo importante acontecer, mostre uma notificação curta numa linha própria começando com 【${s.name}】, em tom frio e objetivo. Ninguém mais no mundo vê ou ouve o Sistema: a tela, a loja, as missões e o baú existem só para o jogador. NPCs nunca reagem à interface nem sabem que ela existe; itens comprados aparecem de forma discreta e plausível, e habilidades parecem talento natural. Se o jogador falar do Sistema em voz alta, os outros só ouvem alguém falando sozinho.`,
-    `Estado: Nível ${s.level} (meta: ${metaFor(s.level)} pontos ganhos; já ganhou ${s.earned}), Rank ${s.rank}, ${s.points} pontos para gastar, ${s.kills} abates. Missões abertas: ${open.length ? open.join(" | ") : "nenhuma"}. Itens já comprados: ${s.purchased.map((p) => p.name).join(", ") || "nenhum"}.`,
+    `Estado: Nível ${s.level} (meta: ${metaFor(s.level)} pontos ganhos; já ganhou ${s.earned}), Rank ${s.rank} (bônus: ${rankBonus(s.rank).label}), ${s.points} pontos para gastar, ${s.kills} abates. Missões abertas: ${open.length ? open.join(" | ") : "nenhuma"}. Itens já comprados: ${s.purchased.map((p) => p.name).join(", ") || "nenhum"}.`,
     "ABATES: toda vez que o jogador matar ou derrotar de vez um inimigo (pessoa, monstro, fera hostil), emita [SISTEMA_ABATE:quem foi|comum] — use comum, forte, elite ou chefe conforme o perigo. Um abate por inimigo; nunca por inimigo que fugiu, foi poupado ou apenas ferido.",
     "AÇÕES: conceda pontos por ações e feitos reais (vencer um desafio, salvar alguém, enganar um poderoso, descobrir algo grande) com [SISTEMA_PONTOS:+n|motivo] (5–40; nunca por andar ou conversar à toa). Os pontos são do jogador para gastar na loja como quiser; o nível sobe sozinho quando os pontos GANHOS batem a meta.",
     "Tags ocultas: Ofereça uma missão do Sistema de vez em quando com [SISTEMA_MISSAO:objetivo concreto|recompensa] (10–100), no máximo duas abertas. Ao cumprir: [SISTEMA_MISSAO_FIM:objetivo]. Missões podem ter prazo e penalidade narrativa, mas nunca obrigam o jogador.",
@@ -167,6 +249,14 @@ export const DEFAULT_SYSTEM_SHOP = [
   { id: "hostil", name: "Olhar de Hostilidade", desc: "Por uma cena, você sabe quem quer ferir você.", cost: 20 },
   { id: "tecnica", name: "Técnica de Combate Básica", desc: "O corpo aprende a lutar com a arma mais comum deste mundo.", cost: 40, once: true },
   { id: "moedas", name: "Bolsa de Moedas", desc: "Dinheiro local suficiente para alguns dias.", cost: 30 },
+  { id: "furtivo", name: "Passos Sem Som", desc: "Por uma cena, você se move sem fazer nenhum barulho.", cost: 45, tier: "D", kind: "habilidade" },
+  { id: "arma-boa", name: "Arma de Mestre Artesão", desc: "Uma arma excelente deste mundo, que nunca perde o fio.", cost: 65, tier: "D", kind: "arma" },
+  { id: "regen", name: "Regeneração Lenta", desc: "Ferimentos leves fecham sozinhos depois de uma noite de sono.", cost: 110, tier: "C", kind: "habilidade", once: true },
+  { id: "inventario", name: "Inventário Dimensional", desc: "Um bolso que só você acessa, onde cabe o equivalente a um baú.", cost: 120, tier: "C", kind: "habilidade", once: true },
+  { id: "aura", name: "Aura de Intimidação", desc: "Inimigos comuns hesitam antes de atacar você. Não funciona em chefes.", cost: 170, tier: "B", kind: "habilidade", once: true },
+  { id: "armadura-rara", name: "Armadura Lendária Leve", desc: "Proteção de um herói antigo, leve como roupa comum.", cost: 190, tier: "B", kind: "equipamento" },
+  { id: "tempo", name: "Percepção Acelerada", desc: "Uma vez por dia, o mundo desacelera por alguns segundos para você.", cost: 280, tier: "A", kind: "habilidade", once: true },
+  { id: "invocar", name: "Invocar Sombra Leal", desc: "Uma vez por dia, uma sombra de um inimigo abatido luta ao seu lado por uma cena.", cost: 520, tier: "S", kind: "habilidade", once: true },
 ];
 
 export function defaultSystem() {

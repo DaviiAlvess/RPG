@@ -41,7 +41,7 @@ import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
 import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
-import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward } from "../lib/game-system.mjs";
+import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem } from "../lib/game-system.mjs";
 import CreateWizard from "../components/CreateWizard";
 import PresetLibrary from "../components/PresetLibrary";
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
@@ -1646,6 +1646,8 @@ export default function RPG() {
       }
       setActive(updated);
       if (newEnding) setTimeout(() => setShowEnding(true), 1200);
+      const rankUp = systemResult.events.find((ev) => ev.type === "rank");
+      if (rankUp) void expandShopForRank(updated, rankUp.rank);
       saveCamp(camp.id, updated);
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
@@ -1909,6 +1911,44 @@ export default function RPG() {
     saveCamp(active.id, updated);
     pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item)].filter(Boolean).join(" ");
     showNotification(`【${r.system.name}】 Comprado: ${r.item.name} — ${grant.kind === "habilidade" ? (grant.duplicate ? "você já tinha essa habilidade" : "nova habilidade na Ficha") : "guardado no inventário"}.`, "success");
+  };
+
+  // A loja ganha itens novos do rank que o jogador acabou de alcançar.
+  const expandShopForRank = async (camp, rank) => {
+    try {
+      const req = shopExpandRequest(camp, rank);
+      const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
+      const data = await res.json().catch(() => ({}));
+      const items = res.ok ? parseShopSearch(data.text, `rank${rank}`).map((i) => ({ ...i, tier: rank })) : [];
+      if (!items.length) return;
+      setActive((prev) => {
+        if (!prev || prev.id !== camp.id) return prev;
+        const next = { ...prev, gameSystem: mergeShopItems(prev.gameSystem, items) };
+        saveCamp(prev.id, next);
+        return next;
+      });
+      showNotification(`【Sistema】 A loja evoluiu: ${items.length} itens novos do Rank ${rank}.`, "success", { duration: 7000 });
+    } catch {}
+  };
+
+  const searchSystemShop = async (query) => {
+    const q = String(query || "").trim();
+    if (!active || !q) return [];
+    const req = shopSearchRequest(active, q);
+    const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw gmRequestError(data, res.status, "A loja não respondeu agora. Tente de novo.");
+    const items = parseShopSearch(data.text);
+    if (!items.length) throw new Error("O Sistema não encontrou nada parecido. Tente outra busca.");
+    setActive((prev) => {
+      if (!prev) return prev;
+      const sys = normalizeSystem(prev.gameSystem);
+      if (!sys) return prev;
+      const next = { ...prev, gameSystem: { ...prev.gameSystem, searchResults: items, lastSearch: q.slice(0, 80) } };
+      saveCamp(prev.id, next);
+      return next;
+    });
+    return items;
   };
 
   const openSystemChest = () => {
@@ -2390,6 +2430,7 @@ export default function RPG() {
       onSaveAsTemplate={saveActiveAsTemplate}
       onBuySystemItem={buySystemItem}
       onOpenChest={openSystemChest}
+      onSearchShop={searchSystemShop}
       recap={recap}
       onCloseRecap={() => setRecap(null)}
       onNarrateRecap={narrateRecap}

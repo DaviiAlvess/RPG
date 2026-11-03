@@ -1,18 +1,24 @@
 import { useState } from "react";
-import { normalizeSystem, SYSTEM_RANKS, asSystemSkills, metaProgress, rankBonus, priceFor, isUnlocked, RANK_BONUS } from "../lib/game-system.mjs";
+import { normalizeSystem, SYSTEM_RANKS, asSystemSkills, metaProgress, rankBonus, priceFor, isUnlocked, RANK_BONUS, cartSummary, rewardKind } from "../lib/game-system.mjs";
 import TreasureChest from "./TreasureChest";
 
 /** Janela do Sistema: status, missões e loja. */
-export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest, onSearchShop, disabled }) {
+export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest, onSearchShop, onCartAdd, onCartRemove, onCartBuyAll, disabled }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [kindFilter, setKindFilter] = useState("todos");
   const s = normalizeSystem(campaign?.gameSystem);
   if (!s) return null;
   const open = s.quests.filter((q) => !q.done);
   const done = s.quests.filter((q) => q.done);
   const owned = new Set(s.purchased.map((p) => p.id));
   const rankIdx = SYSTEM_RANKS.indexOf(s.rank);
+  const inCart = new Set(s.cart.map((i) => i.id));
+  // Tipo exibido: habilidade, arma, equipamento ou item (deduzido quando o item não informa).
+  const typeOf = (item) => (rewardKind(item) === "habilidade" ? "habilidade" : ["arma", "equipamento"].includes(item.kind) ? item.kind : "item");
+  const passes = (item) => kindFilter === "todos" || typeOf(item) === kindFilter;
+  const cart = cartSummary(campaign.gameSystem);
   const renderItem = (item) => {
     const sold = item.once && owned.has(item.id);
     const locked = !isUnlocked(item, s.rank);
@@ -24,11 +30,18 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
           <strong>{item.name}</strong>
           <span>{price !== item.cost ? <s>{item.cost}</s> : null} {price} pts</span>
         </div>
-        <div className="sys-item-tags"><em>Rank {item.tier || "E"}</em>{item.kind ? <em>{item.kind}</em> : null}{item.once ? <em>único</em> : null}</div>
+        <div className="sys-item-tags"><em>Rank {item.tier || "E"}</em><em className={`kind-${typeOf(item)}`}>{typeOf(item)}</em>{item.once ? <em>único</em> : null}</div>
         <p>{item.desc}</p>
-        <button type="button" className="btn-ghost" disabled={disabled || sold || locked || cant} onClick={() => onBuy(item.id)}>
-          {sold ? "Adquirido" : locked ? `Requer Rank ${item.tier}` : cant ? `Faltam ${price - s.points}` : "Comprar"}
-        </button>
+        <div className="sys-item-actions">
+          <button type="button" className="btn-ghost" disabled={disabled || sold || locked || cant} onClick={() => onBuy(item.id)}>
+            {sold ? "Adquirido" : locked ? `Requer Rank ${item.tier}` : cant ? `Faltam ${price - s.points}` : "Comprar"}
+          </button>
+          {!sold && onCartAdd ? (
+            inCart.has(item.id)
+              ? <button type="button" className="btn-ghost sys-cart-btn on" onClick={() => onCartRemove(item.id)} title="Tirar do carrinho" aria-label={`Tirar ${item.name} do carrinho`}><i className="ti ti-shopping-cart-x" aria-hidden="true" /><span>No carrinho</span></button>
+              : <button type="button" className="btn-ghost sys-cart-btn" onClick={() => onCartAdd(item.id)} title="Guardar para comprar depois" aria-label={`Guardar ${item.name} no carrinho`}><i className="ti ti-shopping-cart-plus" aria-hidden="true" /><span>Guardar</span></button>
+          ) : null}
+        </div>
       </div>
     );
   };
@@ -89,6 +102,32 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
 
       <section className="sys-window">
         <div className="sys-sub">LOJA</div>
+        {s.cart.length ? (
+          <div className="sys-cart">
+            <div className="sys-cart-head">
+              <span><i className="ti ti-shopping-cart" aria-hidden="true" /> CARRINHO ({s.cart.length})</span>
+              <b>Total: {cart.total} pts · você tem {s.points}</b>
+            </div>
+            <ul className="sys-cart-list">
+              {s.cart.map((item) => {
+                const locked = !isUnlocked(item, s.rank);
+                const sold = item.once && owned.has(item.id);
+                const price = priceFor(item, s.rank);
+                return (
+                  <li key={item.id} className={locked || sold ? "off" : ""}>
+                    <span className="sys-cart-name">{item.name} <em>Rank {item.tier || "E"}</em></span>
+                    <span className="sys-cart-price">{sold ? "já comprado" : locked ? `requer Rank ${item.tier}` : `${price} pts`}</span>
+                    <button type="button" className="btn-ghost" disabled={disabled || locked || sold || s.points < price} onClick={() => onBuy(item.id)}>Comprar</button>
+                    <button type="button" className="sys-cart-x" onClick={() => onCartRemove(item.id)} aria-label={`Remover ${item.name} do carrinho`}><i className="ti ti-x" aria-hidden="true" /></button>
+                  </li>
+                );
+              })}
+            </ul>
+            <button type="button" className="btn-ghost sys-cart-all" disabled={disabled || !cart.buyable.length || !cart.enough} onClick={onCartBuyAll}>
+              {cart.enough ? `Comprar tudo (${cart.total} pts)` : `Faltam ${cart.total - s.points} pontos para comprar tudo`}
+            </button>
+          </div>
+        ) : null}
         <form className="sys-search" onSubmit={async (e) => {
           e.preventDefault();
           if (!query.trim() || searching || !onSearchShop) return;
@@ -100,14 +139,20 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
           <button type="submit" className="btn-ghost" disabled={disabled || searching || !query.trim()}>{searching ? "Procurando…" : "Procurar"}</button>
         </form>
         {searchError ? <p className="sys-empty sys-error">{searchError}</p> : null}
+        <div className="sys-kinds" role="group" aria-label="Filtrar por tipo">
+          {[["todos", "Todos"], ["habilidade", "Habilidades"], ["arma", "Armas"], ["equipamento", "Equipamentos"], ["item", "Itens"]].map(([id, label]) => {
+            const count = id === "todos" ? s.shop.length : s.shop.filter((i) => typeOf(i) === id).length;
+            return <button key={id} type="button" className={`sys-kind ${kindFilter === id ? "on" : ""}`} aria-pressed={kindFilter === id} onClick={() => setKindFilter(id)}>{label} <small>{count}</small></button>;
+          })}
+        </div>
         {s.searchResults.length ? (
           <div className="sys-results">
             <div className="sys-sub">RESULTADOS PARA “{s.lastSearch}”</div>
-            <div className="sys-shop">{s.searchResults.map((item) => renderItem(item))}</div>
+            <div className="sys-shop">{s.searchResults.filter(passes).map((item) => renderItem(item))}</div>
           </div>
         ) : null}
         {SYSTEM_RANKS.map((tier) => {
-          const items = s.shop.filter((i) => (i.tier || "E") === tier);
+          const items = s.shop.filter((i) => (i.tier || "E") === tier && passes(i));
           if (!items.length) return null;
           const open = isUnlocked({ tier }, s.rank);
           return (

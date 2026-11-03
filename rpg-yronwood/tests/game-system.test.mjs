@@ -127,3 +127,20 @@ test('rank: desconto, multiplicador, trava de itens e busca', async () => {
   const merged = m.mergeShopItems(sysC, [{ name: 'Lança', desc: 'dup' }, { name: 'Escudo', desc: 'novo', tier: 'C' }]);
   assert.equal(merged.shop.length, 2);
 });
+
+test('carrinho guarda itens, soma com desconto e sai ao comprar', async () => {
+  const m = await import('../lib/game-system.mjs');
+  let sys = { enabled: true, rank: 'D', points: 100, shop: [{ id: 'a', name: 'A', desc: 'x', cost: 40 }, { id: 'b', name: 'B', desc: 'y', cost: 60, tier: 'C' }], searchResults: [{ id: 'z', name: 'Z', desc: 'w', cost: 20 }] };
+  sys = m.addToCart(sys, 'a').system;
+  sys = m.addToCart(sys, 'z').system;
+  sys = m.addToCart(sys, 'b').system;
+  assert.equal(m.addToCart(sys, 'a').ok, false);
+  const sum = m.cartSummary(sys);
+  assert.equal(sum.items.length, 3);
+  assert.equal(sum.buyable.length, 2);
+  assert.equal(sum.total, m.priceFor({ cost: 40 }, 'D') + m.priceFor({ cost: 20 }, 'D'));
+  const bought = m.buyItem({ ...sys, searchResults: [] }, 'z');
+  assert.equal(bought.ok, true);
+  assert.equal(bought.system.cart.some((i) => i.id === 'z'), false);
+  assert.equal(m.removeFromCart(sys, 'a').cart.length, 2);
+});

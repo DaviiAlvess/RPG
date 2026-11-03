@@ -41,7 +41,7 @@ import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
 import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
-import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem } from "../lib/game-system.mjs";
+import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary } from "../lib/game-system.mjs";
 import CreateWizard from "../components/CreateWizard";
 import PresetLibrary from "../components/PresetLibrary";
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
@@ -1901,16 +1901,57 @@ export default function RPG() {
     await saveTemplate(template);
   };
 
+  // Uma compra aplicada a uma campanha (pura): permite comprar vários em sequência.
+  const applyPurchase = (camp, itemId) => {
+    const r = buyItem(camp.gameSystem, itemId);
+    if (!r.ok) return { error: r.error };
+    const grant = grantReward(camp, r.item, "Loja do Sistema");
+    return { camp: { ...camp, gameSystem: r.system, ...grant.patch }, item: r.item, grant };
+  };
+
   const buySystemItem = (itemId) => {
     if (!active || sending.current) return;
-    const r = buyItem(active.gameSystem, itemId);
-    if (!r.ok) { showNotification(r.error, "warning"); return; }
-    const grant = grantReward(active, r.item, "Loja do Sistema");
-    const updated = { ...active, gameSystem: r.system, ...grant.patch };
-    setActive(updated);
-    saveCamp(active.id, updated);
+    const r = applyPurchase(active, itemId);
+    if (r.error) { showNotification(r.error, "warning"); return; }
+    setActive(r.camp);
+    saveCamp(active.id, r.camp);
     pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item)].filter(Boolean).join(" ");
-    showNotification(`【${r.system.name}】 Comprado: ${r.item.name} — ${grant.kind === "habilidade" ? (grant.duplicate ? "você já tinha essa habilidade" : "nova habilidade na Ficha") : "guardado no inventário"}.`, "success");
+    const name = r.camp.gameSystem.name || "Sistema";
+    showNotification(`【${name}】 Comprado: ${r.item.name} — ${r.grant.kind === "habilidade" ? (r.grant.duplicate ? "você já tinha essa habilidade" : "nova habilidade na Ficha") : "guardado no inventário"}.`, "success");
+  };
+
+  const cartAdd = (itemId) => {
+    if (!active) return;
+    const r = addToCart(active.gameSystem, itemId);
+    if (!r.ok) { showNotification(r.error, "warning"); return; }
+    const updated = { ...active, gameSystem: r.system };
+    setActive(updated); saveCamp(active.id, updated);
+    showNotification(`Guardado no carrinho: ${r.item.name}`, "info", { duration: 3000 });
+  };
+
+  const cartRemove = (itemId) => {
+    if (!active) return;
+    const updated = { ...active, gameSystem: removeFromCart(active.gameSystem, itemId) };
+    setActive(updated); saveCamp(active.id, updated);
+  };
+
+  const cartBuyAll = () => {
+    if (!active || sending.current) return;
+    const sum = cartSummary(active.gameSystem);
+    if (!sum.buyable.length) { showNotification("Nada no carrinho pode ser comprado agora.", "warning"); return; }
+    if (!sum.enough) { showNotification(`Faltam ${sum.total - (active.gameSystem.points || 0)} pontos para comprar tudo.`, "warning"); return; }
+    let camp = active;
+    const bought = [];
+    for (const item of sum.buyable) {
+      const r = applyPurchase(camp, item.id);
+      if (r.error) continue;
+      camp = r.camp;
+      bought.push(r.item);
+    }
+    if (!bought.length) return;
+    setActive(camp); saveCamp(active.id, camp);
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, ...bought.map(purchaseNote)].filter(Boolean).join(" ");
+    showNotification(`【${camp.gameSystem.name || "Sistema"}】 Comprados ${bought.length} itens: ${bought.map((i) => i.name).join(", ")}.`, "success", { duration: 7000 });
   };
 
   // A loja ganha itens novos do rank que o jogador acabou de alcançar.
@@ -2431,6 +2472,9 @@ export default function RPG() {
       onBuySystemItem={buySystemItem}
       onOpenChest={openSystemChest}
       onSearchShop={searchSystemShop}
+      onCartAdd={cartAdd}
+      onCartRemove={cartRemove}
+      onCartBuyAll={cartBuyAll}
       recap={recap}
       onCloseRecap={() => setRecap(null)}
       onNarrateRecap={narrateRecap}

@@ -634,3 +634,29 @@ button:disabled { cursor: not-allowed; }
 .sys-item.tier-a { border-color: rgba(255, 190, 90, .65); }
 .sys-item.tier-s { border-color: rgba(255, 110, 110, .7); box-shadow: 0 0 14px rgba(255, 110, 110, .25); }
 @media (max-width: 560px) { .sys-rank-ladder { grid-template-columns: repeat(3, 1fr); } .sys-search { flex-direction: column; } }
+
+/* ─── Carrinho ────────────────────────────────────────────────────── */
+.sys-item-actions { display: flex; gap: 6px; }
+.sys-item-actions .btn-ghost:first-child { flex: 1; }
+.sys-cart-btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; font-size: 12px; }
+.sys-cart-btn.on { color: #ffd98a !important; border-color: rgba(255, 210, 110, .6) !important; }
+.sys-cart { display: grid; gap: 10px; padding: 12px; border-radius: 10px; border: 1px solid rgba(255, 210, 110, .5); background: rgba(60, 40, 10, .25); }
+.sys-cart-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 11px; letter-spacing: .14em; color: #ffd98a; }
+.sys-cart-head b { letter-spacing: 0; color: #fff3d6; font-weight: 600; }
+.sys-cart-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sys-cart-list li { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; font-size: 13px; color: #f2f8ff; }
+.sys-cart-list li.off { opacity: .55; }
+.sys-cart-name em { font-style: normal; font-size: 10px; color: #8bbbe8; margin-left: 4px; }
+.sys-cart-price { font-size: 12px; color: #ffd98a; white-space: nowrap; }
+.sys-cart-list .btn-ghost { min-height: 30px; padding: 4px 10px; font-size: 12px; color: #dcebff; border-color: rgba(110, 180, 255, .45); }
+.sys-cart-x { width: 28px; height: 28px; border-radius: 6px; color: #b8d4f0; }
+.sys-cart-x:hover { background: rgba(255, 255, 255, .08); }
+.sys-cart-all { min-height: 40px; color: #fff3d6 !important; border-color: rgba(255, 210, 110, .6) !important; }
+@media (max-width: 560px) { .sys-cart-list li { grid-template-columns: 1fr auto auto; } .sys-cart-price { grid-column: 1; } }
+.sys-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.sys-kind { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(110, 180, 255, .3); color: #b8d4f0; font-size: 12px; min-height: 32px; }
+.sys-kind small { opacity: .7; margin-left: 2px; }
+.sys-kind.on { color: #0b1626; background: #8cc8ff; border-color: #8cc8ff; font-weight: 600; }
+.sys-item-tags em.kind-habilidade { color: #c9a6ff; border-color: rgba(190, 140, 255, .5); }
+.sys-item-tags em.kind-arma { color: #ff9f8a; border-color: rgba(255, 140, 120, .5); }
+.sys-item-tags em.kind-equipamento { color: #ffd98a; border-color: rgba(255, 210, 110, .5); }

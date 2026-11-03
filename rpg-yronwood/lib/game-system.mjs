@@ -57,6 +57,7 @@ export function normalizeSystem(sys) {
     kills: Math.max(0, Math.floor(Number(sys.kills) || 0)),
     shop: normalizeShopList(sys.shop, 40),
     searchResults: normalizeShopList(sys.searchResults, 6),
+    cart: normalizeShopList(sys.cart, 20),
     lastSearch: clip(sys.lastSearch, 80),
     purchased: (Array.isArray(sys.purchased) ? sys.purchased : []).map((p) => ({ id: clip(p.id, 40), name: clip(p.name, 60), at: p.at || 0 })).slice(-60),
     quests: (Array.isArray(sys.quests) ? sys.quests : []).map((q) => ({
@@ -163,7 +164,7 @@ export function applySystemTags(text, sys) {
 export function buyItem(sys, itemId, now = Date.now()) {
   const s = normalizeSystem(sys);
   if (!s) return { ok: false, error: "Sistema desligado." };
-  const item = s.shop.find((i) => i.id === itemId) || s.searchResults.find((i) => i.id === itemId);
+  const item = s.shop.find((i) => i.id === itemId) || s.searchResults.find((i) => i.id === itemId) || s.cart.find((i) => i.id === itemId);
   if (!item) return { ok: false, error: "Item não existe." };
   if (!isUnlocked(item, s.rank)) return { ok: false, error: `Requer Rank ${item.tier}.` };
   if (item.once && s.purchased.some((p) => p.id === item.id)) return { ok: false, error: "Você já comprou isso." };
@@ -173,8 +174,9 @@ export function buyItem(sys, itemId, now = Date.now()) {
   s.purchased.push({ id: item.id, name: item.name, at: now });
   s.log.push(`-${price} loja: ${item.name}`);
   s.log = s.log.slice(-20);
-  // Item achado na busca passa a ficar na loja.
+  // Item achado na busca passa a ficar na loja; comprado sai do carrinho.
   if (!s.shop.some((i) => i.id === item.id)) s.shop = [...s.shop, item].slice(-40);
+  s.cart = s.cart.filter((i) => i.id !== item.id);
   return { ok: true, system: s, item: { ...item, paid: price } };
 }
 
@@ -373,4 +375,31 @@ export function systemSkillsLine(camp = {}) {
   return skills.length
     ? `HABILIDADES DO SISTEMA que o jogador já tem (valem como talento dele, invisíveis aos outros): ${skills.map((s) => `${s.name} — ${s.desc}`).join(" | ")}. Respeite os limites descritos.`
     : "";
+}
+
+// ── Carrinho: guardar itens para comprar depois ──
+export function addToCart(sys, itemId) {
+  const s = normalizeSystem(sys);
+  if (!s) return { ok: false, error: "Sistema desligado." };
+  if (s.cart.some((i) => i.id === itemId)) return { ok: false, error: "Já está no carrinho." };
+  const item = s.shop.find((i) => i.id === itemId) || s.searchResults.find((i) => i.id === itemId);
+  if (!item) return { ok: false, error: "Item não existe." };
+  if (s.cart.length >= 20) return { ok: false, error: "O carrinho está cheio (20 itens)." };
+  return { ok: true, system: { ...s, cart: [...s.cart, item] }, item };
+}
+
+export function removeFromCart(sys, itemId) {
+  const s = normalizeSystem(sys);
+  if (!s) return sys;
+  return { ...s, cart: s.cart.filter((i) => i.id !== itemId) };
+}
+
+/** Total do carrinho com o desconto do rank (só itens liberados e não comprados). */
+export function cartSummary(sys) {
+  const s = normalizeSystem(sys);
+  if (!s) return { items: [], total: 0, buyable: [] };
+  const owned = new Set(s.purchased.map((p) => p.id));
+  const buyable = s.cart.filter((i) => isUnlocked(i, s.rank) && !(i.once && owned.has(i.id)));
+  const total = buyable.reduce((sum, i) => sum + priceFor(i, s.rank), 0);
+  return { items: s.cart, buyable, total, enough: s.points >= total };
 }

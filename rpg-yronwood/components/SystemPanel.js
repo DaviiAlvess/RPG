@@ -132,11 +132,11 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
           e.preventDefault();
           if (!query.trim() || searching || !onSearchShop) return;
           setSearching(true); setSearchError("");
-          try { await onSearchShop(query); } catch (err) { setSearchError(err.message || "A busca falhou."); }
+          try { await onSearchShop(query, kindFilter); } catch (err) { setSearchError(err.message || "A busca falhou."); }
           setSearching(false);
         }}>
-          <input className="sys-search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Procure qualquer coisa: espada de fogo, cavalo rápido, magia de cura…" maxLength={80} disabled={disabled || searching} aria-label="Procurar na loja" />
-          <button type="submit" className="btn-ghost" disabled={disabled || searching || !query.trim()}>{searching ? "Procurando…" : "Procurar"}</button>
+          <input className="sys-search-input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={{ habilidade: "Procure uma habilidade: magia de fogo, visão noturna, esgrima…", arma: "Procure uma arma: espada de fogo, arco longo…", equipamento: "Procure equipamento: armadura leve, cavalo rápido…", item: "Procure um item: poção, mapa, moedas…" }[kindFilter] || "Procure armas, itens ou habilidades: espada de fogo, magia de cura…"} maxLength={80} disabled={disabled || searching} aria-label="Procurar na loja" />
+          <button type="submit" className="btn-ghost" disabled={disabled || searching || !query.trim()}>{searching ? "Procurando…" : kindFilter === "habilidade" ? "Procurar habilidade" : "Procurar"}</button>
         </form>
         {searchError ? <p className="sys-empty sys-error">{searchError}</p> : null}
         <div className="sys-kinds" role="group" aria-label="Filtrar por tipo">

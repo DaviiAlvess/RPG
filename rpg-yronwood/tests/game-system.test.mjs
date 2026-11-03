@@ -144,3 +144,13 @@ test('carrinho guarda itens, soma com desconto e sai ao comprar', async () => {
   assert.equal(bought.system.cart.some((i) => i.id === 'z'), false);
   assert.equal(m.removeFromCart(sys, 'a').cart.length, 2);
 });
+
+test('busca de habilidades', async () => {
+  const m = await import('../lib/game-system.mjs');
+  const req = m.shopSearchRequest({ world: 'W', gameSystem: { enabled: true } }, 'visão noturna', 'habilidade');
+  assert.match(req.systemPrompt, /SOMENTE HABILIDADES/);
+  assert.match(m.shopSearchRequest({ world: 'W' }, 'x').systemPrompt, /crie HABILIDADES/);
+  const found = m.parseShopSearch('{"items":[{"name":"Olhos de Coruja","desc":"vê no escuro","cost":30,"kind":"item"}]}', 'busca', 'habilidade');
+  assert.equal(found[0].kind, 'habilidade');
+  assert.equal(m.rewardKind(found[0]), 'habilidade');
+});

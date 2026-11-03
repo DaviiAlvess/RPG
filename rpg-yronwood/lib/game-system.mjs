@@ -181,16 +181,18 @@ export function buyItem(sys, itemId, now = Date.now()) {
 }
 
 // ── Busca na loja: o Mestre cria opções para o que o jogador procurou ──
-export function shopSearchRequest(camp = {}, query = "") {
+const KIND_WORDS = { habilidade: "HABILIDADES (talentos, técnicas, magias, poderes, sentidos — nada que seja objeto)", arma: "ARMAS", equipamento: "EQUIPAMENTOS (armaduras, roupas, ferramentas, montarias)", item: "ITENS (consumíveis, documentos, dinheiro, objetos)" };
+
+export function shopSearchRequest(camp = {}, query = "", kind = "todos") {
   const s = normalizeSystem(camp.gameSystem) || { rank: "E", level: 1 };
   const next = SYSTEM_RANKS[Math.min(SYSTEM_RANKS.length - 1, SYSTEM_RANKS.indexOf(s.rank) + 1)];
   return {
-    systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador procurou um item. Crie de 3 a 4 opções que combinem com a busca e pertençam a ESTE mundo e época (nada anacrônico, a não ser que o mundo permita). Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"E|D|C|B|A|S","kind":"arma|habilidade|equipamento|item","once":false}]}. O jogador está no nível ${s.level}, Rank ${s.rank}. Faça a maioria das opções do Rank ${s.rank} ou abaixo, com uma versão mais forte do Rank ${next} (trancada, para ele ver o que vem). Quanto maior o rank, mais forte o efeito e mais caro: E 10–40, D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com o efeito e um limite claro. Em português. Se a busca for impossível neste mundo, ofereça o equivalente mais próximo.`,
+    systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador procurou um item. Crie de 3 a 4 opções que combinem com a busca e pertençam a ESTE mundo e época (nada anacrônico, a não ser que o mundo permita). Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"E|D|C|B|A|S","kind":"arma|habilidade|equipamento|item","once":false}]}. O jogador está no nível ${s.level}, Rank ${s.rank}. Faça a maioria das opções do Rank ${s.rank} ou abaixo, com uma versão mais forte do Rank ${next} (trancada, para ele ver o que vem). Quanto maior o rank, mais forte o efeito e mais caro: E 10–40, D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com o efeito e um limite claro. Em português. Se a busca pedir uma habilidade, técnica, magia ou poder, crie HABILIDADES (kind "habilidade"), não objetos. Se a busca for impossível neste mundo, ofereça o equivalente mais próximo.${KIND_WORDS[kind] ? ` O jogador filtrou: crie SOMENTE ${KIND_WORDS[kind]}, com kind "${kind}".` : ""}`,
     content: JSON.stringify({ busca: clip(query, 80), mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), personagem: camp.charName }),
   };
 }
 
-export function parseShopSearch(text, prefix = "busca") {
+export function parseShopSearch(text, prefix = "busca", kind = "todos") {
   try {
     const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "");
     const json = JSON.parse(cleaned.slice(cleaned.indexOf("{"), cleaned.lastIndexOf("}") + 1));
@@ -199,7 +201,7 @@ export function parseShopSearch(text, prefix = "busca") {
       ...i,
       id: `${prefix}-${stamp}-${n}`,
       cost: Math.min(600, Math.max(5, Math.floor(Number(i.cost) || 20))),
-      kind: POOL_KINDS.includes(i.kind) ? i.kind : undefined,
+      kind: POOL_KINDS.includes(kind) ? kind : POOL_KINDS.includes(i.kind) ? i.kind : undefined,
     })).filter((i) => i.name && i.desc), 6);
   } catch {
     return [];

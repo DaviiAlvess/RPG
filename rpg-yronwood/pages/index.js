@@ -1972,14 +1972,14 @@ export default function RPG() {
     } catch {}
   };
 
-  const searchSystemShop = async (query) => {
+  const searchSystemShop = async (query, kind = "todos") => {
     const q = String(query || "").trim();
     if (!active || !q) return [];
-    const req = shopSearchRequest(active, q);
+    const req = shopSearchRequest(active, q, kind);
     const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw gmRequestError(data, res.status, "A loja não respondeu agora. Tente de novo.");
-    const items = parseShopSearch(data.text);
+    const items = parseShopSearch(data.text, "busca", kind);
     if (!items.length) throw new Error("O Sistema não encontrou nada parecido. Tente outra busca.");
     setActive((prev) => {
       if (!prev) return prev;

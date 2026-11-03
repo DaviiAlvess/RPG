@@ -14,7 +14,7 @@ import { applyManualIdentity, identityPromptLines, identityTagList, parseIdentit
 import { buildCharacterNamingDirection, buildNpcPersonalityDirection } from "../lib/character-names.mjs";
 import NarrationSettings from "../components/NarrationSettings";
 import { buildNarrationDirection, buildStartPrompt, isStartBeatMessage, normalizeNarration, sanitizeStartDisplay, startBeatDisplay } from "../lib/narration.mjs";
-import { ADVENTURE_PRESETS } from "../lib/adventure-presets.mjs";
+import dynamic from "next/dynamic";
 import { parseTest, itemEffect, mergeCampaignIndex, mergeCampaignRecords, readWorldState, pendingTestFromMessages, bindStoryLists, storyListsFor, stripTemplateCampaignId, pinStoryIdentity, asItemList, asMissionList } from "../lib/gameplay.mjs";
 import { asPlotList, parsePlotTags, plotDirection, plotPromptLines } from "../lib/plots.mjs";
 import PlayView from "../components/PlayView";
@@ -33,6 +33,7 @@ import {
   formatTimeSkipSeparator,
   shouldShowTimeSeparator,
   formatGameTimeLong,
+  formatGameTimeShort,
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
@@ -41,9 +42,13 @@ import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
 import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
+import { readNarrationStream, visiblePartial } from "../lib/gm-stream.mjs";
+import { pacingDirection, paceCommandOf, paceDisplay, buildPaceMessage, didProgress } from "../lib/pacing.mjs";
 import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary } from "../lib/game-system.mjs";
-import CreateWizard from "../components/CreateWizard";
-import PresetLibrary from "../components/PresetLibrary";
+// Telas usadas só às vezes carregam sob demanda: a página inicial abre mais rápido.
+const LoadingShell = ({ label }) => <div className="rpg-shell"><p className="settings-hint" style={{ padding: 24 }}>{label}</p></div>;
+const CreateWizard = dynamic(() => import("../components/CreateWizard"), { loading: () => <LoadingShell label="Abrindo a criação…" /> });
+const PresetLibrary = dynamic(() => import("../components/PresetLibrary"), { loading: () => <LoadingShell label="Carregando histórias…" /> });
 import { campaignToTemplate, readSharedFromHash, shareUrl } from "../lib/story-share.mjs";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
@@ -262,8 +267,8 @@ const buildPrompt = (c, loreExtra, gameTime) => {
   lines.push(
     `Estilo, tamanho e ritmo da resposta vêm na DIREÇÃO DE NARRAÇÃO mais abaixo e prevalecem nesses pontos. As regras a seguir definem presença e agência — não brigam com ela.`,
     ``,
-    `REGRA 1 — PRESENÇA VISCERAL, NÃO RESUMO.`,
-    `Dramatize o próximo momento. Comece na última ação do jogador e mostre o mundo reagindo no corpo. Não recapitule a cena como um guia. Proibido abrir com "Você está em…", pôr-do-sol genérico ou clima sem aposta. A câmera é o jogador — magnética, atrás/dentro dos olhos: narre em "você"; o primeiro sujeito gramatical é o campo sensorial dele (mão, ombro, visão), nunca um NPC ("O subordinado aperta… Ele…"). Transeunte, figura encapuzada ou subordinado como protagonista do parágrafo é proibido. Vale em TODA campanha (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno, sem recriar a mesa e sem toggle. Visão de túnel sob tensão: só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha) — sem panorama. Ritmo cardíaco: frases curtas e secas; alta tensão = muitos pontos. Ação desajeitada: tropeça, coisas caem, a voz falha. Sem coreografia de filme.`,
+    `REGRA 1 — PRESENÇA NOS MOMENTOS QUE IMPORTAM; CORTE O TEMPO MORTO.`,
+    `Dramatize os momentos com escolha, risco ou emoção. Comece na última ação do jogador e mostre o mundo reagindo no corpo. Tempo morto — trajeto sem incidente, espera, rotina — se corta em uma ou duas frases (corte de cena) até o próximo momento vivo; não narre cada passo. Não recapitule a cena como um guia. Proibido abrir com "Você está em…", pôr-do-sol genérico ou clima sem aposta. A câmera é o jogador — magnética, atrás/dentro dos olhos: narre em "você"; o primeiro sujeito gramatical é o campo sensorial dele (mão, ombro, visão), nunca um NPC ("O subordinado aperta… Ele…"). Transeunte, figura encapuzada ou subordinado como protagonista do parágrafo é proibido. Vale em TODA campanha (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno, sem recriar a mesa e sem toggle. Visão de túnel sob tensão: só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha) — sem panorama. Ritmo cardíaco: frases curtas e secas na tensão; na calma, as frases respiram. Ação desajeitada: tropeça, coisas caem, a voz falha. Sem coreografia de filme.`,
     ``,
     `REGRA 2 — SENTIDOS CRUS, NÃO LISTA NEM PANORAMA.`,
     `Ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas, sons molhados/abafados/estridentes — chegam pelo corpo do jogador, não por um plano que segue um NPC. São tipos de detalhe, não um cardápio fixo: se a resposta anterior já usou um, escolha outro objeto e outro sentido. Não monte lista decorativa de cinco sentidos nem vista panorâmica. "Menos é mais" é recusar tour e adjetivo de juízo, não encolher a cena a um resumo turístico.`,
@@ -325,14 +330,17 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral trava global: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|função; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral sob tensão: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. O ritmo e o tamanho de cada resposta seguem o TEMPO DESTA CENA, no fim deste prompt. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|função; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration, c.disp || c.msgs, {
     voices: recentSpeakers(c.disp || c.msgs, c.charName),
+    skipConsequence: Boolean(paceCommandOf(c.paceInput)),
   }));
   lines.push(masterGuidance(c));
   lines.push(buildCharacterNamingDirection(c));
   lines.push(buildNpcPersonalityDirection(c));
   lines.push(specialAbilityDirection(c.specialAbility));
+  // Por último, para pesar mais: o tempo desta cena (ritmo, tamanho, fechamento, história parada).
+  lines.push(pacingDirection(c, { action: c.paceInput || "" }));
   return lines.filter(Boolean).join("\n");
 };
 
@@ -490,6 +498,9 @@ export default function RPG() {
   const sendMsgRef = useRef(null);
   const authTokenRef = useRef(null);
   const firebaseUserRef = useRef(null);
+  // Texto aparecendo enquanto o Mestre escreve (pode desligar nos Ajustes).
+  const streamingRef = useRef(true);
+  const [streamingEnabled, setStreamingEnabledState] = useState(true);
   const pendingRef = useRef([]);
   const skipNextTimeParseRef = useRef(false);
   const pendingLevelNoteRef = useRef("");
@@ -503,6 +514,47 @@ export default function RPG() {
     setCountdown(0);
     setAutoWaiting(false);
   }
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("rpg-streaming") === "0") { streamingRef.current = false; setStreamingEnabledState(false); }
+    } catch {}
+  }, []);
+  const setStreamingEnabled = (on) => {
+    streamingRef.current = Boolean(on);
+    setStreamingEnabledState(Boolean(on));
+    try { localStorage.setItem("rpg-streaming", on ? "1" : "0"); } catch {}
+  };
+
+  /**
+   * Pede a narração. Tenta o texto em tempo real; se não der (rede, servidor,
+   * resposta vazia), refaz pelo caminho normal, que tem todas as tentativas.
+   */
+  const requestNarration = async (payload, onPartial) => {
+    if (streamingRef.current && !payload.useGrounding && typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined") {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), GM_CLIENT_TIMEOUT_MS);
+      try {
+        const headers = { "Content-Type": "application/json" };
+        try { if (firebaseUserRef.current) authTokenRef.current = await firebaseUserRef.current.getIdToken(); } catch {}
+        if (authTokenRef.current) headers.Authorization = `Bearer ${authTokenRef.current}`;
+        const res = await fetch("/api/gm", { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal: controller.signal });
+        const type = res.headers.get("content-type") || "";
+        if (res.ok && type.includes("text/event-stream") && res.body) {
+          return await readNarrationStream(res, onPartial);
+        }
+      } catch {
+        // cai no caminho normal abaixo
+      } finally {
+        clearTimeout(timer);
+      }
+      onPartial("");
+    }
+    const res = await apiFetch("/api/gm", { method: "POST", headers: { "Content-Type": "application/json" }, timeoutMs: GM_CLIENT_TIMEOUT_MS, body: JSON.stringify(payload) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.error || typeof data.text !== "string") throw gmRequestError(data, res.status);
+    return data.text;
+  };
 
   const apiFetch = useCallback(async (url, options = {}) => {
     const { timeoutMs, retryOnce, ...fetchOptions } = options;
@@ -1002,6 +1054,7 @@ export default function RPG() {
       chapters: save.chapters || [],
       turn: save.turn || 0,
       lastOffscreenTurn: save.lastOffscreenTurn || 0,
+      lastProgressTurn: save.lastProgressTurn ?? save.turn ?? 0,
       places: save.places || [],
       gameSystem: save.gameSystem || active.gameSystem,
       systemSkills: save.systemSkills || [],
@@ -1419,6 +1472,7 @@ export default function RPG() {
     const isMasterBeat = isMasterBeatMessage(text);
     const isStartBeat = isStartBeatMessage(text);
     const isTestResult = /^Resultado do teste\b/i.test(text.trim());
+    const paceKind = paceCommandOf(text);
     const playerDisplay = formatPlayerTurnDisplay(text, camp?.charName);
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
     const newDisp = [
@@ -1426,8 +1480,9 @@ export default function RPG() {
       ...(isTestResult
         ? []
         : [{
-            type: isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
-            text: skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
+            type: paceKind ? "pace_ctx" : isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
+            ...(paceKind ? { pace: paceKind } : {}),
+            text: paceKind ? paceDisplay(text) : skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
           }]),
     ];
     setMsgs(newMsgs); setDisp(newDisp);
@@ -1451,22 +1506,25 @@ export default function RPG() {
       pendingLevelNoteRef.current = "";
       pendingMasterNote = pendingMasterNoteRef.current || camp.pendingMasterNote || "";
       pendingMasterNoteRef.current = "";
-      const res = await apiFetch("/api/gm", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        timeoutMs: GM_CLIENT_TIMEOUT_MS,
-        body: JSON.stringify({
-          economyMode: Boolean(camp.economyMode),
-          useGrounding: !isMasterBeat && shouldGroundGmTurn(camp, baseMsgs.length),
-          messages: newMsgs.slice(memoryUntil),
-          systemPrompt: buildPrompt({ ...camp, memory, pendingLevelNote, pendingMasterNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.error || typeof data.text !== "string") {
-        throw gmRequestError(data, res.status);
-      }
+      // Texto parcial na tela enquanto chega (no máximo ~16 atualizações por segundo).
+      let lastPaint = 0;
+      const paintPartial = (partial) => {
+        if (!partial) { setDisp(newDisp); return; }
+        const now = Date.now();
+        if (now - lastPaint < 60) return;
+        lastPaint = now;
+        const visible = cleanText(visiblePartial(partial));
+        if (visible) setDisp([...newDisp, { type: "gm", text: visible, streaming: true }]);
+      };
+      const narrationText = await requestNarration({
+        economyMode: Boolean(camp.economyMode),
+        useGrounding: !isMasterBeat && shouldGroundGmTurn(camp, baseMsgs.length),
+        messages: newMsgs.slice(memoryUntil),
+        // disp/msgs com a mensagem ATUAL: antes o prompt citava a ação do turno anterior como "última jogada".
+        systemPrompt: buildPrompt({ ...camp, disp: newDisp, msgs: newMsgs, paceInput: isStartBeat || isMasterBeat || isTimeSkipContext ? "" : text, memory, pendingLevelNote, pendingMasterNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
+      }, paintPartial);
 
-      let raw = data.text;
+      let raw = narrationText;
       const lists = storyListsFor(camp.id, camp, { activeId: active?.id, items: active?.items, missions, plots: active?.plots });
       const updatedMissions = parseMissions(raw, lists.missions);
       const updatedItems = parseItems(raw, lists.items);
@@ -1572,6 +1630,12 @@ export default function RPG() {
       const finalMsgs = [...newMsgs, { role: "assistant", content: raw }];
       const finalDisp = [...newDisp];
       if (timeSeparator) finalDisp.push(timeSeparator);
+      // Cartão de cena: ao chegar num lugar novo (e no primeiro turno), um "plano de abertura".
+      const sceneLoc = String(readWorldState(raw, camp.worldState).location || "").trim();
+      const prevLoc = String(camp.worldState?.location || "").trim();
+      if (sceneLoc && (sceneLoc.toLowerCase() !== prevLoc.toLowerCase() || nextTurn === 1)) {
+        finalDisp.push({ type: "scene", text: sceneLoc, time: formatGameTimeShort(nextGameTime) });
+      }
       finalDisp.push({ type: "gm", text: clean });
       if (newChapter) finalDisp.push({ type: "chapter", text: newChapter.title, number: newChapter.number });
       setMsgs(finalMsgs); setDisp(finalDisp);
@@ -1589,6 +1653,24 @@ export default function RPG() {
       }
 
       const nextWorldState = readWorldState(raw, camp.worldState);
+      // A história andou neste turno? (alimenta o detector de história parada)
+      const prevPlots = asPlotList(lists.plots);
+      const progressed = didProgress({
+        clue: clueResult.added.length,
+        choice: choiceResult.added.length,
+        chapter: Boolean(newChapter),
+        tension: nextTension !== (Number(camp.tension) || 0),
+        plots: updatedPlots.length !== prevPlots.length || updatedPlots.some((p, i) => p.status !== prevPlots[i]?.status),
+        place: Boolean(nextWorldState.location) && nextWorldState.location !== camp.worldState?.location,
+        npcs: Object.keys(nextWorldState.npcs || {}).length > Object.keys(camp.worldState?.npcs || {}).length,
+        secrets: (nextWorldState.secrets || []).length > (camp.worldState?.secrets || []).length || (nextWorldState.promises || []).length > (camp.worldState?.promises || []).length,
+        missions: updatedMissions.length !== lists.missions.length || newMissionCount > 0,
+        items: updatedItems.length !== lists.items.length,
+        relations: JSON.stringify(updatedRelationships) !== JSON.stringify(camp.relationships || {}),
+        xp: gained > 0,
+        system: systemResult.events.length,
+        ending: Boolean(newEnding),
+      });
       const updated = {
         ...camp,
         memory, memoryUntil,
@@ -1618,6 +1700,7 @@ export default function RPG() {
         choices: choiceResult.choices,
         chapters: newChapter ? [...(camp.chapters || []), newChapter] : (camp.chapters || []),
         turn: nextTurn,
+        lastProgressTurn: progressed ? nextTurn : (Number(camp.lastProgressTurn) || 0),
         ...(systemResult.system ? { gameSystem: systemResult.system } : {}),
         lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
         ...(newEnding ? { ending: newEnding } : {}),
@@ -1695,6 +1778,16 @@ export default function RPG() {
   msgsRef.current = msgs;
   dispRef.current = disp;
 
+  // Botões de ritmo: "Avançar" pula o tempo morto; "Detalhar" desacelera e descreve.
+  const handlePace = (kind) => {
+    if (!active || sending.current || pendingTest) return;
+    const message = buildPaceMessage(kind);
+    if (!message) return;
+    clearAuto();
+    setPlayPanel("narrator");
+    sendMsg(message, msgs, disp, active, campLore, false);
+  };
+
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;
     clearAuto();
@@ -1728,7 +1821,7 @@ export default function RPG() {
       items: [],
       hp: 100,
       gameTime: defaultTime,
-      clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, places: [], achievements: [],
+      clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, lastProgressTurn: 0, places: [], achievements: [],
       systemSkills: [],
       gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", level: 1, kills: 0, purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],
@@ -2327,7 +2420,6 @@ export default function RPG() {
   if (view === "presets") return (
     <>
     <PresetLibrary
-      presets={ADVENTURE_PRESETS}
       edric={PRESET}
       onPickEdric={() => { setForm({ ...PRESET }); setStep(2); setView("create"); }}
       onPick={pickPreset}
@@ -2475,6 +2567,9 @@ export default function RPG() {
       onCartAdd={cartAdd}
       onCartRemove={cartRemove}
       onCartBuyAll={cartBuyAll}
+      onPace={handlePace}
+      streamingEnabled={streamingEnabled}
+      setStreamingEnabled={setStreamingEnabled}
       recap={recap}
       onCloseRecap={() => setRecap(null)}
       onNarrateRecap={narrateRecap}

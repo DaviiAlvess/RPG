@@ -21,7 +21,7 @@ export function splitChapters(disp = []) {
   const chapters = [{ title: "", entries: [] }];
   for (const m of Array.isArray(disp) ? disp : []) {
     if (m?.type === "chapter") chapters.push({ title: String(m.text || ""), entries: [] });
-    else if (m?.type === "gm" || m?.type === "user" || m?.type === "auto") chapters[chapters.length - 1].entries.push(m);
+    else if (m?.type === "gm" || m?.type === "user" || m?.type === "auto" || m?.type === "scene") chapters[chapters.length - 1].entries.push(m);
   }
   return chapters.filter((c, i) => c.entries.length || (i > 0 && c.title));
 }
@@ -31,9 +31,11 @@ export function buildBookHtml(camp = {}, { disp = camp.disp || [], missions = ca
   const chapters = splitChapters(disp);
   const body = chapters.map((ch, i) => {
     const heading = `<h2 class="chapter"><span>Capítulo ${i + 1}</span>${escapeHtml(ch.title || (i === 0 ? "O começo" : ""))}</h2>`;
-    const text = ch.entries.map((m) => (m.type === "gm"
-      ? `<p>${para(m.text)}</p>`
-      : `<p class="player">— ${para(m.text)}</p>`)).join("");
+    const text = ch.entries.map((m) => (m.type === "scene"
+      ? `<p class="scene-head">${escapeHtml(m.text)}${m.time ? ` · ${escapeHtml(m.time)}` : ""}</p>`
+      : m.type === "gm"
+        ? `<p>${para(m.text)}</p>`
+        : `<p class="player">— ${para(m.text)}</p>`)).join("");
     return `<article>${heading}${text}</article>`;
   }).join("");
 
@@ -54,7 +56,7 @@ body{font-family:Georgia,serif;color:#111;background:#fff;max-width:760px;margin
 .rule{width:80px;height:2px;background:#111;margin:24px auto}
 .chapter{font-weight:normal;font-size:26px;margin:70px 0 28px;page-break-before:always;text-align:center}
 .chapter span{display:block;font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#777;margin-bottom:8px}
-article p{text-align:justify;margin:0 0 20px}.player{text-align:right!important;font-style:italic;color:#444}
+article p{text-align:justify;margin:0 0 20px}.scene-head{text-align:center!important;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#777;margin:36px 0 18px!important}.player{text-align:right!important;font-style:italic;color:#444}
 .ending{text-align:center;margin:80px 0;page-break-before:always}.ending h2{font-size:32px;font-weight:normal;margin:8px 0 16px}
 .eyebrow{font-size:12px;letter-spacing:4px;text-transform:uppercase;color:#777}
 .apx{margin:36px 0;border-top:1px solid #ccc;padding-top:16px;font-size:14px}.apx h3{font-size:13px;letter-spacing:3px;color:#555}

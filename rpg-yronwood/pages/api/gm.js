@@ -32,7 +32,138 @@ const geminiText = data => data?.candidates?.[0]?.content?.parts
   .map((part) => part.text).join("");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "2mb" } } };
+export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "2mb" }, responseLimit: false } };
+
+// ─── Texto em tempo real (streaming) ──────────────────────────────────
+/** Separa eventos "data: {...}" de um trecho de SSE. Devolve { events, rest }. */
+export function extractSseEvents(buffer) {
+  const events = [];
+  const parts = String(buffer || "").split(/\r?\n\r?\n/);
+  const rest = parts.pop() ?? "";
+  for (const part of parts) {
+    const data = part.split(/\r?\n/).filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+    if (!data || data === "[DONE]") continue;
+    try { events.push(JSON.parse(data)); } catch {}
+  }
+  return { events, rest };
+}
+
+export const STREAM_CONNECT_MS = 25000;
+export const STREAM_FIRST_BYTE_MS = 20000;
+
+const sseWrite = (res, payload) => {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  if (typeof res.flush === "function") res.flush();
+};
+
+/**
+ * Narra com streamGenerateContent e repassa o texto ao navegador conforme chega.
+ * Devolve true se já respondeu (sucesso ou erro no meio); false se nem começou —
+ * aí o cliente usa o caminho normal, com todas as tentativas e o rodízio de chaves.
+ */
+async function streamNarration(res, body, modelo, keys) {
+  const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
+  let modelIdx = 0;
+  const startedAt = Date.now();
+  const deadline = startedAt + GM_DEADLINE_MS;
+  // Conectar tem prazo curto: se o Gemini não começar a responder logo, o cliente
+  // usa o caminho normal sem dobrar a espera.
+  const connectDeadline = startedAt + STREAM_CONNECT_MS;
+  const tried = new Set();
+  const maxAttempts = Math.min(Math.max(keys.length, 1), 3) + models.length;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const remaining = connectDeadline - Date.now();
+    if (remaining < 2000) break;
+    const pool = keys.filter(key => !tried.has(key));
+    if (!pool.length) break;
+    const { key } = nextGeminiKey(pool);
+    if (!key) break;
+    const controller = new AbortController();
+    let timer = setTimeout(() => controller.abort(), Math.min(remaining, STREAM_FIRST_BYTE_MS));
+    let upstream;
+    try {
+      upstream = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:streamGenerateContent?alt=sse&key=${key}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal }
+      );
+    } catch {
+      clearTimeout(timer);
+      tried.add(key);
+      continue;
+    }
+    if (upstream.status === 429) {
+      clearTimeout(timer);
+      markGeminiKeyExhausted(key, upstream.headers?.get?.("retry-after"));
+      tried.add(key);
+      continue;
+    }
+    if (upstream.status === 404 && modelIdx < models.length - 1) {
+      clearTimeout(timer);
+      modelIdx += 1;
+      continue;
+    }
+    if (!upstream.ok || !upstream.body?.getReader) {
+      clearTimeout(timer);
+      tried.add(key);
+      continue;
+    }
+
+    res.status(200);
+    res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("X-Accel-Buffering", "no");
+    if (typeof res.flushHeaders === "function") res.flushHeaders();
+
+    const reader = upstream.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let total = "";
+    let lastData = null;
+    let blocked = false;
+    try {
+      clearTimeout(timer);
+      timer = setTimeout(() => controller.abort(), Math.max(1000, deadline - Date.now()));
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const { events, rest } = extractSseEvents(buffer);
+        buffer = rest;
+        for (const event of events) {
+          lastData = event;
+          if (event?.promptFeedback?.blockReason) blocked = true;
+          const piece = geminiText(event);
+          if (piece) {
+            total += piece;
+            sseWrite(res, { t: piece });
+          }
+        }
+      }
+      const tail = extractSseEvents(`${buffer}\n\n`).events;
+      for (const event of tail) {
+        lastData = event;
+        const piece = geminiText(event);
+        if (piece) { total += piece; sseWrite(res, { t: piece }); }
+      }
+      if (!total) {
+        const finish = lastData?.candidates?.[0]?.finishReason;
+        blocked = blocked || ["SAFETY", "PROHIBITED_CONTENT", "RECITATION"].includes(finish);
+        sseWrite(res, { error: blocked ? "A IA não respondeu a esse conteúdo." : "Resposta vazia.", code: blocked ? "CONTENT_BLOCKED" : "EMPTY_RESPONSE" });
+      } else {
+        recordKeyUsage(key, parseUsageTokens(lastData));
+        sseWrite(res, { done: true });
+      }
+    } catch {
+      sseWrite(res, { error: "A transmissão foi interrompida.", code: "STREAM_INTERRUPTED" });
+    } finally {
+      clearTimeout(timer);
+      res.end();
+    }
+    return true;
+  }
+  return false;
+}
+
 
 export function readGmRequestBody(raw) {
   if (raw == null || raw === "") return {};
@@ -506,6 +637,13 @@ export default async function handler(req, res) {
       generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 1024 : 2048, temperature: 0.9 },
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
+
+    // Texto em tempo real: só na narração comum (sem busca na rede). Se não começar, o cliente cai no caminho normal.
+    if (requestBody.stream === true && !useGrounding) {
+      const sent = await streamNarration(res, body, MODELO_GM, chavesUnicas);
+      if (sent) return;
+      return res.status(503).json({ error: "O texto em tempo real não está disponível agora.", code: "STREAM_UNAVAILABLE" });
+    }
 
     const text = useGrounding
       ? await chamarGeminiComBusca(body, MODELO_GM)

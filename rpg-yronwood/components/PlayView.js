@@ -14,8 +14,10 @@ import { RecapModal, EndingScreen, TensionMeter, AmbienceControl } from "./Story
 import { npcPortraitUrl } from "../lib/appearance.mjs";
 import { asClueList } from "../lib/story-progress.mjs";
 import { suggestActions } from "../lib/codex.mjs";
-import CodexPanel from "./CodexPanel";
-import SystemPanel from "./SystemPanel";
+import dynamic from "next/dynamic";
+// Painéis abertos só às vezes carregam sob demanda.
+const CodexPanel = dynamic(() => import("./CodexPanel"), { loading: () => <p className="panel-sub">Abrindo o Códice…</p> });
+const SystemPanel = dynamic(() => import("./SystemPanel"), { loading: () => <p className="panel-sub">Abrindo o Sistema…</p> });
 import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
@@ -324,6 +326,9 @@ export default function PlayView(props) {
     onCartAdd,
     onCartRemove,
     onCartBuyAll,
+    onPace,
+    streamingEnabled,
+    setStreamingEnabled,
     recap,
     onCloseRecap,
     onNarrateRecap,
@@ -390,6 +395,16 @@ export default function PlayView(props) {
   const pendingPreview = pendingTest ? resolveTest(pendingTest, attributes || {}, 10, skills || {}) : null;
   const pendingSkillKey = pendingTest ? skillForAttribute(pendingTest.attribute) : null;
   const pendingSkillName = pendingSkillKey ? (SKILL_LABELS[pendingSkillKey] || pendingSkillKey) : null;
+
+  // Retrato de quem fala: o jogador ou um NPC conhecido desta história.
+  const knownSpeakers = Object.keys({ ...(c.relationships || {}), ...(c.worldState?.npcs || {}) });
+  const portraitFor = (speaker, isPlayer) => {
+    if (c.useImages === false) return null;
+    if (isPlayer) return c.portraitUrl || null;
+    const key = String(speaker || "").trim().toLowerCase();
+    const match = knownSpeakers.find((n) => n.toLowerCase() === key) || knownSpeakers.find((n) => n.toLowerCase().split(/\s+/).includes(key));
+    return match ? npcPortraitUrl(match, c.worldState?.npcs?.[match] || "", c.world, c.portraitStyle) : null;
+  };
 
   const navItems = [
     { id: "narrator", badge: null },
@@ -598,6 +613,24 @@ export default function PlayView(props) {
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
                 {(disp || []).map((message, index) => {
+                  if (message?.type === "scene") {
+                    return (
+                      <div key={message?.id || `scene-${index}`} className="chat-scene-card" role="separator" aria-label={`Cena: ${message?.text}`}>
+                        <span className="scene-card-place">{message?.text}</span>
+                        {message?.time ? <span className="scene-card-time">{message.time}</span> : null}
+                      </div>
+                    );
+                  }
+
+                  if (message?.type === "pace_ctx") {
+                    return (
+                      <div key={message?.id || `pace-${index}`} className="chat-pace-context">
+                        <i className={message?.pace === "detalhar" ? "ti ti-zoom-in" : "ti ti-player-track-next"} aria-hidden="true" />
+                        <span>{message?.text}</span>
+                      </div>
+                    );
+                  }
+
                   if (message?.type === "chapter") {
                     return (
                       <div key={message?.id || `chapter-${index}`} className="chat-chapter" role="separator">
@@ -645,7 +678,7 @@ export default function PlayView(props) {
                   return (
                     <div
                       key={message?.id || `${message?.type || "msg"}-${index}`}
-                      className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""} ${talky ? "scene-talk" : ""}`}
+                      className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""} ${talky ? "scene-talk" : ""} ${message?.streaming ? "streaming" : ""}`}
                     >
                       {talky ? null : (
                         isUser && c?.portraitUrl ? (
@@ -666,12 +699,12 @@ export default function PlayView(props) {
                           {isError ? (
                             message?.text || ""
                           ) : (
-                            <NarrativeContent text={message?.text} playerName={c?.charName} />
+                            <NarrativeContent text={message?.text} playerName={c?.charName} portraitFor={portraitFor} />
                           )}
                         </div>
-                        {timeLabel || (!isUser && !isError) ? (
+                        {timeLabel || (!isUser && !isError && !message?.streaming) ? (
                           <div className="msg-time">
-                            {!isUser && !isError ? <ListenButton text={message?.text} /> : null}
+                            {!isUser && !isError && !message?.streaming ? <ListenButton text={message?.text} /> : null}
                             {timeLabel}
                           </div>
                         ) : null}
@@ -680,7 +713,7 @@ export default function PlayView(props) {
                   );
                 })}
 
-                {loading && disp?.length ? (
+                {loading && disp?.length && !disp[disp.length - 1]?.streaming ? (
                   <div className="typing-row">
                     <div className="msg-avatar narrator">
                       <i className="ti ti-sparkles" />
@@ -777,6 +810,14 @@ export default function PlayView(props) {
                 </button>
               </div>
               <div className="play-tools">
+                <div className="pace-controls" role="group" aria-label="Ritmo da história">
+                  <button type="button" className="pace-btn" disabled={loading || autoMode || autoWaiting || Boolean(pendingTest) || !onPace} onClick={() => onPace("avancar")} title="Pula o tempo morto até o próximo momento que importa">
+                    <i className="ti ti-player-track-next" aria-hidden="true" /> <span>Avançar</span>
+                  </button>
+                  <button type="button" className="pace-btn" disabled={loading || autoMode || autoWaiting || Boolean(pendingTest) || !onPace} onClick={() => onPace("detalhar")} title="Desacelera: o Mestre descreve o lugar e as pessoas com calma">
+                    <i className="ti ti-zoom-in" aria-hidden="true" /> <span>Detalhar</span>
+                  </button>
+                </div>
                 <div className="ability-shortcut">
                   <button type="button" className="ability-trigger" disabled={loading || autoMode || autoWaiting} onClick={() => setMasterChatOpen(true)} aria-haspopup="dialog" aria-label={agreementCount ? `Falar com o Mestre. ${agreementCount} acordos da mesa` : "Falar com o Mestre"}>
                     <i className="ti ti-messages" aria-hidden="true" />
@@ -1250,6 +1291,9 @@ export default function PlayView(props) {
 
             <section className="play-section" aria-labelledby="settings-mesa">
               <h3 id="settings-mesa" className="play-section-title">Mesa</h3>
+              {setStreamingEnabled ? (
+                <label className="economy-setting"><input type="checkbox" checked={Boolean(streamingEnabled)} onChange={e => setStreamingEnabled(e.target.checked)} /><span><strong>Texto em tempo real {streamingEnabled ? "· ativo" : ""}</strong><small>A narração aparece enquanto o Mestre escreve, em vez de chegar toda de uma vez. Se a conexão falhar, o jogo busca a resposta do jeito normal.</small></span></label>
+              ) : null}
               <label className="economy-setting"><input type="checkbox" disabled={loading || autoMode} checked={Boolean(c.economyMode)} onChange={e => props.onEconomyChange(e.target.checked)} /><span><strong>Modo economia {c.economyMode ? "· ativo" : ""}</strong><small>Usa respostas curtas e instruções compactas. No automático, escolhe ações locais mais simples, sem uma chamada extra à IA. A ficha, os segredos e o histórico continuam salvos.</small></span></label>
               {c.economyMode ? <p className="settings-hint">O tamanho curto prevalece enquanto a economia estiver ativa. Desligue para voltar ao tamanho escolhido.</p> : null}
               <details className="settings-fold">

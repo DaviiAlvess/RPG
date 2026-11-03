@@ -660,3 +660,33 @@ button:disabled { cursor: not-allowed; }
 .sys-item-tags em.kind-habilidade { color: #c9a6ff; border-color: rgba(190, 140, 255, .5); }
 .sys-item-tags em.kind-arma { color: #ff9f8a; border-color: rgba(255, 140, 120, .5); }
 .sys-item-tags em.kind-equipamento { color: #ffd98a; border-color: rgba(255, 210, 110, .5); }
+
+/* ─── Ritmo e imersão ─────────────────────────────────────────────── */
+.pace-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.pace-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-md); color: var(--text-secondary); font-size: 12px; font-weight: 600; transition: all .15s; }
+.pace-btn:hover:not(:disabled) { color: var(--text-primary); border-color: var(--purple-mid); background: var(--purple-light); }
+.pace-btn:disabled { opacity: .45; cursor: not-allowed; }
+.chat-pace-context { display: flex; gap: 8px; align-items: center; justify-content: center; margin: 10px auto; font-size: 12px; font-style: italic; color: var(--text-secondary); }
+.chat-pace-context i { color: var(--purple); }
+
+/* Cartão de cena: plano de abertura ao chegar num lugar novo */
+.chat-scene-card { position: relative; display: grid; justify-items: center; gap: 4px; margin: 26px 0 14px; padding: 18px 12px; text-align: center; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: linear-gradient(90deg, transparent, rgba(223, 189, 128, .07), transparent); animation: scene-card-in .9s ease-out both; }
+.scene-card-place { font: 400 24px/1.2 Georgia, serif; color: var(--text-primary); letter-spacing: .02em; }
+.scene-card-time { font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--purple); }
+@keyframes scene-card-in { from { opacity: 0; letter-spacing: .3em; } to { opacity: 1; } }
+
+/* Falas com retrato de quem fala */
+.dialogue-line { flex-direction: row !important; align-items: flex-start; gap: 12px !important; }
+.dialogue-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.dialogue-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--dialogue-accent); background: var(--bg-tertiary); }
+.dialogue-initial { display: inline-grid; place-items: center; font: 700 16px Georgia, serif; color: var(--dialogue-accent); background: var(--dialogue-wash); }
+.dialogue-line-player { flex-direction: row-reverse !important; text-align: right; }
+.dialogue-line-player .dialogue-body { align-items: flex-end; }
+@media (prefers-reduced-motion: reduce) { .chat-scene-card { animation: none; } }
+@media (max-width: 560px) { .dialogue-avatar { width: 32px; height: 32px; } .scene-card-place { font-size: 20px; } }
+
+/* Texto em tempo real: cursor piscando no fim do que já chegou */
+.msg.streaming .narrative-prose:last-child::after,
+.msg.streaming .dialogue-line:last-child .dialogue-text::after { content: "▍"; display: inline-block; margin-left: 3px; color: var(--purple); font-style: normal; animation: stream-caret 1s steps(1) infinite; }
+@keyframes stream-caret { 50% { opacity: .15; } }
+@media (prefers-reduced-motion: reduce) { .msg.streaming .narrative-prose:last-child::after, .msg.streaming .dialogue-line:last-child .dialogue-text::after { animation: none; } }

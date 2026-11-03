@@ -56,16 +56,18 @@ export default function VoiceControl({ disp }) {
     try { localStorage.setItem(VOICE_PREF_KEY, JSON.stringify(prefs)); } catch {}
   }, [prefs]);
 
-  // Lê automaticamente só respostas NOVAS (não relê o save ao abrir).
+  // Lê automaticamente só respostas NOVAS e completas (não relê o save ao abrir
+  // e não lê o texto pela metade enquanto ele ainda está chegando).
   useEffect(() => {
-    const len = (disp || []).length;
-    if (seen.current === null) { seen.current = len; return; }
-    if (len > seen.current) {
-      const last = disp[len - 1];
-      const gmJustArrived = disp.slice(seen.current).some((m) => m?.type === "gm");
-      if (prefs.auto && gmJustArrived) getNarrator()?.speak(last?.type === "gm" ? last.text : lastGm(disp), prefs);
+    const list = disp || [];
+    let last = null;
+    for (let i = list.length - 1; i >= 0; i--) if (list[i]?.type === "gm") { last = list[i]; break; }
+    if (seen.current === null) { seen.current = last && !last.streaming ? last.text : ""; return; }
+    if (!last || last.streaming) return;
+    if (last.text !== seen.current) {
+      seen.current = last.text;
+      if (prefs.auto) getNarrator()?.speak(last.text, prefs);
     }
-    seen.current = len;
   }, [disp, prefs]);
 
   if (!supported) return null;

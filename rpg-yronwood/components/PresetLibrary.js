@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import Head from "next/head";
-import { PRESET_TONES, filterPresets } from "../lib/adventure-presets.mjs";
+import { ADVENTURE_PRESETS, PRESET_TONES, filterPresets } from "../lib/adventure-presets.mjs";
 import { listActiveSpecialAbilities } from "../lib/special-ability.mjs";
 
 function PresetCard({ preset, onPick, actions = null, badge = "" }) {
@@ -25,7 +25,7 @@ function PresetCard({ preset, onPick, actions = null, badge = "" }) {
 
 /** Biblioteca de histórias prontas, das histórias do jogador e da recebida por link. */
 export default function PresetLibrary({
-  presets, edric, onPickEdric, onPick, onBack,
+  presets = ADVENTURE_PRESETS, edric, onPickEdric, onPick, onBack,
   userTemplates = [], sharedTemplate = null, onSaveShared, onDismissShared, onDeleteTemplate, onShareTemplate,
 }) {
   const [query, setQuery] = useState("");

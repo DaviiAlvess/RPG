@@ -91,3 +91,14 @@ do Gemini. Também há um limite de pedidos por conta.
 - `GM_REQUIRE_AUTH=0`: desliga a exigência de login. Use só em emergência:
   sem ela, qualquer pessoa pode gastar a sua cota do Gemini.
 - `FIREBASE_PROJECT_ID`: opcional; por padrão usa `NEXT_PUBLIC_FIREBASE_PROJECT_ID` ou `siterpg32`.
+
+## Ritmo da história e texto em tempo real
+
+- A cada turno o jogo identifica o tipo de cena (combate, perseguição, suspense, conversa,
+  investigação, exploração, viagem, descanso) e envia ao Mestre o "TEMPO DESTA CENA":
+  ritmo das frases, tamanho da resposta, o que mostrar e como fechar. Viagens e esperas
+  viram corte de cena. Depois de 3 respostas sem nada novo, o Mestre é obrigado a mudar algo.
+- Botões **Avançar** (pula o tempo morto) e **Detalhar** (desacelera e descreve) ficam ao lado
+  de "Falar com o Mestre".
+- A narração chega em tempo real (streaming). Se a transmissão falhar, o jogo refaz o pedido
+  pelo caminho normal automaticamente. Dá para desligar em Ajustes → "Texto em tempo real".

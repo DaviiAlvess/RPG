@@ -7,7 +7,7 @@ export const NARRATION_VISCERAL_LOCK = [
   'VISÃO DE TÚNEL — sob tensão NÃO há vista panorâmica. Só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha). Você não sabe o quadro geral. Em calma pode haver um pouco mais de espaço, ainda a partir de você.',
   'ZERO ABSTRAÇÃO — PROIBIDO adjetivos de juízo: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta, objetos que quebram, movimento desajeitado.',
   'AÇÃO DESAJEITADA — sob pressão: tropeça, coisas caem, a voz falha, comunicação bagunçada. Sem coreografia de filme.',
-  'RITMO CARDÍACO — frases curtas e secas. Alta tensão = muitos pontos, fôlego curto. Calma = frases um pouco mais longas ainda concretas. Sem aparte poético ou filosófico.',
+  'RITMO CARDÍACO — o ritmo acompanha o coração da cena: na tensão, frases curtas e secas, muitos pontos, fôlego curto; na conversa, falas e reações curtas; na calma, na descoberta e no descanso, frases mais longas e fluidas, ainda concretas. Variar o comprimento das frases é obrigatório: texto todo picado cansa tanto quanto texto todo arrastado. Sem aparte poético ou filosófico.',
 ].join('\n');
 const NARRATION_POV_LOCK = `Narre em segunda pessoa ("você"); a câmera é o corpo do jogador — magnética, atrás/dentro dos olhos. O primeiro sujeito gramatical é o campo sensorial do jogador (mão, ombro, visão), nunca um NPC. NPCs entram a partir de você ("À sua frente…", "no canto do olho…"). Proibido: "O subordinado aperta… Ele solta um suspiro…" ou abrir com "o transeunte" / "a figura encapuzada" como herói do parágrafo. ${NARRATION_VISION_LOCK} ${NARRATION_VISCERAL_LOCK}`;
 export const NARRATION_STYLES = {
@@ -15,47 +15,47 @@ export const NARRATION_STYLES = {
     "label": "Cinematográfico",
     "icon": "◈",
     "description": "Cenas visuais, cortes precisos e diálogos com presença.",
-    "instruction": `Tom: cortes visuais, ações concretas, diálogo com presença — sem jargão de roteiro. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "A palma cola na madeira. A porta bate. O ar trava no peito. À sua frente, dois dedos no selo. Cera fria. Ferrugem. A carta encosta na sua pele. Você não vê o corredor. Os passos param."
+    "instruction": `Tom: cortes visuais, ações concretas, diálogo com presença — sem jargão de roteiro. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "A porta bate atrás de você e o eco ainda corre pelo corredor quando a carta escorrega da mesa para a sua mão: papel grosso, cera fria, um selo que você conhece. À sua frente, dois dedos tamborilam na madeira. Param. Ele: \"Abra. Agora.\" Lá fora, os passos também param."
   },
   "literary": {
     "label": "Literário",
     "icon": "✒",
     "description": "Prosa expressiva, subtexto e personagens com camadas.",
-    "instruction": `Tom: um gesto específico, subtexto no corpo — sem prosa poética, sem conto em terceira pessoa. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "Sua mão ainda aberta. A carta desliza até você. Cera. Dedos na borda. Suor azedo. O selo no seu campo — intacto. As mãos, não. No canto do olho, a cadeira. O ar não desce."
+    "instruction": `Tom: um gesto específico, subtexto no corpo — sem prosa poética, sem conto em terceira pessoa. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "Você segura a carta mais tempo do que precisa. O papel é bom demais para notícia boa, e a cera do selo ainda guarda a marca de um polegar apressado. Do outro lado da mesa, ela finge olhar o fogo. Suas mãos não fingem nada. Ela: \"Você sabia que isso ia chegar.\" Não é uma pergunta."
   },
   "dark": {
     "label": "Sombrio",
     "icon": "☾",
     "description": "Suspense, incerteza e perigo sugerido.",
-    "instruction": `Tom: pistas no corpo e no que chega aos sentidos — não rotule medo nem imponha violência gratuita. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "O peso no colo. A carta encosta em você. Cera seca. A capa pingue no joelho. Frio na espinha. O mesmo símbolo da sua porta. À sua frente, os olhos dele. O batimento abafado. Você não vê a rua."
+    "instruction": `Tom: pistas no corpo e no que chega aos sentidos — não rotule medo nem imponha violência gratuita. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "A chuva escorre do capuz para dentro da sua gola enquanto você vira o envelope na mão. Nenhum nome. Só o selo — o mesmo símbolo riscado na sua porta ontem. O beco fica quieto de um jeito errado. Atrás de você, uma tábua range. Depois, nada."
   },
   "light": {
     "label": "Leve e espirituoso",
     "icon": "☀",
     "description": "Aventura calorosa, humor de situação e descobertas.",
-    "instruction": `Tom: humor de situação pelo corpo desajeitado — sem ridicularizar o jogador nem virar piada o que é sério. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "À sua frente, a carta. Ele ensaiou a solenidade. Pão cai da manga no seu colo. Você ergue a mão tarde demais. A voz dele falha. Ele: \"A correspondência chegou intacta. O almoço teve complicações.\" Farelo na palma. Mofo no pão."
+    "instruction": `Tom: humor de situação pelo corpo desajeitado — sem ridicularizar o jogador nem virar piada o que é sério. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "Você estende a mão para a carta no exato momento em que ele tenta uma reverência solene — e o pão escondido na manga dele cai bem no seu colo. Farelo no selo. Ele pigarreia, vermelho até as orelhas. Ele: \"A correspondência chegou intacta. O almoço teve complicações.\" Você tira o farelo da cera com a unha."
   },
   "epic": {
     "label": "Épico",
     "icon": "⚑",
     "description": "Decisões marcantes e um mundo maior que o herói.",
-    "instruction": `Tom: peso nas escolhas pelo que o corpo alcança — escale aos poucos, sem profecia, sem adjetivo de juízo. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "Sua mão vazia. Os sinos. A carta não toca a mesa. O ar trava. À sua frente, você vê o queixo dele e uma fresta da praça. Ele: \"Há uma cópia para cada portão. Esta é a última.\" Suor nas costas. O selo corta a pele."
+    "instruction": `Tom: peso nas escolhas pelo que o corpo alcança — escale aos poucos, sem profecia, sem adjetivo de juízo. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "Os sinos da cidade começam a tocar, um depois do outro, enquanto a carta passa da mão dele para a sua. O selo é real. O peso também. Pela janela, você vê a praça se encher de gente que ainda não sabe de nada. Ele: \"Há uma cópia para cada portão. Esta é a última.\" A cera estala sob o seu polegar."
   },
   "intimate": {
     "label": "Íntimo e dramático",
     "icon": "◇",
     "description": "Relações, silêncios e conversas que importam.",
-    "instruction": `Tom: relações e silêncios no espaço entre os corpos — sem rotular emoção do jogador, forçar romance ou falar por ele. A trava visceral prevalece. ${NARRATION_POV_LOCK}`,
-    "sample": "O envelope na sua mão. Papel áspero. À sua frente, o olhar dele no retrato da lareira. A voz falha. Ele: \"Você ainda guarda isso?\" O papel entre os dois. Suas mãos tremem no envelope."
+    "instruction": `Tom: relações e silêncios no espaço entre os corpos — sem rotular emoção do jogador, forçar romance ou falar por ele. A trava visceral vale sob tensão; o TEMPO DESTA CENA decide o ritmo. ${NARRATION_POV_LOCK}`,
+    "sample": "O envelope ainda está quente da mão dele quando chega à sua. Por um momento, nenhum dos dois solta. Você reconhece a letra antes de ler o nome — e ele percebe que você reconheceu. Ele: \"Você ainda guarda as outras?\" A lenha estala na lareira. Você não responde logo."
   }
 };
 export const NARRATION_LENGTHS = { short: { label: 'Curta', instruction: 'Cerca de 80–140 palavras; uma cena focada. Mesmo curto: ancoragem biológica, sentidos crus, visão de túnel, frases curtas. Menos frases, não menos corpo.' }, balanced: { label: 'Equilibrada', instruction: 'Cerca de 200–320 palavras, com espaço para diálogo. Ritmo cardíaco: frases curtas e secas; alta tensão = muitos pontos.' }, rich: { label: 'Detalhada', instruction: 'Cerca de 300–450 palavras, sem avançar além de decisões do jogador. Detalhe é micro (centímetros), não panorama.' } };
-export const NARRATION_PACES = { slow: { label: 'Contemplativo', instruction: 'Dê tempo para o corpo e os sentidos. Não invente urgência a cada turno. Sem aparte poético.' }, balanced: { label: 'Natural', instruction: 'Alterne ação, conversa e descanso conforme a cena. Tensão = frases curtas; descanso ainda pelo corpo, não por resumo.' }, fast: { label: 'Ágil', instruction: 'Entre perto do momento decisivo, reduza transições e preserve oportunidades de agir. Fôlego curto, muitos pontos.' } };
+export const NARRATION_PACES = { slow: { label: 'Contemplativo', instruction: 'Dê tempo para o corpo, os sentidos e os silêncios. Não invente urgência a cada turno. Deixe as frases respirarem na calma. Sem aparte poético.' }, balanced: { label: 'Natural', instruction: 'Alterne ação, conversa e descanso conforme a cena. Tensão = frases curtas; calma = frases que respiram. Tempo morto sem escolha nem risco (trajeto, espera, rotina) vira corte de cena: uma ou duas frases e já o próximo momento que importa.' }, fast: { label: 'Ágil', instruction: 'Entre perto do momento decisivo, corte transições e tempo morto em uma frase e preserve oportunidades de agir. Fôlego curto, muitos pontos.' } };
 export function normalizeNarration(value = {}) {
   return { style: Object.hasOwn(NARRATION_STYLES, value?.style) ? value.style : 'cinematic', length: Object.hasOwn(NARRATION_LENGTHS, value?.length) ? value.length : 'balanced', pace: Object.hasOwn(NARRATION_PACES, value?.pace) ? value.pace : 'balanced' };
 }
@@ -178,8 +178,8 @@ export function buildNarrationDirection(value, recent, options = {}) {
     'DIREÇÃO DE NARRAÇÃO — estas preferências prevalecem sobre instruções anteriores de estilo, tamanho e ritmo, mas nunca alteram regras de dados, fatos, canon ou agência do jogador. A NARRAÇÃO VISCERAL é trava global: prevalece sobre tom literário, leve ou "épico" do seletor.',
     NARRATION_PRESENCE,
     style.instruction, NARRATION_LENGTHS[n.length].instruction, NARRATION_PACES[n.pace].instruction,
-    `MODELO DE VOZ — copie só o ritmo (frase curta, câmera em você). Não copie a cena do exemplo (carta, cera, palma, pão, selo) nem o elenco dele. Capataz, mensageiro e cargos de exemplo NÃO entram se não estiverem nesta história. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética:\n${style.sample}`,
-    consequenceDirection(recent),
+    `MODELO DE VOZ — copie só o ritmo e a câmera em você (frases curtas na tensão, mais longas na calma). Não copie a cena do exemplo (carta, cera, palma, pão, selo) nem o elenco dele. Capataz, mensageiro e cargos de exemplo NÃO entram se não estiverem nesta história. Estilo literário/cinematográfico = corte e detalhe, NÃO terceira pessoa de conto e NÃO prosa poética:\n${style.sample}`,
+    options.skipConsequence ? '' : consequenceDirection(recent),
     conversationDirection(recent, voices),
     repetitionDirection(recent),
     'Uma falha muda a situação, não deve apenas repetir o mesmo bloqueio. Ação desajeitada sob pressão: coisas caem, a voz falha, o corpo atrapalha.',

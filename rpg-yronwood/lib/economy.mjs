@@ -3,6 +3,7 @@ import { appearanceForGm } from './appearance.mjs';
 import { gmBriefLines } from './gm-brief.mjs';
 import { storyProgressLines } from './story-progress.mjs';
 import { systemPromptLines } from './game-system.mjs';
+import { pacingDirection } from './pacing.mjs';
 import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
 import { buildNarrationDirection } from './narration.mjs';
 import { recentSpeakers } from './dialogueFormat.js';
@@ -57,10 +58,12 @@ export function economyPrompt(c, lore, calendar) {
     c.useImages ? 'Ao final, IMAGE_PROMPT: cenário em inglês, sem texto.' : 'Não gere IMAGE_PROMPT.',
     buildNarrationDirection({ ...c.narration, length: 'short' }, c.disp || c.msgs, {
       voices: recentSpeakers(c.disp || c.msgs, c.charName),
+      skipConsequence: Boolean(c.paceInput && String(c.paceInput).startsWith('[RITMO:')),
     }),
     masterGuidance(c),
     buildCharacterNamingDirection(c),
     buildNpcPersonalityDirection(c),
-    specialAbilityDirection(c.specialAbility)
+    specialAbilityDirection(c.specialAbility),
+    pacingDirection({ ...c, narration: { ...(c.narration || {}), length: 'short' } }, { action: c.paceInput || '', short: true })
   ].filter(Boolean).join('\n');
 }

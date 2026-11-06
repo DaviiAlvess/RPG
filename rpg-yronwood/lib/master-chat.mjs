@@ -42,7 +42,7 @@ export function stripAcordoTags(text) {
 }
 
 export function stripMasterTags(text) {
-  text = String(text || '').replace(/\[AJUSTE_(XP|N[IÍ]VEL|PONTOS):[^\]]*\]/gi, '');
+  text = String(text || '').replace(/\[AJUSTE_(XP|N[IÍ]VEL|N[IÍ]VEL_SISTEMA|PONTOS|RANK):[^\]]*\]/gi, '');
   return stripIdentityTags(String(text || ''))
     .replace(MASTER_TAG_LINE, '')
     .replace(MASTER_TAG_INLINE, '')
@@ -212,19 +212,24 @@ function mergeInferredMasterTags(gmText, inferred = []) {
 }
 
 
-// ── Ajustes de progresso pedidos ao Mestre (XP, nível, pontos do Sistema) ──
+import { adjustSystem, SYSTEM_RANKS } from './game-system.mjs';
+
+// ── Ajustes de progresso pedidos ao Mestre (XP, nível, pontos, nível e rank do Sistema) ──
 const XP_PER_LEVEL_MC = 100;
-const PROGRESS_LIMITS = { xp: 1000, levels: 10, points: 500 };
+const PROGRESS_LIMITS = { xp: 5000, levels: 30, points: 25000 };
 const clampInt = (n, max) => Math.max(-max, Math.min(max, Math.trunc(Number(n) || 0)));
 
 /** Lê [AJUSTE_XP:+n], [AJUSTE_NIVEL:+n] e [AJUSTE_PONTOS:+n] da resposta do Mestre. */
 export function parseProgressTags(text) {
-  const out = { xp: 0, levels: 0, points: 0 };
+  const out = { xp: 0, levels: 0, points: 0, sysLevels: 0, rank: null };
   const raw = String(text || '');
+  for (const m of raw.matchAll(/\[AJUSTE_N[IÍ]VEL_SISTEMA:\s*([+-]?\d+)[^\]]*\]/gi)) out.sysLevels += Number(m[1]);
+  const rk = raw.match(/\[AJUSTE_RANK:\s*([EDCBAS])\s*\]/i);
+  if (rk) out.rank = rk[1].toUpperCase();
   for (const m of raw.matchAll(/\[AJUSTE_XP:\s*([+-]?\d+)[^\]]*\]/gi)) out.xp += Number(m[1]);
   for (const m of raw.matchAll(/\[AJUSTE_N[IÍ]VEL:\s*([+-]?\d+)[^\]]*\]/gi)) out.levels += Number(m[1]);
   for (const m of raw.matchAll(/\[AJUSTE_PONTOS:\s*([+-]?\d+)[^\]]*\]/gi)) out.points += Number(m[1]);
-  return { xp: clampInt(out.xp, PROGRESS_LIMITS.xp), levels: clampInt(out.levels, PROGRESS_LIMITS.levels), points: clampInt(out.points, PROGRESS_LIMITS.points) };
+  return { xp: clampInt(out.xp, PROGRESS_LIMITS.xp), levels: clampInt(out.levels, PROGRESS_LIMITS.levels), points: clampInt(out.points, PROGRESS_LIMITS.points), sysLevels: clampInt(out.sysLevels, PROGRESS_LIMITS.levels), rank: out.rank };
 }
 
 /** Pedidos diretos do jogador, para quando o Mestre esquece a tag. */
@@ -232,18 +237,21 @@ export function inferProgressTags(question) {
   const n = requestNorm(question);
   const tags = [];
   const num = (re) => { const m = n.match(re); return m ? Number(m[1]) : null; };
-  const wantsGive = /(quero|me da|me de|da |dar|ganhar|ganho|adiciona|coloca|bota|aumenta|sobe|subir|upa|upar|libera|concede)/.test(n);
-  if (wantsGive && /(nivel|niveis|level|lvl)/.test(n)) {
-    const k = num(/(\d{1,2})\s*(?:niveis|nivel|levels?|lvls?)/) ?? num(/(?:nivel|level|lvl)\s*(?:para|pro|ate)?\s*\+?(\d{1,2})/) ;
-    tags.push(`[AJUSTE_NIVEL:+${k && k > 0 ? Math.min(k, 10) : 1}]`);
+  const wantsGive = /(quero|me da|me de|da |dar|ganhar|ganho|adiciona|coloca|bota|poe|aumenta|sobe|subir|upa|upar|libera|concede|muda|mude|deixa|vira|virar|passa|passar)/.test(n);
+  const aboutSystem = /sistema/.test(n);
+  const rankMatch = n.match(/\brank\s*(?:para|pro|pra|ate|ao|no|em|=|:)?\s*([edcbas])\b/) || n.match(/\b([edcbas])\s*rank\b/);
+  if (rankMatch && (wantsGive || /\brank\s*(?:para|pro|pra)\b/.test(n))) tags.push(`[AJUSTE_RANK:${rankMatch[1].toUpperCase()}]`);
+  if (wantsGive && /(nivel|niveis|level|lvl)/.test(n) && !rankMatch) {
+    const k = num(/(\d{1,2})\s*(?:niveis|nivel|levels?|lvls?)/) ?? num(/(?:nivel|level|lvl)\s*(?:do sistema\s*)?(?:para|pro|ate)?\s*\+?(\d{1,2})/) ;
+    tags.push(aboutSystem ? `[AJUSTE_NIVEL_SISTEMA:+${k && k > 0 ? Math.min(k, 30) : 1}]` : `[AJUSTE_NIVEL:+${k && k > 0 ? Math.min(k, 30) : 1}]`);
   }
-  if (wantsGive && /(\bxp\b|\bexp\b|experiencia)/.test(n)) {
-    const k = num(/(\d{1,4})\s*(?:de\s*)?(?:xp|exp|experiencia|pontos de experiencia)/) ?? num(/(?:xp|exp|experiencia)\s*\+?(\d{1,4})/);
-    if (k) tags.push(`[AJUSTE_XP:+${Math.min(k, 1000)}]`);
+  if (wantsGive && /(\bxps?\b|\bexps?\b|experiencia)/.test(n)) {
+    const k = num(/(\d{1,4})\s*(?:de\s*)?(?:xps?|exps?|experiencia|pontos de experiencia)/) ?? num(/(?:xps?|exps?|experiencia)\s*\+?(\d{1,4})/);
+    if (k) tags.push(`[AJUSTE_XP:+${Math.min(k, 5000)}]`);
   }
-  if (wantsGive && /(pontos do sistema|pontos no sistema|pontos de sistema)/.test(n)) {
-    const k = num(/(\d{1,4})\s*pontos/);
-    if (k) tags.push(`[AJUSTE_PONTOS:+${Math.min(k, 500)}]`);
+  if (wantsGive && /(pontos do sistema|pontos no sistema|pontos de sistema|pontos pro sistema|pontos para o sistema|pts do sistema|\bpontos\b)/.test(n) && !/experiencia|\bxp\b|\bexp\b/.test(n)) {
+    const k = num(/(\d{1,5})\s*(?:pontos|pts)/);
+    if (k) tags.push(`[AJUSTE_PONTOS:+${Math.min(k, 25000)}]`);
   }
   return tags;
 }
@@ -256,22 +264,26 @@ export function applyProgressAdjust(campaign = {}, adjust = { xp: 0, levels: 0, 
   let experience = Math.max(0, Number(campaign.experience) || 0);
   let level = Math.max(1, Number(campaign.level) || 1);
   let hp = Number(campaign.hp ?? 100);
-  experience = Math.max(0, experience + adjust.xp);
-  if (adjust.levels > 0) {
-    level += adjust.levels;
+  const patch = {};
+  // Sistema: pontos, nível do Sistema e rank, recalculados juntos.
+  let sysResult = null;
+  if ((adjust.points || adjust.sysLevels || adjust.rank) && campaign.gameSystem?.enabled) {
+    sysResult = adjustSystem(campaign.gameSystem, { points: adjust.points || 0, levels: adjust.sysLevels || 0, rank: adjust.rank || null });
+    if (sysResult) patch.gameSystem = sysResult.system;
+  }
+  // Nível do Sistema que subiu também sobe o nível da Ficha (como no jogo normal).
+  const fichaLevels = (adjust.levels || 0) + Math.max(0, sysResult?.levelsGained || 0);
+  experience = Math.max(0, experience + (adjust.xp || 0));
+  if (fichaLevels > 0) {
+    level += fichaLevels;
     experience = Math.max(experience, (level - 1) * XP_PER_LEVEL_MC);
-    hp = Math.min(100, hp + 25 * adjust.levels);
-  } else if (adjust.levels < 0) {
-    level = Math.max(1, level + adjust.levels);
+    hp = Math.min(100, hp + 25 * fichaLevels);
+  } else if (fichaLevels < 0) {
+    level = Math.max(1, level + fichaLevels);
     experience = Math.min(experience, level * XP_PER_LEVEL_MC - 1);
   }
-  const patch = { experience, level, hp };
-  if (adjust.points && campaign.gameSystem?.enabled) {
-    const sys = campaign.gameSystem;
-    const points = Math.max(0, (Number(sys.points) || 0) + adjust.points);
-    const earned = Math.max(0, (Number(sys.earned) || 0) + Math.max(0, adjust.points));
-    patch.gameSystem = { ...sys, points, earned, log: [...(sys.log || []), `${adjust.points > 0 ? '+' : ''}${adjust.points} pedido ao Mestre`].slice(-20) };
-  }
+  Object.assign(patch, { experience, level, hp });
+  if (sysResult) patch.systemChange = { levelsGained: sysResult.levelsGained, rankBefore: sysResult.rankBefore, rankAfter: sysResult.rankAfter };
   return patch;
 }
 
@@ -282,6 +294,9 @@ export function describeProgress(before = {}, patch = {}, adjust = {}) {
   const dx = (patch.experience || 0) - (Number(before.experience) || 0);
   if (dx) parts.push(`${dx > 0 ? '+' : ''}${dx} XP`);
   if (adjust.points && patch.gameSystem) parts.push(`${adjust.points > 0 ? '+' : ''}${adjust.points} pontos do Sistema`);
+  const sc = patch.systemChange;
+  if (sc?.levelsGained) parts.push(`Sistema nível ${patch.gameSystem.level}`);
+  if (sc && sc.rankAfter !== sc.rankBefore) parts.push(`Rank ${sc.rankAfter}`);
   return parts.join(' · ');
 }
 
@@ -305,9 +320,9 @@ export function masterBeatDisplay() {
 export function applyMasterChatReply(campaign = {}, gmText = '', playerRequest = '') {
   let tagged = mergeInferredMasterTags(gmText, inferMasterTags(campaign, playerRequest));
   const tagAdjust = parseProgressTags(tagged);
-  const hasProgressTag = tagAdjust.xp || tagAdjust.levels || tagAdjust.points;
+  const hasProgressTag = tagAdjust.xp || tagAdjust.levels || tagAdjust.points || tagAdjust.sysLevels || tagAdjust.rank;
   const adjust = hasProgressTag ? tagAdjust : parseProgressTags(inferProgressTags(playerRequest).join(' '));
-  const progressPatch = adjust.xp || adjust.levels || adjust.points ? applyProgressAdjust(campaign, adjust) : null;
+  const progressPatch = adjust.xp || adjust.levels || adjust.points || adjust.sysLevels || adjust.rank ? applyProgressAdjust(campaign, adjust) : null;
   const extracted = parseAcordoTags(tagged);
   const merged = extracted.length
     ? mergeMasterAgreements(campaign, extracted)
@@ -337,7 +352,7 @@ export function applyMasterChatReply(campaign = {}, gmText = '', playerRequest =
       relationships,
       pendingMasterNote,
       memory,
-      ...(progressPatch || {}),
+      ...(progressPatch ? (({ systemChange, ...rest }) => rest)(progressPatch) : {}),
     },
     progress: progressPatch ? { ...adjust, patch: progressPatch } : null,
     added: merged.added,
@@ -362,8 +377,8 @@ export function masterChatPrompt(campaign) {
     'Você é o Mestre deste RPG conversando diretamente com o jogador FORA da história. Responda em português, de forma clara, breve e acolhedora. Ajude a entender regras, a cena atual e possibilidades; escute pedidos sobre a condução do jogo.',
     'Não narre novas ações, não avance tempo e não role dados. Só altere XP, nível ou pontos do Sistema quando o JOGADOR pedir aqui. Não escreva uma cena completa. Esta conversa continua fora da história. Não revele segredos desconhecidos do personagem. Se faltar informação, diga isso.',
     'Pedidos do jogador aqui são LEI e valem NA HORA. Se pedirem para mudar sentimentos de NPC, cargo, situação, talentos, a cena atual ou uma regra da mesa, CONFIRME em uma frase que isso já vale e, nas últimas linhas, emita as tags ocultas. O aplicativo APLICA as tags imediatamente. Diga que aplicou.',
-    'Tags permitidas (nunca no texto falado; só nas últimas linhas): [ACORDO: regra duradoura de tom/ritmo/mesa] [CARGO:novo título] [SITUAÇÃO:frase curta] [HABILIDADE:talentos atuais] [RELAÇÃO:Nome|Atitude] [INTERVENÇÃO:instrução curta para o narrador aplicar NA CENA ATUAL] [AJUSTE_XP:+n] [AJUSTE_NIVEL:+n] [AJUSTE_PONTOS:+n].',
-    'XP e NÍVEL são da mesa: se o jogador pedir XP, subir de nível ou pontos do Sistema, ATENDA, confirme em uma frase e emita a tag com o número pedido (ex.: "me dá 50 de XP" → [AJUSTE_XP:+50]; "sobe 2 níveis" → [AJUSTE_NIVEL:+2]; "quero 30 pontos no Sistema" → [AJUSTE_PONTOS:+30]). Sem número, use +1 nível ou +25 XP. Também pode tirar com sinal de menos se ele pedir.',
+    'Tags permitidas (nunca no texto falado; só nas últimas linhas): [ACORDO: regra duradoura de tom/ritmo/mesa] [CARGO:novo título] [SITUAÇÃO:frase curta] [HABILIDADE:talentos atuais] [RELAÇÃO:Nome|Atitude] [INTERVENÇÃO:instrução curta para o narrador aplicar NA CENA ATUAL] [AJUSTE_XP:+n] [AJUSTE_NIVEL:+n] [AJUSTE_PONTOS:+n] [AJUSTE_NIVEL_SISTEMA:+n] [AJUSTE_RANK:letra].',
+    'XP e NÍVEL são da mesa: se o jogador pedir XP, subir de nível ou pontos do Sistema, ATENDA, confirme em uma frase e emita a tag com o número pedido (ex.: "me dá 50 de XP" → [AJUSTE_XP:+50]; "sobe 2 níveis" → [AJUSTE_NIVEL:+2]; "quero 30 pontos no Sistema" → [AJUSTE_PONTOS:+30]). Sem número, use +1 nível ou +25 XP. Também pode tirar com sinal de menos se ele pedir. No Sistema: "sobe meu rank para C" → [AJUSTE_RANK:C] (E, D, C, B, A ou S; pode baixar também); "sobe 3 níveis do Sistema" → [AJUSTE_NIVEL_SISTEMA:+3]. O jogo recalcula metas, nível e rank sozinho.',
     'Atitudes válidas: Hostil, Suspeito, Neutral, Amigável. Atração de um NPC pelo jogador → [RELAÇÃO:Nome|Amigável] mais [ACORDO: Nome demonstra atração pelo jogador] e [INTERVENÇÃO: Nome demonstra atração pelo jogador na cena atual].',
     'Exemplo: "quero que a Arya tenha atração por mim" → confirme e emita [RELAÇÃO:Arya|Amigável] [ACORDO: Arya demonstra atração pelo jogador] [INTERVENÇÃO: Arya demonstra atração pelo jogador na cena atual]. Hostil/Suspeito/Neutral conforme o pedido.',
     `Campanha: ${campaign.world}. Personagem: ${campaign.charName}.`,

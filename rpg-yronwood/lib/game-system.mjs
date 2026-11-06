@@ -405,3 +405,47 @@ export function cartSummary(sys) {
   const total = buyable.reduce((sum, i) => sum + priceFor(i, s.rank), 0);
   return { items: s.cart, buyable, total, enough: s.points >= total };
 }
+
+// ── Ajuste direto (pedido no "Falar com o Mestre") ──
+export const RANK_MIN_LEVEL = { E: 1, D: 5, C: 10, B: 15, A: 20, S: 30 };
+
+/**
+ * Ajusta pontos, nível do Sistema e/ou rank mantendo tudo coerente:
+ * pontos ganhos ↔ meta ↔ nível ↔ rank. Devolve { system, levelsGained, rankBefore, rankAfter }.
+ */
+export function adjustSystem(sys, { points = 0, levels = 0, rank = null } = {}) {
+  const s = normalizeSystem(sys);
+  if (!s) return null;
+  const rankBefore = s.rank;
+  const levelBefore = s.level;
+  if (points) {
+    s.points = Math.max(0, s.points + points);
+    if (points > 0) s.earned += points;
+  }
+  if (levels > 0) s.earned = Math.max(s.earned, metaFor(s.level + levels - 1));
+  if (levels < 0) {
+    s.level = Math.max(1, s.level + levels);
+    s.earned = Math.min(s.earned, metaFor(s.level) - 1);
+  }
+  const target = SYSTEM_RANKS.includes(rank) ? rank : null;
+  if (target && SYSTEM_RANKS.indexOf(target) > SYSTEM_RANKS.indexOf(s.rank)) {
+    s.earned = Math.max(s.earned, metaFor(RANK_MIN_LEVEL[target] - 1));
+  } else if (target && SYSTEM_RANKS.indexOf(target) < SYSTEM_RANKS.indexOf(s.rank)) {
+    const nextRank = SYSTEM_RANKS[SYSTEM_RANKS.indexOf(target) + 1];
+    const maxLevel = RANK_MIN_LEVEL[nextRank] - 1;
+    s.level = Math.min(s.level, maxLevel);
+    s.earned = Math.min(s.earned, metaFor(s.level) - 1);
+    s.rank = target;
+  }
+  while (s.earned >= metaFor(s.level) && s.level < 99) s.level += 1;
+  const byLevel = rankForLevel(s.level);
+  if (!target || SYSTEM_RANKS.indexOf(target) >= SYSTEM_RANKS.indexOf(rankBefore)) {
+    if (SYSTEM_RANKS.indexOf(byLevel) > SYSTEM_RANKS.indexOf(s.rank)) s.rank = byLevel;
+  }
+  const parts = [];
+  if (points) parts.push(`${points > 0 ? "+" : ""}${points} pontos`);
+  if (s.level !== levelBefore) parts.push(`nível ${s.level}`);
+  if (s.rank !== rankBefore) parts.push(`Rank ${s.rank}`);
+  s.log = [...s.log, `Mestre: ${parts.join(", ") || "ajuste"}`].slice(-20);
+  return { system: s, levelsGained: s.level - levelBefore, rankBefore, rankAfter: s.rank };
+}

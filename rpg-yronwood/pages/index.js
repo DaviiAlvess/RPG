@@ -44,7 +44,7 @@ import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
 import { readNarrationStream, visiblePartial } from "../lib/gm-stream.mjs";
 import { pacingDirection, paceCommandOf, paceDisplay, buildPaceMessage, didProgress } from "../lib/pacing.mjs";
-import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary } from "../lib/game-system.mjs";
+import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary, SYSTEM_RANKS as SYSTEM_RANKS_ORDER } from "../lib/game-system.mjs";
 // Telas usadas só às vezes carregam sob demanda: a página inicial abre mais rápido.
 const LoadingShell = ({ label }) => <div className="rpg-shell"><p className="settings-hint" style={{ padding: 24 }}>{label}</p></div>;
 const CreateWizard = dynamic(() => import("../components/CreateWizard"), { loading: () => <LoadingShell label="Abrindo a criação…" /> });
@@ -2219,6 +2219,7 @@ export default function RPG() {
         }
         if (pp.hp !== hp) setHp(pp.hp);
       }
+      const sysChange = applied.progress?.patch?.systemChange;
       const visible = applied.visible || result.text.trim();
       if (applied.patch.pendingMasterNote) pendingMasterNoteRef.current = applied.patch.pendingMasterNote;
       const updated = {
@@ -2229,6 +2230,10 @@ export default function RPG() {
       };
       setActive(updated); saveCamp(active.id, updated);
       if (applied.status) showNotification(applied.status, "success");
+      if (sysChange && sysChange.rankAfter !== sysChange.rankBefore) {
+        showNotification(`【Sistema】 Rank ${sysChange.rankAfter} alcançado.`, "success");
+        if (SYSTEM_RANKS_ORDER.indexOf(sysChange.rankAfter) > SYSTEM_RANKS_ORDER.indexOf(sysChange.rankBefore)) void expandShopForRank(updated, sysChange.rankAfter);
+      }
       if (applied.needsSceneBeat) beatCamp = updated;
     } catch (error) {
       sending.current = false;

@@ -1,3 +1,4 @@
+import { eraPromptLines } from "./era.mjs";
 import { bodyChangesLine } from "./manifest.mjs";
 // ─── O Sistema (estilo manhwa) ────────────────────────────────────────
 // Janela de status com pontos, missões do Sistema e loja. O Mestre concede
@@ -192,7 +193,7 @@ export function shopSearchRequest(camp = {}, query = "", kind = "todos") {
   const next = SYSTEM_RANKS[Math.min(SYSTEM_RANKS.length - 1, SYSTEM_RANKS.indexOf(s.rank) + 1)];
   return {
     systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador procurou um item. Crie de 5 a 6 opções variadas que combinem com a busca e pertençam a ESTE mundo e época (nada anacrônico, a não ser que o mundo permita). Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"E|D|C|B|A|S","kind":"arma|habilidade|equipamento|item","once":false}]}. O jogador está no nível ${s.level}, Rank ${s.rank}. Faça a maioria das opções do Rank ${s.rank} ou abaixo, com uma versão mais forte do Rank ${next} (trancada, para ele ver o que vem). Quanto maior o rank, mais forte o efeito e mais caro: E 10–40, D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com o efeito e um limite claro. Em português. Se a busca pedir uma habilidade, técnica, magia ou poder, crie HABILIDADES (kind "habilidade"), não objetos. Se a busca for impossível neste mundo, ofereça o equivalente mais próximo.${KIND_WORDS[kind] ? ` O jogador filtrou: crie SOMENTE ${KIND_WORDS[kind]}, com kind "${kind}".` : ""}`,
-    content: JSON.stringify({ busca: clip(query, 80), mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), personagem: camp.charName }),
+    content: JSON.stringify({ busca: clip(query, 80), epoca: eraPromptLines(camp, { short: true })[0] || "", mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), personagem: camp.charName }),
   };
 }
 
@@ -217,7 +218,7 @@ export function shopExpandRequest(camp = {}, rank = "D") {
   const sys = camp.gameSystem || {};
   return {
     systemPrompt: `Você é a loja do 'Sistema' (estilo manhwa Solo Leveling) de um RPG. O jogador está no Rank ${rank}. Crie 6 itens NOVOS para a loja do Rank ${rank}, mais fortes que os de ranks abaixo, que pertençam a ESTE mundo e época: 2 habilidades, 2 armas ou equipamentos, 2 itens. Crie também 4 recompensas do Rank ${rank} para o BAÚ semanal grátis (coisas boas e raras, um pouco melhores que um item comum da loja desse rank). Responda só com JSON válido: {"items":[{"name":"","desc":"","cost":0,"tier":"${rank}","kind":"arma|habilidade|equipamento|item","once":false}],"chest":[{"name":"","desc":"","tier":"${rank}","kind":"arma|habilidade|equipamento|item"}]}. Custos da loja: E 10–40, D 30–70, C 60–120, B 100–200, A 180–320, S 300–600 pontos. Descrições de uma frase com efeito e limite claro. Nada repetido da lista atual. Em português.`,
-    content: JSON.stringify({ mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), itensAtuais: [...(sys.shop || []), ...(sys.chestPool || [])].map((i) => i.name).slice(-60) }),
+    content: JSON.stringify({ epoca: eraPromptLines(camp, { short: true })[0] || "", mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 800), itensAtuais: [...(sys.shop || []), ...(sys.chestPool || [])].map((i) => i.name).slice(-60) }),
   };
 }
 
@@ -424,7 +425,7 @@ export function chestNote(reward) {
 export function systemGenRequest(camp = {}) {
   return {
     systemPrompt: "Você cria a loja e o baú de recompensas do 'Sistema' (estilo manhwa Solo Leveling) para uma aventura de RPG. Responda só com JSON válido, sem texto fora dele, no formato {\"shop\":[{\"name\":\"\",\"desc\":\"\",\"cost\":0,\"tier\":\"E\",\"once\":false,\"kind\":\"arma|habilidade|equipamento|item\"}],\"chest\":[{\"name\":\"\",\"desc\":\"\",\"tier\":\"E\",\"kind\":\"arma|habilidade|equipamento|item\"}]}. A loja tem 14 itens: 6 do Rank E (10–40 pontos), 4 do Rank D (30–70), 2 do Rank C (60–120), 1 do Rank B (100–200) e 1 do Rank A (180–320), misturando habilidades, armas, equipamentos e itens. O baú tem 8 recompensas: 3 do Rank E, 2 do D, 2 do C e 1 do B. Em português. Tudo deve pertencer a ESTE mundo e época (armas, magias, tecnologia, moedas e costumes locais). Vantagens com limite claro, mais fortes quanto maior o rank; nada que resolva a história. Descrições de uma frase.",
-    content: JSON.stringify({ mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 1500), personagem: camp.charName, habilidades: camp.charSkills }),
+    content: JSON.stringify({ epoca: eraPromptLines(camp, { short: true })[0] || "", mundo: camp.world, contexto: String(camp.worldBg || "").slice(0, 1500), personagem: camp.charName, habilidades: camp.charSkills }),
   };
 }
 

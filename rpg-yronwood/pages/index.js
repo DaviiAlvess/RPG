@@ -37,6 +37,7 @@ import {
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
+import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
 import { gmBriefLines } from "../lib/gm-brief.mjs";
@@ -159,7 +160,14 @@ const GAME_STYLES = {
 const CREATE_STEPS = ["Mundo", "Personagem", "Começar"];
 
 // ─── System prompt ────────────────────────────────────────────────────
+// A época da campanha vai no começo E no fim do prompt: o modelo tende a esquecer o que fica só no meio.
 const buildPrompt = (c, loreExtra, gameTime) => {
+  const era = eraPromptLines(c, { short: Boolean(c.economyMode) });
+  const body = buildPromptBody(c, loreExtra, gameTime);
+  return era.length ? `${era.join("\n")}\n\n${body}\n\n${eraReminder(c)}` : body;
+};
+
+const buildPromptBody = (c, loreExtra, gameTime) => {
   const gt = normalizeGameTime(gameTime);
   if (c.economyMode) return economyPrompt(c, loreExtra, formatGameTimeLong(gt));
   const style = GAME_STYLES[c.gameStyle] ? c.gameStyle : "aventura";
@@ -1541,6 +1549,8 @@ export default function RPG() {
       const choiceResult = parseChoices(raw, camp.choices || [], nextTurn);
       const newChapter = parseChapter(raw, camp.chapters || [], nextTurn);
       const systemResult = applySystemTags(raw, camp.gameSystem);
+      const eraSlips = findAnachronisms(raw, camp);
+      if (eraSlips.length) pendingLevelNoteRef.current = [pendingLevelNoteRef.current, anachronismNote(eraSlips, camp)].filter(Boolean).join(" ");
       systemResult.events.forEach((ev) => {
         const name = systemResult.system?.name || "Sistema";
         if (ev.type === "points" && ev.amount > 0) showNotification(`【${name}】 +${ev.amount} pontos${ev.reason ? ` — ${ev.reason}` : ""}`, "success", { duration: 5000 });
@@ -2114,6 +2124,15 @@ export default function RPG() {
     if (sys.lastRestockDay === day) throw new Error("A loja já renovou hoje. Volte amanhã na história.");
     await expandShopForRank(active, sys.rank, { restockDay: day });
   };
+
+  // Toda campanha (nova ou já em andamento) ganha a época travada uma vez e salva.
+  useEffect(() => {
+    if (!active?.id || active.eraChecked) return;
+    const era = eraSnapshot(detectEraDeep(active));
+    const next = { ...active, era, eraChecked: true };
+    setActive(next);
+    saveCamp(active.id, next);
+  }, [active?.id, active?.eraChecked]);
 
   // Saves antigos já em rank alto ganham itens do mundo para o rank atual uma vez.
   useEffect(() => {

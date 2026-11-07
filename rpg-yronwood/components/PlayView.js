@@ -126,7 +126,7 @@ function LevelUpChoice({ attributes, skills, onConfirm, onCancel }) {
                 disabled={Number(value) >= 5}
                 onClick={() => onConfirm({ type: "skill", key })}
               >
-                {SKILL_LABELS[key] || key} ({value}/5)
+                {SKILL_LABELS[key] || key} ({Number(value) > 5 ? `${value} · Sistema` : `${value}/5`})
               </button>
             ))}
           </div>
@@ -323,6 +323,7 @@ export default function PlayView(props) {
     onBuySystemItem,
     onOpenChest,
     onSearchShop,
+    onRestockShop,
     onCartAdd,
     onCartRemove,
     onCartBuyAll,
@@ -1271,7 +1272,7 @@ export default function PlayView(props) {
                 <div className="panel-title">{c.gameSystem.name || "Sistema"}</div>
                 <div className="panel-sub">Ganhe pontos com feitos e missões. Gaste na loja.</div>
               </div>
-              <SystemPanel campaign={c} gameDay={gameTime?.totalDaysElapsed || 0} onBuy={onBuySystemItem} onOpenChest={onOpenChest} onSearchShop={onSearchShop} onCartAdd={onCartAdd} onCartRemove={onCartRemove} onCartBuyAll={onCartBuyAll} disabled={loading || autoMode} />
+              <SystemPanel campaign={c} gameDay={gameTime?.totalDaysElapsed || 0} onBuy={onBuySystemItem} onOpenChest={onOpenChest} onSearchShop={onSearchShop} onRestockShop={onRestockShop} onCartAdd={onCartAdd} onCartRemove={onCartRemove} onCartBuyAll={onCartBuyAll} disabled={loading || autoMode} />
             </div>
           ) : null}
 

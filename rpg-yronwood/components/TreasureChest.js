@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { chestStatus, formatWaitDays, rewardKind } from "../lib/game-system.mjs";
+import { chestStatus, formatWaitDays, rewardKind, normalizeSystem, CHEST_BONUS_POINTS } from "../lib/game-system.mjs";
 
 const KIND_LABEL = { arma: "Arma", habilidade: "Habilidade", equipamento: "Equipamento", item: "Item" };
 
@@ -44,6 +44,8 @@ export default function TreasureChest({ system, gameDay = 0, onOpen, disabled })
   const [phase, setPhase] = useState("idle");
   const [reward, setReward] = useState(null);
   const status = chestStatus(system, gameDay);
+  const rank = normalizeSystem(system)?.rank || "E";
+  const bonus = CHEST_BONUS_POINTS[rank] || 0;
 
   const open = () => {
     if (phase !== "idle" || !status.ready || disabled) return;
@@ -59,19 +61,19 @@ export default function TreasureChest({ system, gameDay = 0, onOpen, disabled })
 
   return (
     <section className={`sys-window chest-card phase-${phase} ${status.ready ? "ready" : "locked"}`}>
-      <div className="sys-sub">BAÚ SEMANAL</div>
+      <div className="sys-sub">BAÚ SEMANAL · RANK {rank}</div>
       <button type="button" className="chest-btn" onClick={open} disabled={!status.ready || disabled || phase !== "idle"} aria-label={status.ready ? "Abrir o baú semanal" : "Baú trancado"}>
         <ChestIcon size={120} open={phase === "opening" || phase === "revealed"} />
       </button>
       {phase === "revealed" && reward ? (
         <div className="chest-reward" role="status">
-          <span className="chest-kind">{KIND_LABEL[reward.kind] || "Recompensa"}</span>
+          <span className="chest-kind">{KIND_LABEL[reward.kind] || "Recompensa"} · Rank {reward.tier || "E"}</span>
           <strong>{reward.name}</strong>
           <p>{reward.desc}</p>
-          <small>{rewardKind(reward) === "habilidade" ? "Nova habilidade adicionada à sua Ficha." : "Guardado no seu inventário."}</small>
+          <small>{rewardKind(reward) === "habilidade" ? "Nova habilidade adicionada à sua Ficha." : "Guardado no seu inventário."}{reward.bonusPoints ? ` +${reward.bonusPoints} pontos do Sistema.` : ""}</small>
         </div>
       ) : status.ready ? (
-        <p className="chest-hint">Uma recompensa grátis te espera: arma, habilidade ou item deste mundo. Toque no baú. Um novo baú aparece a cada semana da história.</p>
+        <p className="chest-hint">Uma recompensa grátis do seu Rank ({rank}) te espera: arma, habilidade ou item deste mundo{bonus ? `, mais ${bonus} pontos` : ""}. Quanto maior o rank, melhor o baú. Toque nele. Um novo baú aparece a cada semana da história.</p>
       ) : (
         <p className="chest-hint"><i className="ti ti-lock" aria-hidden="true" /> Próximo baú em <strong>{formatWaitDays(status.daysLeft)}</strong> no calendário da história.</p>
       )}

@@ -15,7 +15,7 @@ const VISCERAL_MARKERS = [
   'AÇÃO DESAJEITADA',
   'RITMO CARDÍACO',
   'respiração presa',
-  'ferrugem',
+  'nasce DESTE lugar',
   'assustador',
   'aterrorizante',
   'frases curtas',
@@ -330,4 +330,22 @@ test('O briefing de início vai ao Mestre, não vaza no chat do jogador', async 
   assert.ok(source.includes('isStartBeatMessage'));
   assert.ok(source.includes('startBeatDisplay()'));
   assert.ok(source.includes('sanitizeStartDisplay'));
+});
+
+import { usedCliches, repeatedPhrases } from '../lib/narration.mjs';
+test('fórmulas gastas (bile, pé na lama) e tiques da campanha entram como proibidas', () => {
+  const disp = [
+    { type: 'gm', text: 'Você sente o gosto de bile subir. Suas botas afundam na lama do pátio enquanto o guarda se aproxima devagar.' },
+    { type: 'user', text: 'Saco a faca.' },
+    { type: 'gm', text: 'O gosto amargo de bile volta. O pé afunda na terra mole e o guarda se aproxima devagar de novo.' },
+  ];
+  const labels = usedCliches(disp).map((c) => c.label).join(' | ');
+  assert.match(labels, /bile/);
+  assert.match(labels, /lama/);
+  assert.ok(repeatedPhrases(disp).some((p) => /guarda se aproxima/.test(p.phrase)));
+  const guard = repetitionDirection(disp);
+  assert.match(guard, /PROIBIDO NESTA RESPOSTA/);
+  assert.match(guard, /2x/);
+  assert.match(guard, /Tiques desta campanha/);
+  assert.equal(usedCliches([{ type: 'gm', text: 'A vela treme na mesa e a velha conta moedas sem pressa.' }]).length, 0);
 });

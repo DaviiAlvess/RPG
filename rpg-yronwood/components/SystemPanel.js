@@ -3,8 +3,9 @@ import { normalizeSystem, SYSTEM_RANKS, asSystemSkills, metaProgress, rankBonus,
 import TreasureChest from "./TreasureChest";
 
 /** Janela do Sistema: status, missões e loja. */
-export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest, onSearchShop, onCartAdd, onCartRemove, onCartBuyAll, disabled }) {
+export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest, onSearchShop, onRestockShop, onCartAdd, onCartRemove, onCartBuyAll, disabled }) {
   const [query, setQuery] = useState("");
+  const [restocking, setRestocking] = useState(false);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [kindFilter, setKindFilter] = useState("todos");
@@ -139,6 +140,15 @@ export default function SystemPanel({ campaign, gameDay = 0, onBuy, onOpenChest,
           <button type="submit" className="btn-ghost" disabled={disabled || searching || !query.trim()}>{searching ? "Procurando…" : kindFilter === "habilidade" ? "Procurar habilidade" : "Procurar"}</button>
         </form>
         {searchError ? <p className="sys-empty sys-error">{searchError}</p> : null}
+        {onRestockShop ? (
+          <button type="button" className="btn-ghost sys-restock" disabled={disabled || restocking || s.lastRestockDay === Math.floor(gameDay)} onClick={async () => {
+            setRestocking(true); setSearchError("");
+            try { await onRestockShop(); } catch (err) { setSearchError(err.message || "A loja não renovou agora."); }
+            setRestocking(false);
+          }}>
+            <i className="ti ti-refresh" aria-hidden="true" /> {restocking ? "Renovando…" : s.lastRestockDay === Math.floor(gameDay) ? "Loja já renovada hoje" : `Mais itens do Rank ${s.rank}`}
+          </button>
+        ) : null}
         <div className="sys-kinds" role="group" aria-label="Filtrar por tipo">
           {[["todos", "Todos"], ["habilidade", "Habilidades"], ["arma", "Armas"], ["equipamento", "Equipamentos"], ["item", "Itens"]].map(([id, label]) => {
             const count = id === "todos" ? s.shop.length : s.shop.filter((i) => typeOf(i) === id).length;

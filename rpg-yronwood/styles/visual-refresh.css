@@ -616,6 +616,7 @@ button:disabled { cursor: not-allowed; }
 .sys-ladder-step.past { opacity: .8; }
 .sys-ladder-step.now { opacity: 1; border-color: #8cc8ff; box-shadow: 0 0 12px rgba(120, 190, 255, .45); background: rgba(80, 160, 255, .12); }
 .sys-search { display: flex; gap: 8px; }
+.sys-restock { width: 100%; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .sys-search-input { flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(110, 180, 255, .45); background: rgba(8, 16, 30, .6); color: #f2f8ff; font-size: 14px; outline: none; }
 .sys-search-input:focus { border-color: #8cc8ff; box-shadow: 0 0 0 3px rgba(120, 190, 255, .2); }
 .sys-search .btn-ghost { min-height: 42px; color: #dcebff; border-color: rgba(110, 180, 255, .45); white-space: nowrap; }

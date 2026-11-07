@@ -76,7 +76,8 @@ test('loja gerada pela IA é validada', async () => {
   const { parseGeneratedSystem } = await import('../lib/game-system.mjs');
   const txt = '```json\n{"shop":[{"name":"Runa","desc":"x","cost":999},{"name":"B","desc":"y","cost":10},{"name":"C","desc":"z"}],"chest":[{"name":"Arco","desc":"w","kind":"laser"}]}\n```';
   const g = parseGeneratedSystem(txt);
-  assert.equal(g.shop[0].cost, 80);
+  assert.equal(g.shop[0].cost, 600);
+  assert.equal(g.shop[0].tier, "E");
   assert.equal(g.chest[0].kind, 'item');
   assert.equal(parseGeneratedSystem('nada'), null);
 });
@@ -153,4 +154,33 @@ test('busca de habilidades', async () => {
   const found = m.parseShopSearch('{"items":[{"name":"Olhos de Coruja","desc":"vê no escuro","cost":30,"kind":"item"}]}', 'busca', 'habilidade');
   assert.equal(found[0].kind, 'habilidade');
   assert.equal(m.rewardKind(found[0]), 'habilidade');
+});
+
+import { openChest as openChestRank, pickChestReward, parseChestRewards, mergeChestPool, needsRankExpansion, CHEST_BONUS_POINTS, DEFAULT_SYSTEM_SHOP as SHOP_LIST } from '../lib/game-system.mjs';
+
+test('baú dá recompensa do rank atual e pontos extras', () => {
+  const sysC = { enabled: true, rank: 'C', level: 10, points: 0 };
+  const r = openChestRank(sysC, 0, () => 0);
+  assert.equal(r.reward.tier, 'C');
+  assert.equal(r.reward.bonusPoints, CHEST_BONUS_POINTS.C);
+  assert.equal(r.system.points, CHEST_BONUS_POINTS.C);
+  const world = { ...sysC, chestPool: [{ name: 'Katana do Clã', desc: 'Lâmina antiga.', kind: 'arma', tier: 'C' }, { name: 'Faca', desc: 'Simples.', kind: 'arma' }] };
+  assert.equal(pickChestReward(world, () => 0).name, 'Katana do Clã');
+  assert.equal(pickChestReward({ enabled: true, rank: 'E' }, () => 0).tier, 'E');
+});
+
+test('expansão de rank traz itens para a loja e para o baú', () => {
+  const text = '{"items":[{"name":"Lança","desc":"x","cost":90,"kind":"arma"}],"chest":[{"name":"Elmo do Rei","desc":"Raro.","kind":"equipamento"}]}';
+  const chest = parseChestRewards(text, 'B');
+  assert.equal(chest[0].tier, 'B');
+  const sys = mergeChestPool({ enabled: true, rank: 'B' }, chest, 'B');
+  assert.equal(sys.chestPool.length, 1);
+  assert.equal(needsRankExpansion(sys), false);
+  assert.equal(needsRankExpansion({ enabled: true, rank: 'B' }), true);
+  assert.equal(needsRankExpansion({ enabled: true, rank: 'E' }), false);
+});
+
+test('a loja padrão tem itens em todos os ranks', () => {
+  assert.ok(SHOP_LIST.length >= 25);
+  for (const t of ['D', 'C', 'B', 'A', 'S']) assert.ok(SHOP_LIST.filter((i) => i.tier === t).length >= 2, t);
 });

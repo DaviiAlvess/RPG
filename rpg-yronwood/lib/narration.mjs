@@ -2,8 +2,8 @@ export const NARRATION_VISION_LOCK = 'A narração principal é SEMPRE a visão 
 export const NARRATION_VISCERAL_LOCK = [
   'NARRAÇÃO VISCERAL — trava global, não é estilo extra e não é opção da campanha. Vale em TODA mesa (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno, sem recriar. Narre em segunda pessoa ("você"). Nunca fale, pense, escolha ou decida pelo jogador.',
   'RESPIRAÇÃO DA CENA — sob tensão, perigo, teste ou ferimento use a carga completa abaixo. Em conversa, pausa ou descanso: um detalhe no corpo basta; o estilo escolhido pode respirar sem forçar pânico a cada turno.',
-  'ANCORAGEM BIOLÓGICA — sob tensão, corpo involuntário: respiração presa, dor aguda, calafrio na espinha, mãos tremendo, batimento abafado, suor. Em calma, um sinal leve (ombro, respiração, peso na mão). Corpo observável. PROIBIDO rotular emoção ("assustador", "você sente medo").',
-  'SENTIDOS CRUS — sob tensão: ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas/nojentas, sons molhados/abafados/estridentes. Em calma: um sentido que importa. Chegam pelo corpo de você, não por panorama.',
+  'ANCORAGEM BIOLÓGICA — sob tensão, o corpo reage sozinho (respiração presa e afins), mas cada reação é ESPECÍFICA deste momento e deste corpo — nunca a mesma fórmula de novo. Em calma, um sinal leve basta. Corpo observável. PROIBIDO rotular emoção ("assustador", "você sente medo").',
+  'SENTIDOS CRUS — o detalhe nasce DESTE lugar, DESTA época e DESTE instante: o material que está ao alcance (ferrugem só se houver ferro velho ali), o clima, o que a pessoa à frente carrega, o som que só existe nesta cena. Varie o sentido (tato, som, cheiro, temperatura, peso, luz) e não use gosto na boca, pé afundando no chão ou suor como muleta. Em calma: um sentido que importa. Chegam pelo corpo de você, não por panorama.',
   'VISÃO DE TÚNEL — sob tensão NÃO há vista panorâmica. Só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha). Você não sabe o quadro geral. Em calma pode haver um pouco mais de espaço, ainda a partir de você.',
   'ZERO ABSTRAÇÃO — PROIBIDO adjetivos de juízo: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta, objetos que quebram, movimento desajeitado.',
   'AÇÃO DESAJEITADA — sob pressão: tropeça, coisas caem, a voz falha, comunicação bagunçada. Sem coreografia de filme.',
@@ -74,14 +74,86 @@ export const NARRATION_PRESENCE = [
   'MESA COMO CONVERSA — com gente na cena, a resposta vive em falas Nome: "…" e reações curtas, não em resumo do narrador. Quem está à frente quer algo e responde ao que você fez ou disse.',
   'ELENCO SÓ DA CENA — fale apenas por pessoas já presentes nesta história (cena atual, relacionamentos, memória). PROIBIDO inventar capataz, mensageiro, marujo, curandeira ou qualquer cargo de exemplo se eles não estiverem aqui. Exemplos de formato no prompt NÃO são personagens da mesa.',
   'Um conflito na sua cara — uma aposta visível por vez: alguém quer algo, espera a sua palavra, ou um obstáculo concreto está na sua frente. Não empilhe três crises no mesmo turno.',
-  'Corpo observável sem rotular emoção ("você sente medo", "assustador"); nunca fale, pense ou decida pelo jogador. Sob tensão: respiração presa, suor, tremor. Em calma: um sinal basta.',
+  'Corpo observável sem rotular emoção ("você sente medo", "assustador"); nunca fale, pense ou decida pelo jogador. Sob tensão, uma reação do corpo específica desta cena; em calma, um sinal basta.',
   'Nunca invente diálogo para o personagem do jogador.',
-  'Sentidos crus e visão de túnel sob tensão: ferrugem, mofo, pólvora, trinco, bota — não lista decorativa nem vista panorâmica.',
+  'Sentidos crus e visão de túnel sob tensão: microdetalhes tirados do lugar real da cena — não lista decorativa, nem vista panorâmica, nem o mesmo detalhe de sempre.',
   'Feche frases e o turno: situação viva que o jogador pode responder. Não corte no meio ("sob o…"). Sem menus numerados; não faça cliffhanger em toda resposta.',
-  'Não repita a abertura, metáfora ou estrutura da resposta anterior. O exemplo sensorial (suor, ferrugem, palma, cera) é tipo de detalhe, não um cardápio para usar de novo.'
+  'Não repita a abertura, metáfora ou estrutura da resposta anterior. Fórmulas de corpo gastas (gosto de bile ou sangue na boca, pé afundando na lama, coração martelando, calafrio na espinha, suor frio, nó no estômago) só cabem raramente — e nunca duas vezes seguidas.'
 ].join('\n');
 
 const ECHO_MARKS = ['suor', 'ferrugem', 'mofo', 'pólvora', 'polvora', 'batimento', 'calafrio', 'bile', 'cera', 'palma', 'respiração presa', 'respiracao presa'];
+
+/** Fórmulas de corpo e de ambiente que o modelo tende a repetir em toda resposta. */
+export const CLICHE_PATTERNS = [
+  { label: 'gosto de bile/sangue/metal na boca', re: /\bbile\b|gosto (de |acido |amargo |metalico )?(de )?(sangue|metal|cobre|ferro|ferrugem|poeira|cinza)|gosto metalico|boca amarga/ },
+  { label: 'pé/bota afundando na lama ou na terra', re: /(pes?|botas?|calcanhar|solas?) (afund|atol|escorreg|chafurd)\w*|afund\w* (na|no|em) (lama|barro|terra|lodo|neve|areia)|\blama\b/ },
+  { label: 'coração martelando/disparando', re: /coracao (martel|dispar|acelera|esmurr|bate (forte|contra|rapido)|salta|pulsa)\w*|batimento\w*|pulso (dispara|lateja|acelera)/ },
+  { label: 'calafrio/arrepio na espinha', re: /calafrio|arrepio|(frio|gelo) (na|pela|percorre a) espinha/ },
+  { label: 'suor escorrendo / suor frio', re: /\bsuor\b|\bsua (frio|na nuca)|transpira/ },
+  { label: 'respiração presa/falhando', re: /respiracao (presa|falha|curta|trava|engasga)|prende (a|o) (respiracao|folego)|folego (preso|curto|falha)/ },
+  { label: 'nó/aperto no estômago ou garganta', re: /\bno (no|na) (estomago|garganta|peito)|estomago (revira|embrulha|aperta|afunda|gela)|aperto no (peito|estomago)/ },
+  { label: 'garganta/boca seca', re: /(garganta|boca) (seca|arranha|aperta)/ },
+  { label: 'mãos tremendo', re: /maos? (trem|vacil|suam)\w*|tremor nas maos/ },
+  { label: 'cheiro de ferrugem/mofo/pólvora', re: /(cheiro|odor|fedor) (de |azedo de )?(ferrugem|mofo|polvora|suor|sangue)|\bferrugem\b|\bmofo\b/ },
+  { label: 'zumbido nos ouvidos', re: /zumbido|ouvidos zun/ },
+  { label: 'joelhos falhando', re: /joelhos? (falh|ced|fraquej|dobr)\w*/ },
+  { label: 'mandíbula travada / dentes cerrados', re: /mandibula (trav|cerr|tensa)\w*|dentes cerrados|range os dentes/ },
+  { label: 'ar pesado / silêncio pesado', re: /\bar (pesa|fica pesado|denso|parado)|silencio (pesado|denso|ensurdecedor|espesso)/ },
+  { label: 'tropeço', re: /tropec|tropeca/ },
+];
+
+const STOP = new Set('a o as os um uma uns umas de do da dos das em no na nos nas por para pra com sem que e ou se seu sua seus suas voce ele ela eles elas isso esse essa este esta aquele aquela lhe ao aos mais mas como quando onde ja nao sim tem ha foi era sao esta estao entre sobre sob ate pelo pela pelos pelas me te nos'.split(' '));
+const normText = (v) => String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+function recentNarration(messages, max = 8) {
+  const out = [];
+  const list = Array.isArray(messages) ? messages : [];
+  for (let i = list.length - 1; i >= 0 && out.length < max; i -= 1) {
+    const kind = list[i]?.type || list[i]?.role;
+    if (typeof list[i] !== 'string' && !['gm', 'assistant'].includes(kind)) continue;
+    const clean = visibleLine(list[i]).replace(/\[[^\]]+\]/g, ' ').replace(/IMAGE_PROMPT:.*$/s, ' ').replace(/\s+/g, ' ').trim();
+    if (clean.length >= 28) out.push(clean);
+  }
+  return out;
+}
+
+/** Fórmulas já usadas nas últimas narrações: { label, count }. */
+export function usedCliches(messages, max = 8) {
+  const recent = recentNarration(messages, max).map(normText);
+  return CLICHE_PATTERNS
+    .map((c) => ({ label: c.label, count: recent.filter((t) => c.re.test(t)).length, last: c.re.test(recent[0] || '') }))
+    .filter((c) => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Trechos de 4 palavras que aparecem em duas ou mais narrações recentes (tiques próprios da campanha). */
+export function repeatedPhrases(messages, max = 8) {
+  const recent = recentNarration(messages, max).map(normText);
+  const seen = new Map();
+  recent.forEach((text, idx) => {
+    const words = text.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+    const local = new Set();
+    for (let i = 0; i + 4 <= words.length; i += 1) {
+      const gram = words.slice(i, i + 4);
+      if (gram.filter((w) => !STOP.has(w) && w.length > 2).length < 2) continue;
+      local.add(gram.join(' '));
+    }
+    for (const g of local) {
+      const e = seen.get(g) || new Set();
+      e.add(idx);
+      seen.set(g, e);
+    }
+  });
+  const hits = [...seen.entries()].filter(([, set]) => set.size >= 2).map(([g, set]) => ({ phrase: g, count: set.size }));
+  hits.sort((a, b) => b.count - a.count);
+  const picked = [];
+  for (const h of hits) {
+    if (picked.some((p) => p.phrase.includes(h.phrase.split(' ').slice(1, 3).join(' ')))) continue;
+    picked.push(h);
+    if (picked.length >= 6) break;
+  }
+  return picked;
+}
 
 function visibleLine(entry) {
   if (typeof entry === 'string') return entry;
@@ -162,10 +234,14 @@ export function repetitionDirection(messages) {
   const blob = recent.join(' ').toLowerCase();
   const used = ECHO_MARKS.filter((mark) => blob.includes(mark));
   const openings = recent.slice(0, 2).map((line) => line.slice(0, 80));
+  const cliches = usedCliches(messages);
+  const phrases = repeatedPhrases(messages);
   return [
     'NÃO REPITA O TURNO ANTERIOR.',
     `Não abra igual e não recicle a mesma imagem: ${openings.map((line) => `"${line}"`).join(' | ')}.`,
     used.length ? `Já saiu nesta cena — troque o detalhe: ${used.join(', ')}.` : '',
+    cliches.length ? `PROIBIDO NESTA RESPOSTA (fórmulas já gastas nesta mesa): ${cliches.map((c) => c.count > 1 ? `${c.label} (${c.count}x)` : c.label).join('; ')}. Nem com outras palavras: troque por um detalhe que só existe nesta cena.` : '',
+    phrases.length ? `Tiques desta campanha — não escreva de novo: ${phrases.map((p) => `"${p.phrase}"`).join(', ')}.` : '',
     'Entre pela consequência nova. Outro objeto, outro sentido, outro gesto.',
   ].filter(Boolean).join(' ');
 }

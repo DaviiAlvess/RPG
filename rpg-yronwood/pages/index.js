@@ -37,6 +37,7 @@ import {
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
+import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
 import { gmBriefLines } from "../lib/gm-brief.mjs";
 import { storyProgressLines, stripStoryTags, parseClues, parseTension, detectEnding, buildRecap, recapRequest, returnNote, parseChoices, parseChapter, isOffscreenDue } from "../lib/story-progress.mjs";
@@ -44,7 +45,7 @@ import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
 import { readNarrationStream, visiblePartial } from "../lib/gm-stream.mjs";
 import { pacingDirection, paceCommandOf, paceDisplay, buildPaceMessage, didProgress } from "../lib/pacing.mjs";
-import { applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary, SYSTEM_RANKS as SYSTEM_RANKS_ORDER } from "../lib/game-system.mjs";
+import { DEFAULT_SYSTEM_SHOP, applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary, parseChestRewards, mergeChestPool, needsRankExpansion, SYSTEM_RANKS as SYSTEM_RANKS_ORDER } from "../lib/game-system.mjs";
 // Telas usadas só às vezes carregam sob demanda: a página inicial abre mais rápido.
 const LoadingShell = ({ label }) => <div className="rpg-shell"><p className="settings-hint" style={{ padding: 24 }}>{label}</p></div>;
 const CreateWizard = dynamic(() => import("../components/CreateWizard"), { loading: () => <LoadingShell label="Abrindo a criação…" /> });
@@ -271,10 +272,10 @@ const buildPrompt = (c, loreExtra, gameTime) => {
     `Dramatize os momentos com escolha, risco ou emoção. Comece na última ação do jogador e mostre o mundo reagindo no corpo. Tempo morto — trajeto sem incidente, espera, rotina — se corta em uma ou duas frases (corte de cena) até o próximo momento vivo; não narre cada passo. Não recapitule a cena como um guia. Proibido abrir com "Você está em…", pôr-do-sol genérico ou clima sem aposta. A câmera é o jogador — magnética, atrás/dentro dos olhos: narre em "você"; o primeiro sujeito gramatical é o campo sensorial dele (mão, ombro, visão), nunca um NPC ("O subordinado aperta… Ele…"). Transeunte, figura encapuzada ou subordinado como protagonista do parágrafo é proibido. Vale em TODA campanha (save antigo, preset, Westeros, Bleach, mundo custom) no próximo turno, sem recriar a mesa e sem toggle. Visão de túnel sob tensão: só microdetalhes a centímetros ou o foco de sobrevivência (trinco, bota, fagulha) — sem panorama. Ritmo cardíaco: frases curtas e secas na tensão; na calma, as frases respiram. Ação desajeitada: tropeça, coisas caem, a voz falha. Sem coreografia de filme.`,
     ``,
     `REGRA 2 — SENTIDOS CRUS, NÃO LISTA NEM PANORAMA.`,
-    `Ferrugem, mofo, pólvora, suor azedo, gosto de sangue/poeira/bile, texturas ásperas, sons molhados/abafados/estridentes — chegam pelo corpo do jogador, não por um plano que segue um NPC. São tipos de detalhe, não um cardápio fixo: se a resposta anterior já usou um, escolha outro objeto e outro sentido. Não monte lista decorativa de cinco sentidos nem vista panorâmica. "Menos é mais" é recusar tour e adjetivo de juízo, não encolher a cena a um resumo turístico.`,
+    `O detalhe sensorial nasce do lugar real da cena — o material, a época, o clima, o que está ao alcance da mão ou na pessoa à frente — e chega pelo corpo do jogador, não por um plano que segue um NPC. Varie o sentido (tato, som, cheiro, temperatura, peso, luz). Fórmulas gastas como gosto de bile/sangue na boca, pé afundando na lama, coração martelando, calafrio na espinha ou suor frio são muleta: no máximo de vez em quando, nunca em respostas seguidas. Não monte lista decorativa de cinco sentidos nem vista panorâmica. "Menos é mais" é recusar tour e adjetivo de juízo, não encolher a cena a um resumo turístico.`,
     ``,
     `REGRA 3 — O CORPO, NÃO A ALMA ROTULADA.`,
-    `Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Sob tensão: Ancoragem biológica (respiração presa, dor aguda, calafrio, mãos tremendo, batimento, suor). Em calma: um sinal no corpo basta — a cena pode respirar. Corpo observável; emoção rotulada, não. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta. Não feche toda resposta com "Como você reage?".`,
+    `Nunca escreva "você sente medo", "você fica aliviado", "uma onda de raiva". Sob tensão: Ancoragem biológica — o corpo reage sozinho, com uma reação específica deste momento (não a mesma fórmula de sempre). Em calma: um sinal no corpo basta — a cena pode respirar. Corpo observável; emoção rotulada, não. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Pânico só por ação física concreta. Não feche toda resposta com "Como você reage?".`,
     ``,
     `REGRA 4 — NPCs TÊM VIDA E PERSONALIDADE.`,
     `Cada NPC quer algo específico. Mentem, omitem, têm pressa, guardam rancor. Cada um tem jeito de falar e um gesto estável — não são fantoches iguais. Respeite a atitude já registrada (Hostil, Suspeito, Neutral, Amigável) no tom e na distância — não recomece do zero a cada turno. Mostre o que fazem enquanto falam — só pelo olhar do jogador. A cena orbita o jogador: NPCs entram a partir de você (À sua frente…, no canto do olho…), reagem a ele, nunca como herói do parágrafo ("O subordinado faz X. Ele…"). Um cartão/aparte rotulado pode ser terceira pessoa; a narração principal, não.`,
@@ -1362,7 +1363,7 @@ export default function RPG() {
         const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
         const data = await res.json().catch(() => ({}));
         const gen = res.ok ? parseGeneratedSystem(data.text) : null;
-        if (gen) gameSystem = { ...gameSystem, shop: gen.shop, ...(gen.chest.length ? { chestPool: gen.chest } : {}), generated: true };
+        if (gen) gameSystem = { ...gameSystem, shop: [...gen.shop, ...DEFAULT_SYSTEM_SHOP.filter((i) => ["B", "A", "S"].includes(i.tier) && !gen.shop.some((g) => g.name === i.name))], ...(gen.chest.length ? { chestPool: gen.chest } : {}), generated: true };
       } catch {}
     }
     const id = uid();
@@ -1469,7 +1470,8 @@ export default function RPG() {
     setInput(""); taRef.current?.blur();
 
     const isTimeSkipContext = text.trim().startsWith("[O jogador avançou o tempo:");
-    const isMasterBeat = isMasterBeatMessage(text);
+    const isSystemBeat = isSystemBeatMessage(text);
+    const isMasterBeat = isMasterBeatMessage(text) || isSystemBeat;
     const isStartBeat = isStartBeatMessage(text);
     const isTestResult = /^Resultado do teste\b/i.test(text.trim());
     const paceKind = paceCommandOf(text);
@@ -1482,7 +1484,7 @@ export default function RPG() {
         : [{
             type: paceKind ? "pace_ctx" : isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
             ...(paceKind ? { pace: paceKind } : {}),
-            text: paceKind ? paceDisplay(text) : skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
+            text: paceKind ? paceDisplay(text) : skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isSystemBeat ? systemBeatDisplay() : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
           }]),
     ];
     setMsgs(newMsgs); setDisp(newDisp);
@@ -1999,7 +2001,27 @@ export default function RPG() {
     const r = buyItem(camp.gameSystem, itemId);
     if (!r.ok) return { error: r.error };
     const grant = grantReward(camp, r.item, "Loja do Sistema");
-    return { camp: { ...camp, gameSystem: r.system, ...grant.patch }, item: r.item, grant };
+    const next = { ...camp, gameSystem: r.system, ...grant.patch };
+    const fresh = grant.kind === "habilidade" && !grant.duplicate;
+    const manifest = fresh ? applyManifestation(next, r.item) : { manifestation: null, patch: {} };
+    const stats = fresh ? applyStatBoost(camp.attributes ?? attributes, camp.skills ?? skills, r.item) : { boost: null };
+    const statPatch = stats.boost ? { attributes: stats.attributes, skills: stats.skills } : {};
+    return { camp: { ...next, ...manifest.patch, ...statPatch }, item: r.item, grant, manifestation: manifest.manifestation, boost: stats.boost };
+  };
+
+  // A habilidade comprada aparece na cena na hora, sem esperar a próxima jogada.
+  const manifestNow = (camp, items) => {
+    const send = sendMsgRef.current;
+    const historyMsgs = Array.isArray(camp.msgs) && camp.msgs.length ? camp.msgs : (msgsRef.current || []);
+    const historyDisp = Array.isArray(camp.disp) && camp.disp.length ? camp.disp : (dispRef.current || []);
+    if (!send || !historyMsgs.length || loading) return;
+    setPlayPanel("narrator");
+    void send(buildSystemBeatMessage(items), historyMsgs, historyDisp, camp, camp.lore || campLore, false);
+  };
+
+  const syncStats = (camp) => {
+    if (camp.attributes) setAttributes(camp.attributes);
+    if (camp.skills) setSkills(camp.skills);
   };
 
   const buySystemItem = (itemId) => {
@@ -2007,10 +2029,12 @@ export default function RPG() {
     const r = applyPurchase(active, itemId);
     if (r.error) { showNotification(r.error, "warning"); return; }
     setActive(r.camp);
+    if (r.boost) syncStats(r.camp);
     saveCamp(active.id, r.camp);
-    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item)].filter(Boolean).join(" ");
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, purchaseNote(r.item, r.manifestation, describeBoost(r.boost))].filter(Boolean).join(" ");
     const name = r.camp.gameSystem.name || "Sistema";
-    showNotification(`【${name}】 Comprado: ${r.item.name} — ${r.grant.kind === "habilidade" ? (r.grant.duplicate ? "você já tinha essa habilidade" : "nova habilidade na Ficha") : "guardado no inventário"}.`, "success");
+    showNotification(`【${name}】 Comprado: ${r.item.name} — ${r.grant.kind === "habilidade" ? (r.grant.duplicate ? "você já tinha essa habilidade" : r.manifestation ? `seu corpo muda: ${r.manifestation.change}` : "nova habilidade na Ficha") : "guardado no inventário"}${r.boost ? ` · Ficha: ${describeBoost(r.boost)}` : ""}.`, "success", { duration: 7000 });
+    if (r.grant.kind === "habilidade" && !r.grant.duplicate) manifestNow(r.camp, [r.item]);
   };
 
   const cartAdd = (itemId) => {
@@ -2039,31 +2063,62 @@ export default function RPG() {
       const r = applyPurchase(camp, item.id);
       if (r.error) continue;
       camp = r.camp;
-      bought.push(r.item);
+      bought.push(r);
     }
     if (!bought.length) return;
     setActive(camp); saveCamp(active.id, camp);
-    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, ...bought.map(purchaseNote)].filter(Boolean).join(" ");
-    showNotification(`【${camp.gameSystem.name || "Sistema"}】 Comprados ${bought.length} itens: ${bought.map((i) => i.name).join(", ")}.`, "success", { duration: 7000 });
+    if (bought.some((b) => b.boost)) syncStats(camp);
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, ...bought.map((b) => purchaseNote(b.item, b.manifestation, describeBoost(b.boost)))].filter(Boolean).join(" ");
+    showNotification(`【${camp.gameSystem.name || "Sistema"}】 Comprados ${bought.length} itens: ${bought.map((b) => b.item.name).join(", ")}.`, "success", { duration: 7000 });
+    const skills = bought.filter((b) => b.grant.kind === "habilidade" && !b.grant.duplicate).map((b) => b.item);
+    if (skills.length) manifestNow(camp, skills);
   };
 
-  // A loja ganha itens novos do rank que o jogador acabou de alcançar.
-  const expandShopForRank = async (camp, rank) => {
+  // A loja e o baú ganham coisas novas do rank do jogador (ao subir de rank ou ao pedir mais itens).
+  const expandRankRef = useRef(new Set());
+  const expandShopForRank = async (camp, rank, { restockDay = null } = {}) => {
+    const key = `${camp.id}:${rank}:${restockDay ?? "rank"}`;
+    if (expandRankRef.current.has(key)) return 0;
+    expandRankRef.current.add(key);
     try {
       const req = shopExpandRequest(camp, rank);
       const res = await apiFetch("/api/gm", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: req.content }], systemPrompt: req.systemPrompt }) });
       const data = await res.json().catch(() => ({}));
-      const items = res.ok ? parseShopSearch(data.text, `rank${rank}`).map((i) => ({ ...i, tier: rank })) : [];
-      if (!items.length) return;
+      if (!res.ok) throw gmRequestError(data, res.status, "A loja não respondeu agora. Tente de novo.");
+      const items = parseShopSearch(data.text, `rank${rank}`).map((i) => ({ ...i, tier: rank }));
+      const chest = parseChestRewards(data.text, rank);
+      if (!items.length && !chest.length) throw new Error("O Sistema não trouxe itens novos agora. Tente de novo.");
       setActive((prev) => {
         if (!prev || prev.id !== camp.id) return prev;
-        const next = { ...prev, gameSystem: mergeShopItems(prev.gameSystem, items) };
+        let sys = mergeShopItems(prev.gameSystem, items);
+        sys = mergeChestPool(sys, chest, rank);
+        if (restockDay != null) sys = { ...sys, lastRestockDay: restockDay };
+        const next = { ...prev, gameSystem: sys };
         saveCamp(prev.id, next);
         return next;
       });
-      showNotification(`【Sistema】 A loja evoluiu: ${items.length} itens novos do Rank ${rank}.`, "success", { duration: 7000 });
-    } catch {}
+      showNotification(`【Sistema】 ${items.length} itens novos do Rank ${rank} na loja${chest.length ? ` e ${chest.length} recompensas novas no baú` : ""}.`, "success", { duration: 7000 });
+      return items.length;
+    } catch (error) {
+      expandRankRef.current.delete(key);
+      if (restockDay != null) throw error;
+      return 0;
+    }
   };
+
+  // Botão "Mais itens": uma vez por dia da história.
+  const restockSystemShop = async () => {
+    if (!active?.gameSystem?.enabled) return;
+    const day = Math.floor(gameTimeRef.current?.totalDaysElapsed || gameTime?.totalDaysElapsed || 0);
+    const sys = normalizeSystem(active.gameSystem);
+    if (sys.lastRestockDay === day) throw new Error("A loja já renovou hoje. Volte amanhã na história.");
+    await expandShopForRank(active, sys.rank, { restockDay: day });
+  };
+
+  // Saves antigos já em rank alto ganham itens do mundo para o rank atual uma vez.
+  useEffect(() => {
+    if (active?.gameSystem?.enabled && needsRankExpansion(active.gameSystem)) void expandShopForRank(active, normalizeSystem(active.gameSystem).rank);
+  }, [active?.id, active?.gameSystem?.rank]);
 
   const searchSystemShop = async (query, kind = "todos") => {
     const q = String(query || "").trim();
@@ -2090,11 +2145,17 @@ export default function RPG() {
     const r = openChest(active.gameSystem, normalizeGameTime(gameTimeRef.current).totalDaysElapsed || 0);
     if (!r.ok) { showNotification(r.error, "warning"); return null; }
     const grant = grantReward(active, r.reward, "Baú do Sistema");
-    const updated = { ...active, gameSystem: r.system, ...grant.patch };
-    showNotification(grant.kind === "habilidade" ? `Nova habilidade na Ficha: ${r.reward.name}` : `Guardado no inventário: ${r.reward.name}`, "success", { duration: 6000 });
+    const base = { ...active, gameSystem: r.system, ...grant.patch };
+    const manifest = grant.kind === "habilidade" && !grant.duplicate ? applyManifestation(base, r.reward) : { manifestation: null, patch: {} };
+    const stats = grant.kind === "habilidade" && !grant.duplicate ? applyStatBoost(active.attributes ?? attributes, active.skills ?? skills, r.reward) : { boost: null };
+    const updated = { ...base, ...manifest.patch, ...(stats.boost ? { attributes: stats.attributes, skills: stats.skills } : {}) };
+    if (stats.boost) { setAttributes(stats.attributes); setSkills(stats.skills); showNotification(`Ficha: ${describeBoost(stats.boost)}`, "success", { duration: 6000 }); }
+    const tierTag = `[Rank ${r.reward.tier || "E"}]`;
+    const bonusTag = r.reward.bonusPoints ? ` · +${r.reward.bonusPoints} pontos` : "";
+    showNotification(`${tierTag} ${grant.kind === "habilidade" ? (manifest.manifestation ? `Nova habilidade: ${r.reward.name} — seu corpo muda: ${manifest.manifestation.change}` : `Nova habilidade na Ficha: ${r.reward.name}`) : `Guardado no inventário: ${r.reward.name}`}${bonusTag}`, "success", { duration: 6000 });
     setActive(updated);
     saveCamp(active.id, updated);
-    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, chestNote(r.reward)].filter(Boolean).join(" ");
+    pendingLevelNoteRef.current = [pendingLevelNoteRef.current, chestNote(r.reward), manifest.manifestation ? `MANIFESTAÇÃO FÍSICA na próxima resposta: ${manifest.manifestation.change}. Mostre a transformação no corpo; os NPCs presentes percebem e reagem, sem saber do Sistema. É permanente.` : ""].filter(Boolean).join(" ");
     return r.reward;
   };
 
@@ -2569,6 +2630,7 @@ export default function RPG() {
       onBuySystemItem={buySystemItem}
       onOpenChest={openSystemChest}
       onSearchShop={searchSystemShop}
+      onRestockShop={restockSystemShop}
       onCartAdd={cartAdd}
       onCartRemove={cartRemove}
       onCartBuyAll={cartBuyAll}

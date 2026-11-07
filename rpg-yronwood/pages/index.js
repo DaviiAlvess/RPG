@@ -395,6 +395,9 @@ export default function RPG() {
   const [view, setView]     = useState("home");
   const [idx, setIdx]       = useState([]);
   const [active, setActive] = useState(null);
+  // Versão mais recente da campanha, para respostas que chegam depois de o jogador comprar, abrir o baú etc.
+  const activeRef = useRef(null);
+  useEffect(() => { activeRef.current = active; }, [active]);
   const [step, setStep]     = useState(0);
   const [form, setForm]     = useState({
     world: "", worldBg: "", isKnownIP: false,
@@ -1535,7 +1538,12 @@ export default function RPG() {
       }, paintPartial);
 
       let raw = narrationText;
-      const lists = storyListsFor(camp.id, camp, { activeId: active?.id, items: active?.items, missions, plots: active?.plots });
+      // Enquanto o Mestre narrava, o jogador pode ter comprado, aberto o baú ou falado com o Mestre.
+      // Parte do estado MAIS RECENTE para nada disso sumir quando a resposta chega.
+      const latest = activeRef.current && String(activeRef.current.id) === String(camp.id) ? activeRef.current : camp;
+      const LIVE_FIELDS = ["gameSystem", "items", "systemSkills", "bodyChanges", "appearance", "attributes", "skills", "masterChat", "masterAgreements", "era", "eraChecked", "level", "experience"];
+      for (const key of LIVE_FIELDS) if (latest[key] !== undefined && latest[key] !== camp[key]) camp = { ...camp, [key]: latest[key] };
+      const lists = storyListsFor(camp.id, camp, { activeId: camp.id, items: camp.items, missions, plots: latest.plots || camp.plots });
       const updatedMissions = parseMissions(raw, lists.missions);
       const updatedItems = parseItems(raw, lists.items);
       const updatedPlots = parsePlotTags(raw, lists.plots);
@@ -1700,8 +1708,8 @@ export default function RPG() {
         hp: nextHp,
         level: camp.level ?? level,
         experience: nextExperience,
-        attributes,
-        skills,
+        attributes: camp.attributes ?? attributes,
+        skills: camp.skills ?? skills,
         gameTime: nextGameTime,
         temporalEffects: nextTemporalEffects,
         charInitialAge: camp.charInitialAge ?? charInitialAge,

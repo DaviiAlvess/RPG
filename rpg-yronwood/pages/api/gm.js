@@ -32,6 +32,41 @@ const geminiText = data => data?.candidates?.[0]?.content?.parts
   .map((part) => part.text).join("");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * No Gemini 2.5 Flash o "pensamento" interno gasta o mesmo limite de tokens da resposta:
+ * a narração acabava cortada no meio. Para narrar, ele não precisa pensar.
+ */
+export function withModelConfig(body, model) {
+  if (!body?.generationConfig || !/^gemini-2\.5-flash/.test(String(model || ""))) return body;
+  if (body.generationConfig.thinkingConfig) return body;
+  return { ...body, generationConfig: { ...body.generationConfig, thinkingConfig: { thinkingBudget: 0 } } };
+}
+
+export const finishReasonOf = data => data?.candidates?.[0]?.finishReason || "";
+
+/** Pedido para continuar uma narração que bateu no limite de tamanho. */
+export function continuationBody(body, partial) {
+  const contents = [
+    ...(Array.isArray(body?.contents) ? body.contents : []),
+    { role: "model", parts: [{ text: partial }] },
+    { role: "user", parts: [{ text: "[Sistema: sua resposta foi cortada pelo limite de tamanho. Continue EXATAMENTE de onde parou — no meio da frase, se for o caso —, sem repetir nada e sem recomeçar. Feche a cena e inclua as tags ocultas que faltaram.]" }] },
+  ];
+  const { tools, ...rest } = body || {};
+  return { ...rest, contents, generationConfig: { ...(body?.generationConfig || {}), maxOutputTokens: 1536 } };
+}
+
+/** Junta a continuação sem duplicar o trecho em que a primeira parte parou. */
+export function joinContinuation(partial, more) {
+  const a = String(partial || "");
+  let b = String(more || "");
+  for (let n = Math.min(80, a.length, b.length); n >= 8; n -= 1) {
+    if (a.endsWith(b.slice(0, n))) { b = b.slice(n); break; }
+  }
+  const needsSpace = a && b && !/\s$/.test(a) && !/^[\s.,;:!?…)»"']/.test(b) && /[.!?…"»]$/.test(a);
+  return (needsSpace ? " " : "") + b;
+}
+
+
 export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "2mb" }, responseLimit: false } };
 
 // ─── Texto em tempo real (streaming) ──────────────────────────────────
@@ -84,7 +119,7 @@ async function streamNarration(res, body, modelo, keys) {
     try {
       upstream = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:streamGenerateContent?alt=sse&key=${key}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal }
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(body, models[modelIdx])), signal: controller.signal }
       );
     } catch {
       clearTimeout(timer);
@@ -144,6 +179,20 @@ async function streamNarration(res, body, modelo, keys) {
         lastData = event;
         const piece = geminiText(event);
         if (piece) { total += piece; sseWrite(res, { t: piece }); }
+      }
+      // Bateu no limite de tamanho: pede a continuação e manda junto, sem o jogador perceber o corte.
+      if (total && finishReasonOf(lastData) === "MAX_TOKENS" && deadline - Date.now() > 4000) {
+        try {
+          const ctrl = new AbortController();
+          const t2 = setTimeout(() => ctrl.abort(), Math.max(1000, deadline - Date.now() - 500));
+          const more = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:generateContent?key=${key}`,
+            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(continuationBody(body, total), models[modelIdx])), signal: ctrl.signal }
+          ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+          clearTimeout(t2);
+          const extra = joinContinuation(total, geminiText(more));
+          if (extra) { total += extra; sseWrite(res, { t: extra }); }
+        } catch {}
       }
       if (!total) {
         const finish = lastData?.candidates?.[0]?.finishReason;
@@ -288,7 +337,7 @@ export default async function handler(req, res) {
         method: "POST",
         signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(withModelConfig(requestBody, modeloAtual)),
       }
     );
 
@@ -418,6 +467,13 @@ export default async function handler(req, res) {
         }
 
         recordKeyUsage(apiKey, parseUsageTokens(data));
+        if (finishReasonOf(data) === "MAX_TOKENS" && deadline - Date.now() > 4000) {
+          try {
+            const more = await callWithBudget(continuationBody(body, text), Math.min(deadline - Date.now() - 500, perRequestMs));
+            const extra = more.parsed && more.res.ok ? joinContinuation(text, geminiText(more.payload)) : "";
+            if (extra) return text + extra;
+          } catch {}
+        }
         return text;
       } catch (err) {
         if (err.fatal) throw err;
@@ -634,7 +690,7 @@ export default async function handler(req, res) {
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 1024 : 2048, temperature: 0.9 },
+      generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 2048 : 4096, temperature: 0.9 },
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
 

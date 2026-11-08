@@ -8,7 +8,7 @@ test('link de história faz ida e volta preservando tramas e bastidores', () => 
   const url = shareUrl(preset, 'https://rpg.exemplo.app/');
   assert.match(url, /^https:\/\/rpg\.exemplo\.app\/#historia=[A-Za-z0-9_-]+$/);
   const back = readSharedFromHash(new URL(url).hash);
-  assert.equal(back.charName, 'Cícera do Riacho');
+  assert.equal(back.charName, 'Cícero do Riacho');
   assert.equal(back.plots.length, 3);
   assert.match(back.gmBrief.truth, /Mãe-d'Água/);
   assert.equal(back.shared, true);

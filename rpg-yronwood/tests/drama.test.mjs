@@ -49,3 +49,18 @@ test('momentos marcados: dilema, passado do personagem, no máximo um por turno'
   assert.equal(lines.filter((l) => /DILEMA|PASSADO|SEGREDO|PROMESSA|VIRADA/.test(l)).length, 1);
   assert.ok(lines.some((l) => /CAMADAS DE UMA RESPOSTA COMPLETA/.test(l)));
 });
+
+import { ADVENTURE_PRESETS } from '../lib/adventure-presets.mjs';
+test('histórias prontas: ameaça, elenco maior, protagonista masculino e virada dos bastidores', () => {
+  for (const p of ADVENTURE_PRESETS) {
+    assert.ok(p.threat?.name && p.threat?.goal, `${p.id}: ameaça central`);
+    assert.ok(Object.keys(p.worldState.npcs).length >= 4, `${p.id}: elenco`);
+  }
+  const fem = ['Lia Maré', 'Clara Vale', 'Mila dos Juncos', 'Edda Freixo', 'Hana Mori', 'Bia Torres', 'Cícera do Riacho', 'Duda Ferraz', 'Kiri de Yu Dao'];
+  assert.ok(!ADVENTURE_PRESETS.some((p) => fem.includes(p.charName)));
+  for (const id of ['westeros', 'got-muralha', 'got-danca-dragoes', 'got-porto-real']) assert.ok(ADVENTURE_PRESETS.find((p) => p.id === id), id);
+  const got = ADVENTURE_PRESETS.find((p) => p.id === 'westeros');
+  const camp = { ...got, turn: 8, threat: { ...got.threat, stage: 1, lastTurn: 0 } };
+  assert.match(dramaPromptLines(camp).join(' '), /Merrick e dois homens revistam a estalagem/);
+  assert.match(dramaBeat({ ...got, turn: 30 }).line, /Sor Willem, o pai, sabia do plano/);
+});

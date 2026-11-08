@@ -4,6 +4,7 @@
 // Cada turno recebe no máximo UM momento extra, para o prompt não virar uma lista de tarefas.
 
 const clip = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
+const briefList = (camp, key) => (Array.isArray(camp?.gmBrief?.[key]) ? camp.gmBrief[key].filter(Boolean) : []);
 
 // ── Ameaça com relógio ──
 export const THREAT_STAGES = [
@@ -74,8 +75,11 @@ function threatLines(camp, { short }) {
   const base = `AMEAÇA: ${t.name}${t.goal ? ` — quer ${t.goal}` : ""}. Estágio ${t.stage}/4 (${st.label}).`;
   const rules = short ? "" : " Ela age mesmo sem o jogador olhar. Se o jogador atrapalhar o plano de verdade, emita [AMEACA_RECUA]; se for derrotada de vez, [AMEACA_VENCIDA].";
   if (due) {
-    const next = THREAT_STAGES[Math.min(4, t.stage + 1)];
-    return [`${base} ⚠ A AMEAÇA AVANÇA NESTA RESPOSTA para "${next.label}": ${next.show}. Mostre UMA consequência concreta pelos sentidos do jogador (sem narrar de fora).${rules}`];
+    const nextStage = Math.min(4, t.stage + 1);
+    const next = THREAT_STAGES[nextStage];
+    // Histórias prontas já trazem os passos do relógio: o avanço usa o passo previsto.
+    const planned = clip(briefList(camp, "escalation")[nextStage - 2], 220);
+    return [`${base} ⚠ A AMEAÇA AVANÇA NESTA RESPOSTA para "${next.label}": ${planned ? `${planned} ` : ""}(${next.show}). Mostre UMA consequência concreta pelos sentidos do jogador (sem narrar de fora).${rules}`];
   }
   return [`${base} Nível de presença agora: ${st.show}.${rules}`];
 }
@@ -120,15 +124,18 @@ export function dramaBeat(camp = {}, { busy = false } = {}) {
   const turn = Number(camp.turn) || 0;
   if (busy || turn < 4 || camp.ending) return null;
   if (midpointDue(camp)) {
+    const twist = clip(camp.gmBrief?.twist, 400);
     const secret = pick(camp.worldState?.secrets, turn, 1);
-    return { id: "virada", line: `VIRADA DO MEIO DA HISTÓRIA (uma vez): nesta resposta, revele algo que MUDA O SENTIDO do que o jogador sabia — um aliado com outra agenda, a ameaça com um motivo inesperado, o objetivo que era outro${secret ? ` (pode partir deste segredo: ${secret})` : ""}. A revelação vem de algo que o jogador vê ou ouve, não de um narrador explicando. Depois, a história segue com outro peso.` };
+    const source = twist ? ` Use a virada preparada nos bastidores: ${twist}` : secret ? ` Pode partir deste segredo: ${secret}.` : "";
+    return { id: "virada", line: `VIRADA DO MEIO DA HISTÓRIA (uma vez): nesta resposta, revele algo que MUDA O SENTIDO do que o jogador sabia — um aliado com outra agenda, a ameaça com um motivo inesperado, o objetivo que era outro.${source} A revelação vem de algo que o jogador vê ou ouve, não de um narrador explicando. Depois, a história segue com outro peso.` };
   }
   if (turn % 11 === 0) return { id: "dilema", line: "DILEMA (este turno): coloque o jogador diante de uma escolha entre duas coisas que ele valoriza — não dá para ter as duas, e nenhuma é a resposta certa (salvar alguém ou cumprir a missão, verdade ou lealdade, ganho ou princípio). Mostre o que se perde em cada lado e espere a decisão dele." };
   const hook = turn % 9 === 4 ? personalHook(camp) : "";
   if (hook) return { id: "passado", line: `O PASSADO DO PERSONAGEM VOLTA (este turno): traga para a cena algo ligado a isto da história dele — "${hook}" — como pessoa, objeto, notícia, cheiro ou lembrança que pesa numa decisão. Não explique o passado inteiro; deixe uma ponta.` };
   const promise = turn % 10 === 2 ? pick(camp.worldState?.promises, turn, 10) : "";
   if (promise) return { id: "promessa", line: `PROMESSA COBRADA (este turno): alguém lembra ou cobra isto — "${promise}". Cumprir, adiar ou quebrar tem consequência.` };
-  const secret = turn % 13 === 7 ? pick(camp.worldState?.secrets, turn, 13) : "";
+  const secretPool = (camp.worldState?.secrets || []).length ? camp.worldState.secrets : briefList(camp, "clues");
+  const secret = turn % 13 === 7 ? pick(secretPool, turn, 13) : "";
   if (secret) return { id: "segredo", line: `UM SEGREDO VAZA UM POUCO (este turno): uma ponta disto aparece na cena, sem revelar tudo — "${secret}". Um detalhe que não bate, uma frase cortada, alguém que muda de assunto.` };
   return null;
 }

@@ -1,5 +1,6 @@
 // Histórias prontas — elenco inventado, poderes com limite, verdade escondida para o Mestre.
-// Cada história tem: 3 tramas (principal, pessoal, paralela), 3 vozes no elenco e gmBrief
+// Cada história tem: 3 tramas (principal, pessoal, paralela), 5 ou mais vozes no elenco, uma ameaça
+// central (threat) que o diretor de drama faz avançar, e gmBrief
 // (verdade, pistas, relógio de escalada, virada e agendas). gmBrief só entra no prompt do Mestre.
 const power = (name, description, limits, secret = true) => ({
   enabled: true,
@@ -45,18 +46,20 @@ export const ADVENTURE_PRESETS = [
     charSkills:
       "Orientação noturna, corrida de resistência, esconder volumes, primeiros socorros rústicos, leitura de posturas. Sem jutsus de clã.",
     supportingCast:
-      "Mika — estalajadeira; seca, conta moedas em voz alta, esconde afeto atrás de cobrança; tem cicatrizes de selo nas palmas que nunca explica. Kaji — viajante de capa úmida; fala baixo demais, pergunta o preço do pacote como quem já sabe o conteúdo; tique: limpa a unha com a faca na bota. Juro — ex-parceiro de Ren; sorriso torto, manca da perna que quebrou no assalto; agora anda com Kaji e chama Ren de 'sócio' com veneno.",
+      "Mika — estalajadeira; seca, conta moedas em voz alta, esconde afeto atrás de cobrança; tem cicatrizes de selo nas palmas que nunca explica. Kaji — viajante de capa úmida; fala baixo demais, pergunta o preço do pacote como quem já sabe o conteúdo; tique: limpa a unha com a faca na bota. Juro — ex-parceiro de Ren; sorriso torto, manca da perna que quebrou no assalto; agora anda com Kaji e chama Ren de 'sócio' com veneno. Sayo — médica da vila vizinha; prática, mal-humorada antes do chá, guarda penas negras numa caixa; tique: cheira tudo antes de tocar. Capitão Daigo — chūnin de patrulha da vila vizinha; correto, cansado, confisca o que acha suspeito; tique: anota tudo num pergaminho pequeno.",
     storyStartPoint:
-      `A poeira da estrada da Vila do Vale Nebuloso entra na boca quando a carroça trava na saída do portão de madeira. O pacote sem selo lateja quente no colo — chakra fraco, ritmado, como um animal dormindo. Kaji já está junto da roda, perto demais, mão aberta. Atrás dele, mancando, alguém que você deixou para trás há dois anos. Mika: "Ren. Se entregar isso errado, não volta para a minha mesa." Kaji: "O preço que ela te pagou é esmola. Me dá o volume e você some vivo." Juro: "Oi, sócio. Dessa vez você não corre sozinho."`,
+      "Fim de tarde no portão sul da Vila do Vale Nebuloso. A carroça de entregas trava na saída, com a roda presa num sulco de pedra, e o pacote sem selo pulsa no seu colo — chakra fraco, ritmado, como um bicho dormindo que de vez em quando sonha. Kaji já está encostado na roda, perto demais, a faca girando entre os dedos. Atrás dele, mancando, um rosto que você deixou para trás há dois anos. Mika, da porta da estalagem, enxugando as mãos no avental: \"Ren. Se entregar isso errado, não volta para a minha mesa.\" Kaji, baixinho: \"O que ela te pagou é esmola. Me dá o volume e você some vivo.\" Juro, com o sorriso torto: \"Oi, sócio. Dessa vez você não corre sozinho.\" No alto do portão, um ninja de patrulha da vila vizinha desenrola um pergaminho pequeno e começa a anotar.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Mãos calejadas, tornozeleira de corda, jaqueta com bolsos costurados por dentro.",
-    relationships: { Mika: "Amigável", Kaji: "Suspeito", Juro: "Hostil" },
+    relationships: { Mika: "Amigável", Kaji: "Suspeito", Juro: "Hostil", "Sayo": "Neutral", "Capitão Daigo": "Neutral" },
     worldState: {
       location: "Portão sul da Vila do Vale Nebuloso",
       npcs: {
         Mika: "estalajadeira; seca e protetora, cicatrizes de selo nas palmas; Vale Nebuloso; confiou a encomenda",
         Kaji: "viajante; fala baixa, limpa a faca na bota; estrada; quer o pacote",
         Juro: "ex-parceiro; manca, sorriso torto; anda com Kaji; ressentido com Ren",
+        "Sayo": "médica da vila vizinha; prática, cheira tudo; Vila do Pinheiral; deve chocar o ovo",
+        "Capitão Daigo": "chūnin de patrulha; correto e cansado, anota tudo; estrada entre as vilas; confisca o suspeito",
       },
     },
     plots: [
@@ -64,6 +67,7 @@ export const ADVENTURE_PRESETS = [
       plot("Dívida e nome limpo", "Ren deve a Mika; entregar certo pode quitar tudo, ou provar que ele sempre foi só um mensageiro descartável."),
       plot("O parceiro deixado para trás", "Juro voltou com Kaji. Ren pode pagar a culpa daquele assalto — ou repetir a fuga."),
     ],
+    threat: { name: "Kaji e o bando Lua Rachada", goal: "recuperar o ovo de invocação e, por meio dele, trazer Mika de volta ao bando" },
     gmBrief: {
       truth:
         "O pacote é um ovo selado de invocação — filhote de uma linhagem de corvos mensageiros que se achava extinta. Mika foi kunoichi desertora; anos atrás roubou o ovo do bando mercenário Lua Rachada para que não fosse vendido a um senhor feudal. Agora o selo está enfraquecendo e ela mandou Ren entregar a uma médica de vila vizinha, Sayo, que sabe chocar o ovo. Kaji lidera o que sobrou do Lua Rachada. Juro entrou no bando porque ninguém mais o aceitou depois da perna quebrada.",
@@ -83,6 +87,8 @@ export const ADVENTURE_PRESETS = [
         Mika: "proteger o ovo sem se expor como desertora; gosta de Ren mais do que admite",
         Kaji: "recuperar o ovo e, através dele, Mika",
         Juro: "dinheiro para tratar a perna; no fundo, quer que Ren peça desculpas",
+        "Sayo": "chocar o ovo e esconder o filhote dos senhores feudais; tem medo de Kaji desde os tempos do bando",
+        "Capitão Daigo": "levar o pacote para a vila dele e ganhar promoção; vira aliado se souber do bando",
       },
     },
     specialAbility: power(
@@ -94,43 +100,46 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "one-piece",
     world: "One Piece",
-    charName: "Lia Maré",
-    charTitle: "Aprendiz de carpinteira no Estaleiro Maré Baixa",
+    charName: "Léo Maré",
+    charTitle: "Aprendiz de carpinteiro naval no Estaleiro Maré Baixa",
     charAge: "23",
     genre: "Mar e liberdade",
     hook: "Um barco chega sozinho ao cais com um pedido de socorro escondido no casco. Ao amanhecer, ele vira lenha — junto com a única pista.",
     charBg:
-      "Órfã de um porto secundário da East Blue, cresceu medindo tábuas e ouvindo histórias da Grand Line que ninguém daqui chega a ver. Bento a tirou da rua; ela odeia dever favores e ainda assim deve a vida a ele. Sonha com um navio próprio, não com fama.",
+      "Órfão de um porto secundário da East Blue, cresceu medindo tábuas e ouvindo histórias da Grand Line que ninguém daqui chega a ver. Bento o tirou da rua aos nove anos, depois de pegá-lo roubando pregos; ele odeia dever favores e ainda assim deve a vida ao velho. Guarda num caixote o esboço de um navio que desenha desde menino. Sonha com um barco próprio, não com fama — e nunca soube quem o deixou no cais.",
     charPersonality:
-      "Inventiva e teimosa; generosa com quem tem fome, dura com quem manda sem sujar as mãos. Fala com as mãos (desenha no ar). Quando mente, assobia fora do tom. Medo secreto: ser deixada em terra enquanto o mundo segue.",
+      "Inventivo e teimoso; generoso com quem tem fome, duro com quem manda sem sujar as mãos. Fala com as mãos, desenhando cascos no ar. Quando mente, assobia fora do tom. Ri alto para esconder que tem medo da altura do mastro. Medo secreto: ficar em terra enquanto o mundo segue sem ele.",
     charSkills: "Reparo de casco, nós, natação, ferramentas, cheiro de madeira podre vs. boa. Sem Akuma no Mi.",
     supportingCast:
-      "Bento — patrão do estaleiro; voz grossa, humor cruel, protege a oficina como um filho; quer desmontar o barco antes do amanhecer. Iara — pescadora; reconhece o casco, fala em metáforas de maré, evita olhar nos olhos; tique: enrola a rede nos pulsos quando mente. Russo — agiota do porto; terno branco com manchas de sal, ri antes de ameaçar; aparece sempre que Bento fica nervoso.",
+      "Bento — patrão do estaleiro; voz grossa, humor cruel, protege a oficina como um filho; quer desmontar o barco antes do amanhecer. Iara — pescadora; reconhece o casco, fala em metáforas de maré, evita olhar nos olhos; tique: enrola a rede nos pulsos quando mente. Russo — agiota do porto; terno branco com manchas de sal, ri antes de ameaçar; aparece sempre que Bento fica nervoso. Tenente Neves — oficial da Marinha recém-chegado ao porto; jovem, correto até doer, deve a promoção a Gaspar e desconfia dele; tique: alinha o quepe quando decide algo. Zé Gaivota — garoto de recados de 11 anos; sabe tudo o que acontece no cais e vende cada fofoca por um peixe frito; idolatra Léo; tique: assobia imitando gaivota para avisar perigo.",
     storyStartPoint:
-      `A água da East Blue sobe gelada pelos tornozelos no Estaleiro Maré Baixa. Você está ajoelhada no casco abandonado que Bento quer virar lenha até o alvorecer. Sob a tábua solta, os dedos acham papel úmido: um pedido de ajuda, tinta ainda vermelha nas bordas, e um desenho de ilha que não está em mapa nenhum. Bento: "Antes do sol, isso vira tábua. Sem drama." Iara, na beira do cais: "Esse barco é do meu irmão. Ele saiu há um mês e não voltou."`,
+      "Maré cheia no Estaleiro Maré Baixa: o casco abandonado range a cada onda, como se reclamasse de ter voltado. Você está deitado de costas sob a quilha, com a lanterna presa nos dentes, quando a tábua solta cede e um maço de papel encerado cai no seu peito. Dentro, um pedido de socorro escrito em tinta escura de lula e o desenho de uma ilha em forma de dente que não existe em carta nenhuma. Bento, de cima, batendo o martelo no costado: \"Antes do sol, isso vira lenha. Sem drama, garoto.\" Na beira do cais, Iara aperta a rede contra o peito: \"Esse barco é do meu irmão. Ele saiu há um mês.\" E, no fim da prancha, um terno branco que não devia estar acordado a essa hora — Russo, sorrindo para o barco como quem sorri para um devedor.",
     narration: { style: "light", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Farrapos de sal, óculos improvisados na testa, lascas de madeira nos cabelos.",
-    relationships: { Bento: "Amigável", Iara: "Neutral", Russo: "Suspeito" },
+    charAppearanceNote: "Sal seco na camisa aberta, óculos de proteção improvisados na testa, lascas de madeira no cabelo, mãos cheias de cortes pequenos.",
+    relationships: { Bento: "Amigável", Iara: "Neutral", Russo: "Suspeito", "Tenente Neves": "Neutral", "Zé Gaivota": "Amigável" },
     worldState: {
       location: "Estaleiro Maré Baixa, porto secundário da East Blue",
       npcs: {
         Bento: "patrão; voz grossa, humor cruel; estaleiro; quer desmontar o barco",
         Iara: "pescadora; metáforas de maré, enrola rede nos pulsos; cais; o barco é do irmão dela",
         Russo: "agiota; terno branco manchado, ri antes de ameaçar; porto; cobra Bento",
+        "Tenente Neves": "oficial da Marinha; correto, alinha o quepe; quartel do porto; desconfia de Gaspar sem provas",
+        "Zé Gaivota": "garoto de recados; vende fofoca por peixe frito; cais; idolatra Léo",
       },
     },
     plots: [
       plot("O barco sem tripulação", "Um casco volta sozinho com um pedido de socorro e uma ilha fora do mapa. Desmontar é apagar a última pista."),
-      plot("Um navio só meu", "Se Lia salvar e consertar o casco, ele pode ser o primeiro barco dela — se o dono não estiver morto."),
+      plot("Um navio só meu", "Se Léo salvar e consertar o casco, ele pode ser o primeiro barco dele — se o dono não estiver morto."),
       plot("A dívida de Bento", "Russo cobra Bento com juros que crescem toda noite. Ninguém no estaleiro sabe o que ele comprou."),
     ],
+    threat: { name: "Capitão-tenente Gaspar", goal: "esconder a pedreira clandestina e vender os presos antes que alguém ache a ilha" },
     gmBrief: {
       truth:
         "O irmão de Iara, Caio, e sua tripulação de pescadores foram presos por um capitão-tenente da Marinha corrupto, Gaspar, que mantém uma pedreira clandestina numa ilhota fora das cartas e usa presos como mão de obra. Caio soltou o barco vazio na corrente com a mensagem escrita em tinta de lula. Russo é o testa de ferro de Gaspar no porto; mandou Bento destruir o casco em troca de perdoar parte da dívida.",
       clues: [
         "Os pregos novos no casco são de ferro da Marinha, com número de lote.",
         "No encaixe do mastro há um mapa riscado a faca: correntes, um rochedo em forma de dente.",
-        "O livro de contas de Bento tem pagamentos a Russo desde o ano em que Lia chegou.",
+        "O livro de contas de Bento tem pagamentos a Russo desde o ano em que Léo chegou.",
         "Bêbados no porto falam de 'trabalho bem pago numa ilha' — ninguém que foi voltou.",
       ],
       escalation: [
@@ -138,11 +147,13 @@ export const ADVENTURE_PRESETS = [
         "Eles caçam quem ficou com a carta; Iara some de casa.",
         "Gaspar decide vender os presos para um navio negreiro — a pedreira será esvaziada em três dias.",
       ],
-      twist: "A dívida de Bento existe porque, anos atrás, ele pagou a Russo para tirar o nome de Lia de uma lista de órfãos vendidos. Ele a protege do mesmo homem que agora quer o barco destruído.",
+      twist: "A dívida de Bento existe porque, anos atrás, ele pagou a Russo para tirar o nome de Léo de uma lista de órfãos vendidos. Ele a protege do mesmo homem que agora quer o barco destruído.",
       agendas: {
-        Bento: "manter Lia e o estaleiro vivos, nem que precise mentir para ela",
+        Bento: "manter Léo e o estaleiro vivos, nem que precise mentir para ele",
         Iara: "achar o irmão; não confia em ninguém que trabalhe para Bento",
         Russo: "apagar provas e manter Gaspar satisfeito",
+        "Tenente Neves": "subir na carreira sem sujar a farda; vira aliado se as provas forem fortes",
+        "Zé Gaivota": "ser levado no barco quando Léo partir; é o primeiro a ver os homens de Russo chegando",
       },
     },
     specialAbility: power(
@@ -154,39 +165,42 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "harry-potter",
     world: "Harry Potter",
-    charName: "Clara Vale",
+    charName: "Daniel Vale",
     charTitle: "Auxiliar da loja Relíquias & Restos",
     charAge: "24",
     genre: "Mistério mágico",
     hook: "Uma escrivaninha usada começa a escrever cartas que ninguém mandou. A letra é igual à da sua mãe — que morreu há três anos.",
     charBg:
-      "Bruxa de formação mediana, sem sobrenome famoso. Cataloga objetos usados num beco lateral de um mercado mágico secundário. Dora a contratou porque Clara não faz perguntas em voz alta — até agora. A mãe, Helena, era aborto (squib) e trabalhava limpando casas de bruxos ricos.",
+      "Bruxo de formação mediana, sem sobrenome famoso, saiu da escola com notas boas em Feitiços e péssimas em ficar quieto. Cataloga objetos usados num beco lateral de um mercado mágico secundário. Dora o contratou porque Daniel não faz perguntas em voz alta — até agora. A mãe, Helena, era aborto (squib), limpava casas de bruxos ricos e morreu de uma 'doença súbita' há três anos. Ele ainda guarda o avental dela no fundo do armário.",
     charPersonality:
-      "Curiosa demais para o próprio bem; cuidadosa com regras até achar uma falha. Evita confronto, mas anota tudo. Quando nervosa, organiza prateleiras. Segredo: já abriu um artefato proibido e mentiu no relatório.",
+      "Curioso demais para o próprio bem; cuidadoso com regras até achar uma falha nelas. Evita confronto, mas anota tudo num caderno com feitiço de tranca. Quando nervoso, organiza prateleiras em ordem alfabética. Tem humor seco e um carinho teimoso por objetos que ninguém quer. Segredo: já abriu um artefato proibido e mentiu no relatório.",
     charSkills: "Feitiços cotidianos, catalogação, observação, latim de etiqueta. Sem dons únicos de sangue.",
     supportingCast:
-      "Dora — dona da loja; elegante, impaciente, protege o nome da casa; exige discrição absoluta e fica pálida quando ouve o nome Helena. Elias — cliente; afirma que o objeto é dele, fala demais, suor na testa; tique: ajusta uma gravata que não está usando. Inspetora Moira Fenn — fiscal de artefatos; educada, cansada, caneta de pena que anota sozinha; aparece justo quando algo dá errado.",
+      "Dora — dona da loja; elegante, impaciente, protege o nome da casa; exige discrição absoluta e fica pálida quando ouve o nome Helena. Elias — cliente; afirma que o objeto é dele, fala demais, suor na testa; tique: ajusta uma gravata que não está usando. Inspetora Moira Fenn — fiscal de artefatos; educada, cansada, caneta de pena que anota sozinha; aparece justo quando algo dá errado. Bartolomeu Crane — vizinho de loja, vende varinhas de segunda mão; fofoqueiro gentil, deve favores a meio beco, conhecia Helena e muda de assunto quando o nome dela aparece; tique: estala os dedos para acender o cachimbo. Sra. Ofélia Thorne — colecionadora rica e encantadora de 'curiosidades'; luvas de pelica, voz de chá servido, aparece para comprar justamente a escrivaninha; tique: chama todo mundo de 'meu bem'.",
     storyStartPoint:
-      `O cadeado de Relíquias & Restos ainda está frio na palma quando a gaveta lacrada da escrivaninha cede. Uma carta cai no seu colo: cheiro de fuligem, tinta recente, a letra redonda da sua mãe — e o endereço da sua casa. Do outro lado da vitrine, Elias não pisca. Dora, sem olhar: "Clara. Se isso vazar, você some do livro-caixa." Elias: "Esse móvel é meu. Entrega agora e ninguém precisa saber o que ele escreve."`,
+      "Hora de fechar na Relíquias & Restos. As velas das prateleiras baixam sozinhas, uma por uma, e só a escrivaninha do leilão de ontem continua acordada: a pena presa no tinteiro está escrevendo. Você chega perto a tempo de ver a última linha secar — a letra redonda da sua mãe, o endereço da sua casa e um nome riscado três vezes. Atrás do balcão, Dora fecha o livro-caixa com força demais. Do outro lado da vitrine, sob a chuva, Elias não pisca. Dora, sem levantar os olhos: \"Daniel. Se isso vazar, você some do livro-caixa — e eu junto.\" Elias bate de leve no vidro com um anel: \"Esse móvel é meu. Me entrega antes que a fiscal chegue e ninguém precisa saber o que ele escreve.\"",
     narration: { style: "literary", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Dedos manchados de tinta, avental com bolsos etiquetados, cicatriz fina no polegar.",
-    relationships: { Dora: "Neutral", Elias: "Suspeito", "Moira Fenn": "Neutral" },
+    charAppearanceNote: "Dedos manchados de tinta, avental com bolsos etiquetados, cicatriz fina no polegar, varinha de amieiro remendada com fita.",
+    relationships: { Dora: "Neutral", Elias: "Suspeito", "Moira Fenn": "Neutral", "Bartolomeu Crane": "Amigável", "Sra. Ofélia Thorne": "Neutral" },
     worldState: {
       location: "Loja Relíquias & Restos, beco de mercado mágico secundário",
       npcs: {
         Dora: "proprietária; elegante e impaciente; loja; exige discrição, reage ao nome Helena",
         Elias: "cliente; fala demais, ajusta gravata inexistente; vitrine; reivindica a escrivaninha",
         "Moira Fenn": "fiscal de artefatos; educada e cansada, pena que anota sozinha; aparece em crises",
+        "Bartolomeu Crane": "vendedor de varinhas usadas; fofoqueiro gentil, cachimbo; loja ao lado; conhecia Helena",
+        "Sra. Ofélia Thorne": "colecionadora rica; luvas de pelica, 'meu bem'; loja; quer a escrivaninha",
       },
     },
     plots: [
-      plot("Cartas que voltam", "A escrivaninha escreve cartas nunca enviadas, com a letra da mãe de Clara. Uma delas aponta para a casa dela."),
-      plot("O relatório falso", "Clara mentiu sobre um artefato proibido. Com a fiscalização rondando a loja, a mentira pode vir à tona."),
-      plot("Quem era Helena", "A mãe de Clara limpava casas de bruxos ricos. Talvez tenha visto coisas demais."),
+      plot("Cartas que voltam", "A escrivaninha escreve cartas nunca enviadas, com a letra da mãe de Daniel. Uma delas aponta para a casa dele."),
+      plot("O relatório falso", "Daniel mentiu sobre um artefato proibido. Com a fiscalização rondando a loja, a mentira pode vir à tona."),
+      plot("Quem era Helena", "A mãe de Daniel limpava casas de bruxos ricos. Talvez tenha visto coisas demais."),
     ],
+    threat: { name: "A rede de objetos amaldiçoados", goal: "recuperar e queimar as provas de Helena antes que a fiscalização veja os nomes" },
     gmBrief: {
       truth:
-        "Helena, a mãe de Clara, juntava provas contra uma rede que vende objetos amaldiçoados a famílias ricas: anotava nomes, datas e entregas das casas onde limpava. Ela escondia as cartas na escrivaninha com um feitiço que a própria Dora lançou, e a escrivaninha 'devolve' as cartas a quem tem o sangue dela. Elias trabalha para a rede e quer os nomes. Helena morreu de uma 'doença súbita' — foi uma maldição.",
+        "Helena, a mãe de Daniel, juntava provas contra uma rede que vende objetos amaldiçoados a famílias ricas: anotava nomes, datas e entregas das casas onde limpava. Ela escondia as cartas na escrivaninha com um feitiço que a própria Dora lançou, e a escrivaninha 'devolve' as cartas a quem tem o sangue dela. Elias trabalha para a rede e quer os nomes. Helena morreu de uma 'doença súbita' — foi uma maldição.",
       clues: [
         "As cartas são cópias de cartas que Helena escreveu e nunca enviou; cada uma cita uma casa e um objeto.",
         "Dora tem no livro-caixa a compra da escrivaninha no leilão dos bens de Helena — feita por ela mesma.",
@@ -195,14 +209,16 @@ export const ADVENTURE_PRESETS = [
       ],
       escalation: [
         "Elias volta à noite com um 'advogado' de terno escuro e uma ordem falsificada de devolução.",
-        "Alguém invade a casa de Clara e revira tudo atrás das cartas antigas.",
-        "A rede denuncia Clara à fiscal Moira como receptadora de artefatos das trevas, usando a mentira antiga do relatório.",
+        "Alguém invade a casa de Daniel e revira tudo atrás das cartas antigas.",
+        "A rede denuncia Daniel à fiscal Moira como receptadora de artefatos das trevas, usando a mentira antiga do relatório.",
       ],
-      twist: "Dora era a melhor amiga de Helena e lançou o feitiço da escrivaninha. Contratou Clara para protegê-la de perto — e nunca teve coragem de contar.",
+      twist: "Dora era a melhor amiga de Helena e lançou o feitiço da escrivaninha. Contratou Daniel para protegê-lo de perto — e nunca teve coragem de contar.",
       agendas: {
-        Dora: "proteger Clara sem admitir a culpa por não ter salvado Helena",
+        Dora: "proteger Daniel sem admitir a culpa por não ter salvado Helena",
         Elias: "recuperar as cartas antes que os nomes cheguem à fiscalização; tem medo dos próprios chefes",
         "Moira Fenn": "fechar casos; é honesta, mas acredita em provas, e as provas podem ser forjadas",
+        "Bartolomeu Crane": "esconder que vendeu à rede a lista das casas onde Helena limpava; quer se redimir sem se entregar",
+        "Sra. Ofélia Thorne": "é a compradora final da rede: quer as cartas queimadas e o próprio nome fora delas",
       },
     },
     specialAbility: power(
@@ -225,18 +241,20 @@ export const ADVENTURE_PRESETS = [
       "Prático, irônico, desconfiado de uniformes. Incapaz de abandonar um ferido — e odeia isso em si mesmo. Quando mente, limpa as mãos no pano mesmo limpas. Medo: a dívida virar coleira para sempre.",
     charSkills: "Mecânica de cargueiros, leitura de painéis, solda, pilotagem básica. Sem treino de Força.",
     supportingCast:
-      "Nemi — fornecedora; cobra peças com sorriso doce e prazo cruel; sabe todos os segredos do porto. Capitão Dreel — dono do cargueiro; voz militar sem patente clara; insiste que o compartimento não seja aberto; tique: aperta o comlink sem transmitir. Kass Venn — caçadora de recompensas; armadura remendada com peças de três exércitos, bebe sempre a mesma coisa, educada demais.",
+      "Nemi — fornecedora; cobra peças com sorriso doce e prazo cruel; sabe todos os segredos do porto. Capitão Dreel — dono do cargueiro; voz militar sem patente clara; insiste que o compartimento não seja aberto; tique: aperta o comlink sem transmitir. Kass Venn — caçadora de recompensas; armadura remendada com peças de três exércitos, bebe sempre a mesma coisa, educada demais. Ilsa Rho — escriturária imperial desertora, escondida no cargueiro; 19 anos, voz firme demais para quem treme tanto, códigos presos no cabelo; tique: corrige a gramática dos outros quando está com medo. Tenente Corrin Vael — oficial imperial do porto; jovem, ambicioso, educado como manual, fecha o porto 'por inspeção de rotina'; tique: tira as luvas devagar antes de interrogar.",
     storyStartPoint:
-      `No hangar sujo do Porto Cinza, o painel do casco aquece no ombro enquanto o último parafuso aperta. Três batidas vêm de um compartimento sem registro — ritmadas, humanas. Depois, mais duas, fracas. Dreel já está no corredor. Nemi, pelo comlink aberto na bancada: "Taren, se esse navio atrasa, a dívida dobra." Dreel: "Não abre. Ordem. Você ouviu."`,
+      "Porto Cinza, hangar 7, turno da madrugada. O último parafuso do painel do casco trava sob a sua chave quando três batidas vêm de dentro de um compartimento que não existe na planta do cargueiro — ritmadas, humanas. Depois, mais duas, fracas. O comlink na bancada estala com a voz doce de Nemi: \"Taren, se esse navio atrasar, a sua dívida dobra. De novo.\" O Capitão Dreel já está parado no corredor, com a mão no coldre: \"Não abre. É uma ordem. Você ouviu.\" Pelos alto-falantes do porto, uma voz imperial anuncia que todas as decolagens estão suspensas \"para inspeção de rotina\". Na cantina do outro lado da pista, uma figura de armadura remendada vira a cabeça na direção do seu hangar.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Macacão manchado de óleo, cicatriz de solda no antebraço, ferramenta no cinto.",
-    relationships: { Nemi: "Neutral", "Capitão Dreel": "Suspeito", "Kass Venn": "Neutral" },
+    relationships: { Nemi: "Neutral", "Capitão Dreel": "Suspeito", "Kass Venn": "Neutral", "Ilsa Rho": "Neutral", "Tenente Corrin Vael": "Hostil" },
     worldState: {
       location: "Hangar 7, Porto Cinza",
       npcs: {
         Nemi: "fornecedora; sorriso doce, prazo cruel; porto; cobra peças",
         "Capitão Dreel": "capitão; voz militar, aperta comlink; corredor; proíbe abrir o casco",
         "Kass Venn": "caçadora de recompensas; armadura remendada, educada demais; cantina do porto",
+        "Ilsa Rho": "desertora imperial; corrige gramática com medo; compartimento do cargueiro; tem os códigos",
+        "Tenente Corrin Vael": "oficial imperial; educado, tira luvas devagar; torre de controle; fecha o porto",
       },
     },
     plots: [
@@ -244,6 +262,7 @@ export const ADVENTURE_PRESETS = [
       plot("A dívida-coleira", "Nemi dobra a dívida a cada atraso. Taren precisa de um jeito de sair dela sem vender ninguém."),
       plot("A caçadora na cantina", "Kass Venn chegou ao porto no mesmo dia do cargueiro. Ela pergunta por um rosto — e paga bem."),
     ],
+    threat: { name: "O Império no Porto Cinza", goal: "recuperar os códigos de prisioneiros e quem os levou antes do fim do bloqueio" },
     gmBrief: {
       truth:
         "No compartimento está Ilsa Rho, escriturária imperial de 19 anos que desertou levando os códigos de transferência de prisioneiros de uma guarnição. Dreel é ex-oficial imperial e contrabandista: prometeu levá-la para fora do setor, mas pretende revendê-la ao Império pela recompensa. Kass Venn foi contratada pelo Império para achá-la. Nemi, por baixo do sorriso, é contato de uma célula rebelde local e foi quem arranjou o cargueiro, sem saber que Dreel era traidor.",
@@ -263,6 +282,8 @@ export const ADVENTURE_PRESETS = [
         Nemi: "salvar Ilsa e os códigos sem expor a célula",
         "Capitão Dreel": "entregar Ilsa ao Império e sumir rico",
         "Kass Venn": "cumprir o contrato; tem código de honra próprio e odeia ser enganada por clientes",
+        "Ilsa Rho": "levar os códigos aos rebeldes e libertar o irmão preso na guarnição",
+        "Tenente Corrin Vael": "achar a desertora antes do superior chegar e ficar com o mérito",
       },
     },
     specialAbility: power(
@@ -274,36 +295,39 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "witcher",
     world: "The Witcher",
-    charName: "Mila dos Juncos",
+    charName: "Milo dos Juncos",
     charTitle: "Ajudante da cabana de ervas de Ada",
     charAge: "27",
     genre: "Fantasia sombria",
-    hook: "A tosse da aldeia segue a rota de um comerciante, e a água da fonte brilha no escuro. Antes da cura, a vila vai querer uma culpada.",
+    hook: "A tosse da aldeia segue a rota de um comerciante, e a água da fonte brilha no escuro. Antes da cura, a vila vai querer um culpado.",
     charBg:
-      "Humana comum, aprendeu ervas com Ada nas margens pantanosas. Não é feiticeira nem bruxa caçadora. Os vizinhos a chamam quando a tosse começa; ela já enterrou amigos demais para fingir esperança barata.",
+      "Humano comum, aprendeu ervas com Ada nas margens pantanosas depois que a mãe morreu de febre do pântano. Não é feiticeiro nem bruxo caçador. Os vizinhos o chamam quando a tosse começa; ele já enterrou amigos demais para fingir esperança barata. Remenda redes de graça para quem não pode pagar o remédio — e Ada finge não ver.",
     charPersonality:
-      "Paciente com doentes, cética com milagres, protetora até a teimosia. Fala pouco; quando a raiva sobe, conta ingredientes em voz alta. Segredo: roubou um frasco raro de Ada e ainda não confessou.",
+      "Paciente com doentes, cético com milagres, protetor até a teimosia. Fala pouco; quando a raiva sobe, conta ingredientes em voz alta. Tem um jeito manso que faz criança parar de chorar e bêbado baixar a faca. Segredo: roubou um frasco raro de Ada e ainda não confessou.",
     charSkills: "Herbalismo, curativos, trilhas do pântano, negociação de raízes. Sem Sinais nem mutações.",
     supportingCast:
-      "Ada — mentora; voz rouca, mãos manchadas de verde, ama a verdade mais que a paz; pede que você ache a origem da água turva. Oren — moleiro; ri alto demais, evita a fonte, panelas de cobre novas na cozinha; tique: limpa farinha da barba quando mente. Mestre Ulric — alquimista viajante; luvas de couro fino, fala de 'progresso', oferece ajuda antes que alguém peça.",
+      "Ada — mentora; voz rouca, mãos manchadas de verde, ama a verdade mais que a paz; pede que você ache a origem da água turva. Oren — moleiro; ri alto demais, evita a fonte, panelas de cobre novas na cozinha; tique: limpa farinha da barba quando mente. Mestre Ulric — alquimista viajante; luvas de couro fino, fala de 'progresso', oferece ajuda antes que alguém peça. Fardo — comerciante ambulante; gordo, risonho, tosse sangue e jura que é poeira, leva ingredientes rio acima sem saber o que são; tique: oferece amostra grátis de tudo. Velha Brunhilde — a sineira da aldeia; conta as mortes no sino, acha que doença é castigo e tem o povo na palma da mão; tique: aperta a corda do sino quando fala de pecado.",
     storyStartPoint:
-      `Você ainda está descalça na soleira da cabana quando o frasco frio toca a palma — a criança que o trouxe já correu. A água brilha verde no escuro da cozinha, com cheiro da fonte da aldeia dos Juncos. Do outro lado da rua, a tosse não para. Ada: "Não é febre comum. Segue o caminho do comerciante." Oren, na porta, com um saco de farinha no ombro: "Não tem nada na fonte. Vocês assustam o povo."`,
+      "Lua baixa sobre os Juncos. Você ainda está descalço na soleira da cabana quando a criança enfia o frasco nas suas mãos e some correndo na cerração. A água dentro brilha verde no escuro da cozinha — a água da fonte da aldeia. Do outro lado da rua, a tosse do ferreiro não para; mais adiante, alguém já bate numa porta pedindo que você venha. Ada, sem tirar os olhos do frasco: \"Não é febre comum. Segue o caminho do comerciante, Milo, e não come nada que ele tenha vendido.\" Oren, parado na porta com o saco de farinha no ombro e panelas de cobre novas tilintando na carroça: \"Não tem nada na fonte. Vocês dois só assustam o povo.\" E, na janela da taverna, uma luva de couro fino levanta um copo para você, como num brinde.",
     narration: { style: "dark", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Avental manchado, unhas verdes de seiva, cordão com dente de peixe seco.",
-    relationships: { Ada: "Amigável", Oren: "Suspeito", "Mestre Ulric": "Neutral" },
+    charAppearanceNote: "Avental manchado, unhas verdes de seiva, cordão com dente de peixe seco, barba curta mal aparada.",
+    relationships: { Ada: "Amigável", Oren: "Suspeito", "Mestre Ulric": "Neutral", "Fardo": "Neutral", "Velha Brunhilde": "Suspeito" },
     worldState: {
       location: "Aldeia dos Juncos, cabana de Ada",
       npcs: {
         Ada: "mentora; voz rouca, verdade acima da paz; cabana; pede investigar a fonte",
         Oren: "moleiro; ri alto, limpa farinha da barba, panelas novas; rua; nega problema na fonte",
         "Mestre Ulric": "alquimista viajante; luvas finas, fala de progresso; estalagem; oferece ajuda",
+        "Fardo": "comerciante ambulante; risonho, tosse e nega; estrada do rio; entrega para Ulric",
+        "Velha Brunhilde": "sineira da aldeia; conta mortes no sino, acusa; capela; quer um culpado",
       },
     },
     plots: [
       plot("Água que brilha", "A doença segue a rota de um comerciante; a fonte brilha e Oren mente. Alguém lucra com isso."),
-      plot("O frasco roubado", "Mila roubou um frasco raro de Ada. Pode ser justamente o que falta para a cura — se ela confessar."),
+      plot("O frasco roubado", "Milo roubou um frasco raro de Ada. Pode ser justamente o que falta para a cura — se ele confessar."),
       plot("Fogueira para a curandeira", "Com crianças doentes, a aldeia procura culpados. Ada, que mexe com ervas, é o alvo mais fácil."),
     ],
+    threat: { name: "Mestre Ulric", goal: "terminar os experimentos com mutagênicos no moinho antes que alguém descubra o que desce o córrego" },
     gmBrief: {
       truth:
         "Mestre Ulric faz experimentos com mutagênicos num moinho velho rio acima e despeja os resíduos no córrego que alimenta a fonte. Oren vendeu a ele o uso do canal dos fundos do moinho e recebeu em cobre. O comerciante, Fardo, é o entregador de Ulric: carrega ingredientes e bebe do mesmo cantil contaminado, por isso a doença segue a rota dele. Os resíduos também atraem afogadores, que sobem o córrego à noite.",
@@ -318,11 +342,13 @@ export const ADVENTURE_PRESETS = [
         "Afogadores sobem o córrego à noite e atacam o curral perto da fonte.",
         "Ulric se oferece para 'curar' os doentes de graça, desde que possa levar os mais graves para o moinho.",
       ],
-      twist: "O frasco que Mila roubou contém essência de raiz-de-pântano, o único antídoto para o mutagênico. Ada sabe que foi Mila e está esperando a confissão.",
+      twist: "O frasco que Milo roubou contém essência de raiz-de-pântano, o único antídoto para o mutagênico. Ada sabe que foi Milo e está esperando a confissão.",
       agendas: {
-        Ada: "salvar a aldeia; quer que Mila aprenda a assumir os próprios erros",
+        Ada: "salvar a aldeia; quer que Milo aprenda a assumir os próprios erros",
         Oren: "esconder o acordo; está com medo e começa a tossir também",
         "Mestre Ulric": "cobaias para os experimentos, com aparência de benfeitor",
+        "Fardo": "vender e ir embora antes que a doença o pegue; não sabe que já pegou",
+        "Velha Brunhilde": "achar um culpado para acalmar a aldeia — e Milo, com o frasco roubado, serve",
       },
     },
     specialAbility: power(
@@ -334,36 +360,39 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "skyrim",
     world: "Skyrim",
-    charName: "Edda Freixo",
+    charName: "Eirik Freixo",
     charTitle: "Carregadora da Caravana do Pinheiro Quebrado",
     charAge: "25",
     genre: "Estradas e ruínas",
     hook: "As carroças estão intactas, a sopa ainda está quente e a gente sumiu. As pegadas na neve vão embora em fila, sem sinal de luta.",
     charBg:
-      "Viaja por salário e manda moedas à família no norte. Não é Dragonborn nem jarl. Já enterrou um amigo numa nevasca e jurou não deixar outro para trás — promessa que dói.",
+      "Viaja por salário e manda moedas à mãe e às duas irmãs no norte. Não é Dragonborn nem jarl. Já enterrou um amigo, Torvald, numa nevasca e jurou não deixar outro para trás — promessa que dói. Aprendeu a ler sozinho, com o livro de entregas da caravana.",
     charPersonality:
-      "Resistente, franca, cautelosa com juramentos. Humor seco. Quando tem medo, conta passos. Medo secreto: a família descobrir que ela já matou em legítima defesa e gostou do silêncio depois.",
+      "Resistente, franco, cauteloso com juramentos. Humor seco, de quem já passou frio demais para reclamar. Quando tem medo, conta passos. Divide a última ração sem fazer discurso. Medo secreto: a família descobrir que ele já matou em legítima defesa e gostou do silêncio depois.",
     charSkills: "Acampar, rastrear carroças, machado de trabalho, cuidar de animais de carga. Sem Thu'um.",
     supportingCast:
-      "Rurik — chefe da caravana; oferece ouro pelo livro de entregas, voz de quem já perdeu gente; olha demais para o horizonte. Sela — outra carregadora; quer desistir, mãos trêmulas, leal a Edda; tique: aperta o amuleto de Talos quando mente para si mesma. Hrodulf — intendente de um jarl; manto bom demais para a estrada, sorri sem mostrar os dentes; chega 'por acaso' ao acampamento.",
+      "Rurik — chefe da caravana; oferece ouro pelo livro de entregas, voz de quem já perdeu gente; olha demais para o horizonte. Sela — outra carregadora; quer desistir, mãos trêmulas, leal a Eirik; tique: aperta o amuleto de Talos quando mente para si mesma. Hrodulf — intendente de um jarl; manto bom demais para a estrada, sorri sem mostrar os dentes; chega 'por acaso' ao acampamento. Ulfgar Dente-Partido — caçador de vampiros aposentado numa cabana da encosta; bêbado, rabugento, sabe o que é a torre e finge não saber; tique: cospe no fogo e diz o nome de Arkay. Irmã Hjordis — sacerdotisa de Arkay a caminho de Dawnstar; serena, olhos de quem já fechou muitos olhos, leva água benta e pouca paciência para mentirosos; tique: toca o amuleto antes de responder.",
     storyStartPoint:
-      `O vento da Pale corta as mangas quando você alcança as carroças da Caravana do Pinheiro Quebrado — intactas, rédeas presas. A sopa na panela ainda aquece os dedos. Na neve, pegadas saem do acampamento em fila, todas no mesmo passo. Sela puxa seu braço. Rurik aponta o livro aberto no banco. Sela: "Edda, a gente some. Agora." Rurik: "O livro vale mais que a sua vida. Traga — ou alguém menos paciente vem buscar."`,
+      "O vento da Pale vem atravessado quando você alcança o acampamento da Caravana do Pinheiro Quebrado. As carroças estão intactas, os cavalos amarrados, a sopa ainda fumega no caldeirão — e não há ninguém. Na neve, as pegadas saem do círculo das fogueiras em fila perfeita, todas no mesmo passo, todas descalças. Sela agarra o seu braço com força de quem não vai soltar. Rurik está de pé junto ao livro de entregas aberto no banco, olhando para o norte como quem espera ser chamado. Sela: \"Eirik, a gente vai embora. Agora.\" Rurik, sem se virar: \"O livro vale mais que a sua vida. Traga — ou alguém menos paciente vem buscar.\" No alto da colina, por um instante, uma tocha acende numa torre de vigia que está em ruínas há cem anos.",
     narration: { style: "epic", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Peles remendadas, cicatriz de corda no ombro, machado curto no cinto.",
-    relationships: { Rurik: "Neutral", Sela: "Amigável", Hrodulf: "Suspeito" },
+    charAppearanceNote: "Peles remendadas, cicatriz de corda no ombro, machado curto no cinto, barba loura com gelo preso nos fios.",
+    relationships: { Rurik: "Neutral", Sela: "Amigável", Hrodulf: "Suspeito", "Ulfgar Dente-Partido": "Neutral", "Irmã Hjordis": "Amigável" },
     worldState: {
       location: "Acampamento abandonado na Pale",
       npcs: {
         Rurik: "chefe; voz dura, olha o horizonte; acampamento; quer o livro",
         Sela: "carregadora; treme, aperta amuleto; acampamento; quer fugir",
         Hrodulf: "intendente de um jarl; manto bom, sorriso fechado; chega ao acampamento",
+        "Ulfgar Dente-Partido": "caçador aposentado; bêbado e rabugento, invoca Arkay; cabana na encosta; sabe o que é a torre",
+        "Irmã Hjordis": "sacerdotisa de Arkay; serena, toca o amuleto; estrada para Dawnstar; leva água benta",
       },
     },
     plots: [
       plot("Caravana fantasma", "Mercadorias intactas, gente sumida em fila. O livro de entregas ainda espera uma assinatura."),
-      plot("A promessa da nevasca", "Edda jurou não deixar ninguém para trás. Sela quer fugir — e começa a ouvir uma voz que chama pelo nome dela."),
+      plot("A promessa da nevasca", "Eirik jurou não deixar ninguém para trás. Sela quer fugir — e começa a ouvir uma voz que chama pelo nome dela."),
       plot("Quem pagou o frete", "Uma linha do livro foi paga em ouro de um jarl. Hrodulf apareceu rápido demais."),
     ],
+    threat: { name: "O vampiro da cripta", goal: "beber os caravaneiros até recuperar a força antiga e voltar a caçar nas aldeias da Pale" },
     gmBrief: {
       truth:
         "Uma das cargas era um caixão selado com prata, levado de uma cripta nórdica: dentro havia um vampiro antigo adormecido. Hrodulf, intendente de um jarl, pagou a Rurik para transportá-lo em segredo, pois pretende usar o vampiro contra um rival político. O selo rompeu na estrada; o vampiro acordou e levou os caravaneiros em transe para uma torre de vigia arruinada, onde se alimenta deles aos poucos.",
@@ -381,8 +410,10 @@ export const ADVENTURE_PRESETS = [
       twist: "O filho de Rurik, Ulf, está entre os levados. Rurik quer o livro porque é a única prova de que Hrodulf pagou pelo transporte — e a única moeda para negociar o filho de volta.",
       agendas: {
         Rurik: "salvar o filho; mente sobre a carga por vergonha",
-        Sela: "sobreviver; gosta de Edda e tem medo de ser um fardo",
+        Sela: "sobreviver; gosta de Eirik e tem medo de ser um fardo",
         Hrodulf: "recuperar o livro e o caixão, eliminar testemunhas com discrição",
+        "Ulfgar Dente-Partido": "não voltar à caça — perdeu a família para uma criatura assim; pode ser convencido",
+        "Irmã Hjordis": "destruir mortos-vivos onde estiverem; desconfia de Hrodulf desde o primeiro olhar",
       },
     },
     specialAbility: power(
@@ -405,18 +436,20 @@ export const ADVENTURE_PRESETS = [
       "Gentil até se prejudicar; persistente; curioso com sons estranhos. Foge de briga com treinadores famosos. Quando mente, oferece comida. Segredo: já libertou um Houndour 'perigoso' contra a ordem de Bia.",
     charSkills: "Cuidados básicos, leitura de comportamento, orientação local. Parceiro comum, sem habilidade lendária.",
     supportingCast:
-      "Bia — responsável pelo abrigo; firme, justa, esconde cansaço; pede que você ache a cuidadora atrasada. Davi — morador; ouviu barulho sob a ponte, exagera histórias, quer atenção; tique: bate o pé no ritmo da água. Pipoca — Yamper parceiro de Nico; rabo eriçado de estática quando sente perigo, late para a água sem parar.",
+      "Bia — responsável pelo abrigo; firme, justa, esconde cansaço; pede que você ache a cuidadora atrasada. Davi — morador; ouviu barulho sob a ponte, exagera histórias, quer atenção; tique: bate o pé no ritmo da água. Pipoca — Yamper parceiro de Nico; rabo eriçado de estática quando sente perigo, late para a água sem parar. Lúcia — cuidadora do abrigo que sumiu; firme, risada fácil, nunca deixa um Pokémon para trás; está presa na gruta e conta os pulsos do emissor para não perder o juízo. Vítor Lacerda — 'colecionador' simpático recém-chegado à cidade; caderninho de couro, Pokémon raro no ombro, pergunta demais sobre a ponte; tique: limpa os óculos quando calcula um preço.",
     storyStartPoint:
-      `A correia estica no pulso na entrada da Ponte Ribanceira — Pipoca crava as patas e solta faíscas, recusando o primeiro degrau. Cheiro de rio. Entre as pedras, uma mochila azul do abrigo balança na correnteza. A água se mexe contra a corrente. Bia, pelo comunicador: "Nico, a Lúcia não chegou. Não atravessa se eles recusam." Davi, na margem: "Tem coisa grande embaixo. Eu ouvi chorar. Você vai ver."`,
+      "Manhã de neblina na entrada da Ponte Ribanceira. A guia estica no seu pulso: Pipoca crava as patas na madeira, solta faíscas de medo e se recusa a dar o primeiro passo. Ele não é o único — os Pidgey do corrimão levantaram voo todos de uma vez, e nenhum Pokémon selvagem chega perto da água. Lá embaixo, uma mochila azul do abrigo balança presa num galho, e a água se mexe contra a corrente, devagar, como se algo enorme respirasse por baixo. Bia, pelo comunicador, com a voz cansada: \"Nico, a Lúcia não voltou da ronda de ontem. Se eles recusam a ponte, você também recusa.\" Davi, na margem, sem fôlego: \"Tem coisa grande lá embaixo. Eu ouvi chorar. Juro.\" No alto da estrada, um homem de óculos para o carro, abre um caderninho de couro e fica olhando para a ponte.",
     narration: { style: "light", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Colete do abrigo, joelho ralado, Poké Ball comum no cinto.",
-    relationships: { Bia: "Amigável", Davi: "Neutral" },
+    relationships: { Bia: "Amigável", Davi: "Neutral", "Lúcia": "Amigável", "Vítor Lacerda": "Suspeito" },
     worldState: {
       location: "Ponte Ribanceira, perto do abrigo",
       npcs: {
         Bia: "responsável; firme e cansada; abrigo; pede achar a cuidadora Lúcia",
         Davi: "morador; exagera, bate o pé; margem; ouviu choro sob a ponte",
         Pipoca: "Yamper parceiro de Nico; medroso, solta estática; ao lado de Nico",
+        "Lúcia": "cuidadora sumida; risada fácil; gruta sob a ponte; descobriu os caçadores",
+        "Vítor Lacerda": "colecionador recém-chegado; caderninho, Pokémon raro; hotel da cidade; pergunta da ponte",
       },
     },
     plots: [
@@ -424,6 +457,7 @@ export const ADVENTURE_PRESETS = [
       plot("O Houndour libertado", "O Pokémon que Nico soltou escondido pode voltar — como ameaça ou como aliado."),
       plot("O cansaço de Bia", "O abrigo está quase falido e Bia carrega tudo sozinha. Ela esconde alguma coisa da equipe."),
     ],
+    threat: { name: "Os caçadores ilegais da ponte", goal: "vender o filhote de Lapras a colecionadores antes que a mãe furiosa desça o rio" },
     gmBrief: {
       truth:
         "Caçadores ilegais prenderam um filhote de Lapras numa gruta sob a ponte para vendê-lo a colecionadores. Instalaram um emissor ultrassônico que só Pokémon ouvem, para afastar curiosos — por isso todos recusam a ponte. A cuidadora Lúcia descobriu o esquema, foi pega e está amarrada na gruta. A mãe Lapras procura o filhote rio abaixo, cada vez mais furiosa.",
@@ -443,6 +477,8 @@ export const ADVENTURE_PRESETS = [
         Bia: "salvar Lúcia sem que o acordo antigo venha à tona",
         Davi: "ser levado a sério pela primeira vez",
         Pipoca: "proteger Nico, mesmo morrendo de medo",
+        "Lúcia": "salvar o filhote de Lapras e sair viva para denunciar o esquema",
+        "Vítor Lacerda": "é o comprador do filhote; quer a entrega antes que a mãe Lapras chegue",
       },
     },
     specialAbility: power(
@@ -455,62 +491,87 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "westeros",
     world: "Westeros — Crônicas de Gelo e Fogo",
-    charName: "Tomás Reedle",
-    charTitle: "Ajudante da Estalagem do Cervo Molhado",
-    charAge: "22",
-    genre: "Intriga e sobrevivência",
-    hook: "Um hóspede sumiu, deixou uma bolsa e dois grupos armados querem ela antes do anoitecer. Mentir pode matar mais rápido que a verdade.",
-    charBg:
-      "Filho de trabalhadores, serve mesas e cuida de cavalos numa estrada secundária das Terras Fluviais. Sem título, sem espada de nome. Já ouviu demais para ser inocente; ainda não o bastante para ser cruel.",
-    charPersonality:
-      "Discreto, pragmático, dividido entre salário e lealdade. Observa bocas, não olhos. Quando mente, limpa canecas. Medo: escolher o lado errado e a estalagem queimar com Mara dentro.",
-    charSkills: "Cavalos, escuta de taverna, cozinha simples, caminhos locais. Sem treino de cavaleiro.",
-    supportingCast:
-      "Mara — estalajadeira; quer paz e lucro, voz baixa quando ameaça; trata Tomás quase como filho e quase como empregado. Ivo — cocheiro; oferece o dobro do salário para esconder a bolsa; tique: cospe à esquerda antes de mentir. Sor Bennet do Vau — cavaleiro andante; armadura amassada, fome eterna, honesto até a falta de juízo; jura que está atrás de 'um ladrão'.",
-    storyStartPoint:
-      `Na Estalagem do Cervo Molhado, a bolsa ainda está quente do ombro de quem a deixou quando Ivo a empurra contra o seu peito no corredor fechado. Cheiro de cerveja azeda e palha. Pelo couro, você sente o lacre duro de cartas. Do pátio, duas vozes pedem o mesmo hóspede. Ivo: "O dobro do mês. Você não viu nada." Mara, da cozinha, sem abrir a porta: "Tomás. Se trouxer guerra para a minha casa, eu te jogo na estrada."`,
-    narration: { style: "intimate", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Avental manchado, unhas de estábulo, olheiras de turno longo.",
-    relationships: { Mara: "Amigável", Ivo: "Suspeito", "Sor Bennet": "Neutral" },
+    worldBg: "Ano 299 depois da Conquista. Guerra dos Cinco Reis. O Rei do Norte marcha para as Gêmeas, para o casamento que deve selar a aliança com a Casa Frey. Aventura original: o jogador é um homem de Westeros fora do elenco da obra. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui, mas pode mudar o que acontece ao redor deles — sempre com um preço.",
+    charName: "Aldric Rivers",
+    charTitle: "Bastardo e espada juramentada da Casa Ferrovau, nas Terras Fluviais",
+    charAge: "23",
+    genre: "Guerra, intriga e traição",
+    hook: "Um escudeiro Frey morre nos seus braços com uma carta de selo Bolton: 'não deixem o rei entrar'. Faltam dois dias para o casamento nas Gêmeas.",
+    charBg: "Filho bastardo de Sor Willem Ferrovau com uma lavadeira do Ramo Verde. Cresceu no castelo do pai, treinado ao lado dos filhos legítimos, sempre um passo atrás deles na mesa e um à frente no pátio de treino. Lutou no Bosque dos Murmúrios sob o estandarte do lobo e salvou a vida do meio-irmão, Edwyn, que nunca o perdoou por isso. Quer uma coisa só: que um dia o chamem de Sor sem rir. Carrega uma espada de bom aço que o pai lhe deu escondido da esposa.",
+    charPersonality: "Calado, observador, de temperamento frio até alguém ferir os seus — aí esquenta rápido demais. Leal por escolha, não por sangue. Tem humor seco e um senso de honra que ele mesmo acha inconveniente. Quando mente, segura o punho da espada. Medo: morrer como bastardo anônimo numa vala de batalha, sem que ninguém lembre o nome dele.",
+    charSkills: "Espada longa e escudo, montaria de guerra, rastrear em mata ribeirinha, ler e escrever (o meistre do pai ensinou por pena), conhecer brasões e quem odeia quem. Sem magia, sem título.",
+    supportingCast: "Edwyn Ferrovau — meio-irmão legítimo e herdeiro; bonito, ressentido, corajoso no campo e covarde na mesa, prometido a uma neta de Walder Frey; tique: gira o anel da casa quando se sente diminuído. Sor Willem Ferrovau — o pai; velho cavaleiro de bigode branco e joelhos ruins, honra antiga e dívidas novas, nunca disse 'filho' em público. Lyra Frey — neta de Lorde Walder, dama nas Gêmeas; esperta e cansada da família, olha para Aldric como quem mede uma saída; tique: corrige o próprio sobrenome ('Frey... por enquanto'). Merrick Pele-Fina — homem de armas da Casa Bolton; voz mansa, sorriso fino, sempre perto de onde alguém morre; tique: descasca maçãs com uma faca curta sem nunca comê-las. Sor Hosman Corvo — cavaleiro andante bêbado que lutou três guerras e perdeu todas; conhece cada atalho até as Gêmeas; tique: brinda aos mortos antes de beber. Arwin Frey — o escudeiro de 15 anos que morre na primeira cena; o que ele sabia ainda está escondido na sela do cavalo dele.",
+    storyStartPoint: "Estalagem do Vau Vermelho, no Ramo Verde, a dois dias das Gêmeas. A chuva grossa martela as vigas do estábulo. Você está sentado num fardo de feno, limpando a lâmina depois do treino, quando um cavalo entra a galope pela porta aberta e derruba o cavaleiro na palha: um rapaz de libré cinza e azul, das Gêmeas, com um corte fundo no pescoço. Ele agarra a sua gola com uma força que já não tem e enfia na sua mão uma carta molhada, de lacre rosado — o homem esfolado dos Bolton. \"O casamento...\" — a voz falha — \"não deixem o rei entrar.\" Os dedos dele afrouxam. No pátio, cascos. Pela fresta da porta, você vê um homem de manto rosado descer do cavalo, tirar uma faca curta da bainha e começar, sem pressa nenhuma, a descascar uma maçã. Atrás de você, Edwyn chega correndo com uma tocha: \"Aldric. O que foi que você fez?\"",
+    narration: {
+      style: "cinematic",
+      length: "balanced",
+      pace: "balanced",
+    },
+    charAppearanceNote: "Alto, ombros de quem treinou a vida inteira, cabelo castanho-escuro cortado curto, cicatriz no queixo do Bosque dos Murmúrios, capa verde-escura sem brasão — bastardo não usa o do pai.",
+    relationships: {
+      Edwyn: "Suspeito",
+      "Sor Willem": "Neutral",
+      "Lyra Frey": "Neutral",
+      "Merrick Pele-Fina": "Hostil",
+      "Sor Hosman": "Amigável",
+    },
     worldState: {
-      location: "Estalagem do Cervo Molhado, estrada das Terras Fluviais",
+      location: "Estalagem do Vau Vermelho, Ramo Verde, a dois dias das Gêmeas",
       npcs: {
-        Mara: "estalajadeira; voz baixa quando ameaça; cozinha; quer paz",
-        Ivo: "cocheiro; cospe à esquerda; corredor; oferece ouro pela mentira",
-        "Sor Bennet": "cavaleiro andante; armadura amassada, faminto, honesto; pátio; caça 'um ladrão'",
+        Edwyn: "meio-irmão herdeiro; ressentido, gira o anel da casa; Estalagem do Vau Vermelho; prometido a uma Frey",
+        "Sor Willem": "pai de Aldric; velho, honra antiga e dívidas novas; acampamento Ferrovau; nunca o chamou de filho",
+        "Lyra Frey": "neta de Walder Frey; esperta, 'Frey... por enquanto'; Gêmeas; procura uma saída",
+        "Merrick Pele-Fina": "homem dos Bolton; descasca maçãs sem comer; sempre perto das mortes; caça a carta",
+        "Sor Hosman": "cavaleiro andante bêbado; brinda aos mortos; estrada das Gêmeas; conhece todos os atalhos",
       },
     },
     plots: [
-      plot("A bolsa do hóspede", "Dois grupos armados pedem a mesma bolsa; Mara quer paz e Ivo paga pelo silêncio."),
-      plot("O lado errado", "Nas Terras Fluviais, quem escolhe lado cedo morre cedo. Tomás vai ter que escolher mesmo assim."),
-      plot("O hóspede escondido", "O dono da bolsa não fugiu para longe. Alguém na estalagem sabe onde ele está."),
+      {
+        title: "A carta do homem esfolado",
+        hook: "Um escudeiro Frey morreu para entregar um aviso de selo Bolton. Quem mais sabe — e quem vai acreditar num bastardo?",
+      },
+      {
+        title: "Um nome para o bastardo",
+        hook: "Edwyn vai casar com uma Frey. Se a carta for verdade, a Casa Ferrovau está do lado errado da mesa — e só Aldric pode salvá-la.",
+      },
+      {
+        title: "Dois dias até as Gêmeas",
+        hook: "O rei, a mãe dele e o exército já estão na estrada. Avisar é trair os Frey; calar é trair o Norte.",
+      },
     ],
+    threat: {
+      name: "Merrick Pele-Fina e o pacto Bolton-Frey",
+      goal: "recuperar a carta e garantir que o rei entre nas Gêmeas sem aviso",
+    },
     gmBrief: {
-      truth:
-        "A bolsa tem cartas que provam que Lorde Harlan Vellen, de uma casa menor das Terras Fluviais, encomendou o envenenamento de um rival num casamento próximo. O hóspede é Aldo, aprendiz de meistre que copiou as cartas e fugiu. Os homens de Vellen querem as cartas destruídas; Sor Bennet serve à família do rival e quer as provas. Ivo foi pago por Vellen. Aldo está escondido no palheiro do estábulo.",
+      truth: "A carta é a cópia, feita pelo escudeiro Arwin Frey, de uma mensagem entre Roose Bolton e Lorde Walder Frey: o casamento será uma armadilha, e os homens do rei serão mortos no salão e nos acampamentos. Arwin, neto bastardo de Walder, descobriu e fugiu para avisar. Merrick Pele-Fina foi mandado por Bolton para calar vazamentos. Edwyn já sabe de algo: Walder prometeu a ele terras do outro lado do rio se a Casa Ferrovau 'ficar longe do salão'. O canon caminha para o massacre; o jogador pode salvar gente ao redor dele, mas cada grande mudança custa caro.",
       clues: [
-        "O lacre das cartas mostra uma garça de asas abertas — o brasão dos Vellen.",
-        "A tinta é de meistre, e as cartas têm correções na margem com letra de aprendiz.",
-        "Um elo de corrente de meistre, de cobre, está caído na palha do estábulo.",
-        "Ivo tem moedas novas demais e uma luva com o mesmo bordado de garça.",
+        "Na sela do cavalo de Arwin há um segundo papel: a lista de quais acampamentos do Norte serão atacados primeiro.",
+        "Os Frey compraram vinho e contrataram músicos muito além do que um casamento pede.",
+        "Edwyn guarda na bota uma carta de Walder Frey com promessa de terras.",
+        "Merrick usa no dedo mindinho um anel que era do escudeiro morto.",
       ],
       escalation: [
-        "Ao entardecer, os homens de Vellen revistam os quartos à força.",
-        "Eles tomam Mara como refém para obrigar alguém a entregar a bolsa.",
-        "Ateiam fogo ao estábulo para tirar o hóspede escondido de lá.",
+        "Merrick e dois homens revistam a estalagem à força e matam o estalajadeiro, que viu demais.",
+        "Edwyn tenta trocar a carta pelo próprio futuro e entrega Aldric a Merrick como 'assassino do escudeiro'.",
+        "O casamento começa nas Gêmeas: as portas do salão se fecham e a música muda.",
       ],
-      twist: "Aldo é o filho que Mara entregou aos meistres anos atrás e nunca mais viu. Ela o reconhece no instante em que ele aparece.",
+      twist: "Sor Willem, o pai, sabia do plano: aceitou manter a casa longe do salão em troca do perdão das dívidas e mandou Aldric para longe, escoltando suprimentos, para que o bastardo não estivesse perto quando tudo acontecesse. Ele quis salvar o filho — e ajudou a vender o rei.",
       agendas: {
-        Mara: "manter a estalagem de pé; vai virar outra pessoa se descobrir quem é Aldo",
-        Ivo: "dinheiro e sobreviver aos dois lados",
-        "Sor Bennet": "justiça para o senhor dele, sem ver os inocentes no caminho",
+        Edwyn: "garantir terras e um casamento; tem inveja de Aldric e vergonha disso",
+        "Sor Willem": "salvar a casa e o bastardo que ama, sem admitir que ama",
+        "Lyra Frey": "sair das Gêmeas antes do massacre; troca informação por fuga",
+        "Merrick Pele-Fina": "recuperar a carta e matar quem a leu",
+        "Sor Hosman": "uma última causa que valha a pena; morreria por ela se fosse convencido",
       },
     },
-    specialAbility: power(
-      "Ouvido de Taverna",
-      "Em lugares barulhentos você isola uma conversa a poucos metros — nomes, números, medo — como se o resto fosse água.",
-      "Exige concentração e linha de visão parcial. Em combate ou música alta demais falha. Não funciona no campo aberto silencioso."
-    ),
+    specialAbility: {
+      enabled: true,
+      name: "Instinto de Batalha",
+      description: "Em combate ou emboscada, você percebe um instante antes de onde vem o golpe mais perigoso — um ombro que gira, um arqueiro no alto, uma porta prestes a abrir.",
+      limits: "Uma vez por cena. Não funciona contra o que você não pode ver ou ouvir. Cansa como uma corrida: usar duas vezes seguidas deixa você lento.",
+      secret: true,
+    },
   }),
   base({
     id: "bleach",
@@ -526,18 +587,20 @@ export const ADVENTURE_PRESETS = [
       "Quieto, teimoso, humor negro. Protege pacientes como se fossem família. Quando mente, conta azulejos. Segredo: já ajudou um espírito a 'passar' sem testemunha e não sabe se fez o certo.",
     charSkills: "Primeiros socorros, corrida em corredor, discrição, leitura de medo em rostos. Sem zanpakutō.",
     supportingCast:
-      "Enfermeira Rika — pragmática, fuma no terraço, desconfia de Sora, passa horas no quarto 312; tique: aperta o crachá. Kenta — espírito de menino; voz fina, só aparece pela metade, pede silêncio e tem medo de 'os de uniforme preto'. Arata Kuze — shinigami de turno; educado demais, sempre com pressa, carrega uma caixa laqueada que não abre na frente de ninguém.",
+      "Enfermeira Rika — pragmática, fuma no terraço, desconfia de Sora, passa horas no quarto 312; tique: aperta o crachá. Kenta — espírito de menino; voz fina, só aparece pela metade, pede silêncio e tem medo de 'os de uniforme preto'. Arata Kuze — shinigami de turno; educado demais, sempre com pressa, carrega uma caixa laqueada que não abre na frente de ninguém. Dr. Hayato Kuroi — médico plantonista; brilhante, insone, rabisca diagramas de energia nos prontuários e sente coisas que não deveria; tique: bate o dedo na têmpora contando. Sra. Noriko — mãe de Kenta; dorme na cadeira do quarto 312 há três meses, doce e exausta, conversa com o filho em coma toda noite; tique: dobra e desdobra o mesmo grou de papel.",
     storyStartPoint:
-      `O corredor do Hospital Karakura Leste cheira a antisséptico frio. A luz pisca. Um bip de monitor some no meio, como se alguém tivesse engolido o som. Rika: "Hane. Se estiver vendo coisa de novo, não mistura paciente." A voz fina, à sua esquerda, sem corpo inteiro: "Não chama eles. Se chamar, eu sumo errado."`,
+      "Duas da manhã no Hospital Karakura Leste, corredor 3. A luz fria pisca, e o bip de um monitor some no meio, como se alguém tivesse engolido o som. Você para com o esfregão na mão: no fim do corredor, um menino de pijama de hospital está pela metade — da cintura para baixo, só uma corrente presa ao peito, arrastando no chão. Rika passa apressada com uma prancheta: \"Hane. Se estiver vendo coisa de novo, não mistura com paciente.\" A voz fina, agora à sua esquerda: \"Não chama eles. Se chamar, eu sumo errado.\" Pela janela, no telhado do prédio em frente, um homem de quimono negro abre uma caixa laqueada e olha direto para o quarto 312.",
     narration: { style: "dark", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Uniforme de faxina, fones no pescoço, mãos rachadas de álcool.",
-    relationships: { Rika: "Neutral", Kenta: "Amigável", "Arata Kuze": "Suspeito" },
+    relationships: { Rika: "Neutral", Kenta: "Amigável", "Arata Kuze": "Suspeito", "Dr. Hayato Kuroi": "Neutral", "Sra. Noriko": "Amigável" },
     worldState: {
       location: "Hospital Karakura Leste, corredor 3",
       npcs: {
         Rika: "enfermeira; pragmática, aperta crachá, vive no quarto 312; desconfia de Sora",
         Kenta: "espírito de menino; voz fina, aparece pela metade; corredor 3; medo de shinigamis",
         "Arata Kuze": "shinigami; educado e apressado, caixa laqueada; ronda o hospital",
+        "Dr. Hayato Kuroi": "médico plantonista; insone, rabisca diagramas; ala de coma; sente presenças",
+        "Sra. Noriko": "mãe de Kenta; exausta, dobra o mesmo grou; quarto 312; não sai do lado do filho",
       },
     },
     plots: [
@@ -545,6 +608,7 @@ export const ADVENTURE_PRESETS = [
       plot("O espírito que Sora ajudou", "Sora já fez um espírito 'passar' antes. Agora alguém sabe — e quer saber como."),
       plot("O quarto 312", "Rika passa as noites num quarto que não é da ala dela. O monitor de lá falha junto com a voz de Kenta."),
     ],
+    threat: { name: "Arata Kuze", goal: "cortar a corrente de Kenta e vender o espírito antes que alguém perceba que o corpo ainda vive" },
     gmBrief: {
       truth:
         "Kenta não está morto: o corpo dele está em coma no quarto 312, e a corrente do destino ainda está presa. Uma larva de Hollow se instalou nas paredes do hospital e se alimenta das correntes de espíritos fracos, que é o que engole os sons. Arata Kuze é um shinigami corrupto que vende espíritos raros a um pesquisador clandestino: ele quer 'purificar' Kenta cortando a corrente, o que mataria o corpo.",
@@ -564,6 +628,8 @@ export const ADVENTURE_PRESETS = [
         Rika: "que o filho acorde; não aguenta mais esperança nem notícia ruim",
         Kenta: "voltar para o corpo e para a mãe",
         "Arata Kuze": "levar Kenta e a larva para o comprador sem testemunhas",
+        "Dr. Hayato Kuroi": "provar que não está louco; é o pesquisador para quem Arata vende espíritos — e não sabe que eles são gente",
+        "Sra. Noriko": "que o filho acorde; assinaria qualquer coisa que um médico prometesse",
       },
     },
     specialAbility: power(
@@ -575,36 +641,39 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "jujutsu",
     world: "Jujutsu Kaisen",
-    charName: "Hana Mori",
-    charTitle: "Estagiária de arquivo da Prefeitura Espiritual Secundária",
+    charName: "Haru Mori",
+    charTitle: "Estagiário de arquivo da Prefeitura Espiritual Secundária",
     charAge: "20",
     genre: "Maldição urbana",
     hook: "Um dossiê marcado como arquivado ainda pulsa, e a maldição dentro dele sabe o seu nome. Ela só quer que você termine de ler.",
     charBg:
-      "Civil contratada para digitalizar relatórios. Sem escola de feiticeiros. Aprendeu a não olhar demais para manchas nas paredes. Quer promoção e também quer sair viva. O pai morreu num desabamento quando ela tinha doze anos.",
+      "Civil contratado para digitalizar relatórios. Sem escola de feiticeiros. Aprendeu a não olhar demais para manchas nas paredes. Quer a efetivação e também quer sair vivo. O pai morreu num desabamento de prédio quando ele tinha doze anos; a mãe nunca mais passou naquela rua. Faz o turno da noite porque paga mais.",
     charPersonality:
-      "Meticulosa, ansiosa, corajosa em picos curtos. Faz listas para não pirar. Quando mente, bebe água. Segredo: abriu um dossiê selado por curiosidade e agora a maldição 'responde'.",
+      "Meticuloso, ansioso, corajoso em picos curtos. Faz listas para não pirar. Quando mente, bebe água. Tem um senso de justiça que o faz falar com o supervisor quando devia ficar quieto. Segredo: abriu um dossiê selado por curiosidade e agora a maldição 'responde'.",
     charSkills: "Arquivo, pesquisa, corrida urbana, discrição. Sem técnica inata formal.",
     supportingCast:
-      "Supervisor Ken — frio, correto, esconde pânico sob protocolo; quer o dossiê fechado; tique: alinha canetas quando está com medo. Maldição do Arquivo — voz de papel amassado; chama Hana pelo nome; farfalha sem vento. Daichi Moro — feiticeiro investigador de segundo grau; simpático, cansado, come doce o tempo todo; foi mandado para 'resolver sem barulho'.",
+      "Supervisor Ken — frio, correto, esconde pânico sob protocolo; quer o dossiê fechado; tique: alinha canetas quando está com medo. Maldição do Arquivo — voz de papel amassado; chama Haru pelo nome; farfalha sem vento. Daichi Moro — feiticeiro investigador de segundo grau; simpático, cansado, come doce o tempo todo; foi mandado para 'resolver sem barulho'. Kazuo Endō — zelador do prédio há trinta anos; varre em silêncio e deixa sal grosso nos cantos, viu o dossiê ser escondido e nunca contou; tique: assobia música antiga quando a lâmpada pisca. Diretor Fujita — chefe da Prefeitura; voz de reunião, sorriso de foto oficial, assinou a liberação junto com Ken há oito anos; tique: ajeita o broche da Prefeitura.",
     storyStartPoint:
-      `No porão da Prefeitura Espiritual Secundária, o arquivo cheira a poeira e ozônio. O dossiê marcado ARQUIVADO pulsa na mão como um coração de papel. Na primeira linha, um endereço que você conhece. Ken: "Mori. Isso não existe no sistema. Fecha e esquece." O farfalhar, sem boca: "Hana. Você já leu a primeira linha. Termina."`,
+      "Três da manhã no porão da Prefeitura Espiritual Secundária. A lâmpada do corredor C pisca no ritmo de uma respiração que não é a sua. O dossiê carimbado ARQUIVADO está aberto na sua mesa, embora você tenha certeza de que o deixou fechado, e a primeira linha mostra um endereço que você sabe de cor: o prédio onde seu pai morreu. As páginas viram sozinhas até uma lista de nomes. Ken aparece na porta, gravata frouxa, uma caneta em cada mão: \"Mori. Isso não existe no sistema. Fecha e esquece que viu.\" O papel farfalha sem vento, e a voz vem de dentro dele, amassada: \"Haru. Você já leu a primeira linha. Lê o resto em voz alta.\" No celular, chega uma mensagem de um número desconhecido: \"Não deixa ele levar o arquivo. — D.\"",
     narration: { style: "dark", length: "balanced", pace: "fast" },
-    charAppearanceNote: "Crachá torto, adesivos no notebook, olheiras de turno.",
-    relationships: { Ken: "Neutral", "Daichi Moro": "Neutral" },
+    charAppearanceNote: "Crachá torto, adesivos no notebook, olheiras de turno, tênis gastos de tanto subir escada.",
+    relationships: { Ken: "Neutral", "Daichi Moro": "Neutral", "Kazuo Endō": "Amigável", "Diretor Fujita": "Suspeito" },
     worldState: {
       location: "Arquivo subterrâneo da Prefeitura Espiritual Secundária",
       npcs: {
         Ken: "supervisor; frio, protocolo, alinha canetas; arquivo; quer fechar o dossiê",
-        "Maldição do Arquivo": "maldição; voz de papel amassado, farfalha sem vento; dentro do dossiê; chama Hana",
+        "Maldição do Arquivo": "maldição; voz de papel amassado, farfalha sem vento; dentro do dossiê; chama Haru",
         "Daichi Moro": "feiticeiro de segundo grau; simpático, come doce; enviado para resolver em silêncio",
+        "Kazuo Endō": "zelador; deixa sal nos cantos, assobia; porão; viu o dossiê ser escondido",
+        "Diretor Fujita": "diretor da Prefeitura; sorriso oficial, ajeita o broche; último andar; quer o arquivo queimado",
       },
     },
     plots: [
-      plot("Dossiê que pulsa", "Um arquivo 'morto' conhece o nome de Hana, e Ken quer silêncio a qualquer custo."),
-      plot("A primeira linha", "O endereço no dossiê é o do prédio onde o pai de Hana morreu."),
-      plot("Limpeza sem barulho", "Daichi veio exorcizar a maldição — e apagar os registros. Talvez apague Hana junto."),
+      plot("Dossiê que pulsa", "Um arquivo 'morto' conhece o nome de Haru, e Ken quer silêncio a qualquer custo."),
+      plot("A primeira linha", "O endereço no dossiê é o do prédio onde o pai de Haru morreu."),
+      plot("Limpeza sem barulho", "Daichi veio exorcizar a maldição — e apagar os registros. Talvez apague Haru junto."),
     ],
+    threat: { name: "Diretor Fujita e a Prefeitura", goal: "incinerar o dossiê e quem o leu antes que a verdade do desabamento venha à tona" },
     gmBrief: {
       truth:
         "A maldição nasceu do rancor das vítimas de um desabamento de prédio oito anos atrás. A Prefeitura sabia que a estrutura estava condenada, mas Ken, então fiscal júnior, assinou a liberação sob pressão dos superiores. O dossiê é o relatório verdadeiro, escondido. A maldição não quer matar: quer que a verdade seja lida em voz alta por alguém ligado às vítimas. Se for exorcizada sem isso, renasce mais forte.",
@@ -617,13 +686,15 @@ export const ADVENTURE_PRESETS = [
       escalation: [
         "Frases do relatório começam a aparecer escritas nas paredes da Prefeitura.",
         "A maldição possui impressoras e arquivos e ataca Ken diretamente.",
-        "Uma equipe de feiticeiros chega para exorcizar e incinerar o arquivo inteiro, com Hana listada como 'contaminada'.",
+        "Uma equipe de feiticeiros chega para exorcizar e incinerar o arquivo inteiro, com Haru listado como 'contaminado'.",
       ],
-      twist: "O primeiro nome da lista de vítimas é o do pai de Hana. A maldição a chama porque ela é a única ligada às vítimas que trabalha ali.",
+      twist: "O primeiro nome da lista de vítimas é o do pai de Haru. A maldição o chama porque ele é o único ligado às vítimas que trabalha ali.",
       agendas: {
         Ken: "enterrar o passado; a culpa o está comendo vivo",
         "Maldição do Arquivo": "ser ouvida; reage com violência a quem tenta calá-la",
         "Daichi Moro": "cumprir a ordem, mas desconfia dela; pode virar aliado se vir provas",
+        "Kazuo Endō": "proteger o rapaz sem perder o emprego; carrega a culpa de ter ficado calado",
+        "Diretor Fujita": "apagar o dossiê e quem o leu; Ken é só o primeiro a ser sacrificado",
       },
     },
     specialAbility: power(
@@ -647,18 +718,20 @@ export const ADVENTURE_PRESETS = [
       "Teimoso, sarcástico, leal a quem divide o pão. Congela quando ouve trombetas. Quando mente, aperta a fivela do cinto. Segredo: já viu uma rachadura 'respirar' e não contou.",
     charSkills: "Cordas, andaime, leitura de rachaduras, corrida em telhado. Sem equipamento de manobra.",
     supportingCast:
-      "Sargento Vale — disciplina seca, esconde medo com ordens; quer o relatório limpo. Mira — vendedora do mercado; oferece moedas pelo silêncio; tique: olha sempre para o alto da muralha. Gus — garoto do orfanato onde Piet cresceu; magro, rápido, mãos sujas de terra; jura que só trabalha 'carregando saco'.",
+      "Sargento Vale — disciplina seca, esconde medo com ordens; quer o relatório limpo. Mira — vendedora do mercado; oferece moedas pelo silêncio; tique: olha sempre para o alto da muralha. Gus — garoto do orfanato onde Piet cresceu; magro, rápido, mãos sujas de terra; jura que só trabalha 'carregando saco'. Cabo Lene Hartmann — colega de turno da Guarnição; ri alto, dorme pouco, sonha com a Tropa de Exploração; tique: bate na lâmina da cintura antes de decidir. Albrecht Kessler — mercador de grãos do distrito interno; perfumado, cordial, lucra com a fome do externo e paga a propina de Vale; tique: chama criança de 'investimento'.",
     storyStartPoint:
-      `No andaime da muralha interna de Trost, o vento corta o rosto. Seus dedos acham uma rachadura nova — úmida, fria, fora do relatório. Encostando o ouvido, você escuta pás raspando pedra do outro lado. Vale, no patamar: "Orso. Se não está no papel, não existe. Desce." Mira, lá embaixo, ergue um saquinho: "Você não viu nada. Tem gente que paga melhor que a guarnição."`,
+      "Fim de turno no andaime da muralha interna de Trost. O vento corta o rosto e as cordas rangem a cada rajada. Seus dedos acham uma rachadura nova na pedra — úmida, fria, fora de qualquer relatório — e, quando você encosta o ouvido, escuta pás raspando do outro lado. Pás pequenas. Mãos pequenas. Sargento Vale, no patamar de cima: \"Orso. Se não está no papel, não existe. Desce.\" Lá embaixo, no mercado, Mira levanta um saquinho de moedas para você ver: \"Você não viu nada. Tem gente que paga melhor que a Guarnição.\" Atrás dela, um mercador perfumado do distrito interno observa a cena da porta de uma carruagem, como quem confere um investimento.",
     narration: { style: "cinematic", length: "balanced", pace: "fast" },
     charAppearanceNote: "Cinto de manutenção remendado, joelheiras, pó de pedra no cabelo.",
-    relationships: { "Sargento Vale": "Neutral", Mira: "Suspeito", Gus: "Amigável" },
+    relationships: { "Sargento Vale": "Neutral", Mira: "Suspeito", Gus: "Amigável", "Cabo Lene Hartmann": "Amigável", "Albrecht Kessler": "Hostil" },
     worldState: {
       location: "Andaime da muralha interna, Trost",
       npcs: {
         "Sargento Vale": "sargento; ordens secas; patamar; quer relatório limpo",
         Mira: "vendedora; olha para o alto da muralha; mercado; oferece silêncio pago",
         Gus: "órfão; magro, mãos sujas de terra; distrito externo; diz que só carrega sacos",
+        "Cabo Lene Hartmann": "cabo da Guarnição; ri alto, bate na lâmina; turno da muralha; quer entrar na Exploração",
+        "Albrecht Kessler": "mercador de grãos; perfumado, lucra com a fome; distrito interno; financia a propina de Vale",
       },
     },
     plots: [
@@ -666,6 +739,7 @@ export const ADVENTURE_PRESETS = [
       plot("O túnel", "Alguém está cavando dentro da muralha. Piet precisa decidir se denuncia — e quem cai junto."),
       plot("Os órfãos do distrito", "Gus e outras crianças do orfanato aparecem com terra nas unhas e comida que não podiam pagar."),
     ],
+    threat: { name: "Mercador Albrecht Kessler", goal: "lacrar o túnel com os órfãos dentro e manter alto o preço do grão" },
     gmBrief: {
       truth:
         "Mira lidera um grupo que cava um túnel através da base da muralha interna para contrabandear grãos do distrito interno, rico, para o externo, onde crianças passam fome. Vale recebe propina para não registrar a rachadura. Os cavadores são órfãos, incluindo Gus, pagos em comida. O túnel está enfraquecendo a fundação, e um desabamento parcial pode matar todos lá dentro e abrir uma brecha na muralha interna.",
@@ -685,6 +759,8 @@ export const ADVENTURE_PRESETS = [
         "Sargento Vale": "não perder o posto; tem família para sustentar",
         Mira: "alimentar e salvar as crianças, nem que precise subornar a guarnição inteira",
         Gus: "comer e proteger os menores; admira Piet e esconde isso",
+        "Cabo Lene Hartmann": "subir na carreira; se souber do túnel, terá de escolher entre o regulamento e as crianças",
+        "Albrecht Kessler": "manter o preço do grão alto; quer o túnel fechado — com os órfãos dentro, se preciso",
       },
     },
     specialAbility: power(
@@ -708,18 +784,20 @@ export const ADVENTURE_PRESETS = [
       "Educado, teimoso, faminto de lareira segura. Conta piadas ruins quando nervoso. Segredo: abriu uma carta uma vez e o conteúdo ainda o persegue.",
     charSkills: "Caminhos do Condado, discrição, barganha, corrida entre sebes. Sem magia.",
     supportingCast:
-      "Tia Nessa — quer que Bram devolva a carta e fique; voz doce, medo real; reconhece aquela cera e não diz de onde. Estranho do manto cinza — paga o dobro para a carta seguir para o oeste; fala pouco; tique: não deixa a luz cair no rosto. Talan — andarilho do norte, um dos Guardiões; botas gastas, fuma cachimbo comprido, aparece nas sebes sem fazer barulho.",
+      "Tia Nessa — quer que Bram devolva a carta e fique; voz doce, medo real; reconhece aquela cera e não diz de onde. Estranho do manto cinza — paga o dobro para a carta seguir para o oeste; fala pouco; tique: não deixa a luz cair no rosto. Talan — andarilho do norte, um dos Guardiões; botas gastas, fuma cachimbo comprido, aparece nas sebes sem fazer barulho. Odo Pé-de-Feno — hobbit próspero, dono de três silos; generoso em público, apertado nas contas, sabe que o nome dele está na lista; tique: puxa o colete quando mente. Rosinha Covas — prima de Bram e carteira do Condado oriental; rápida, curiosa, reconhece remetente pelo cheiro do envelope; tique: morde o lápis antes de dizer algo esperto.",
     storyStartPoint:
-      `Na bifurcação do caminho do Salgueiro Velho, a carta queima leve no bolso interno — cera cor de ferrugem, com uma mão branca carimbada, que não é do correio. Nessa segura seu braço. O estranho do manto espera no entroncamento, de costas para o sol. Nessa: "Devolve isso, Bram. Cartas assim comem lareiras." O estranho: "Oeste. Antes do anoitecer. Pago o dobro — e o silêncio."`,
+      "Fim de tarde na bifurcação do caminho do Salgueiro Velho. A carta pesa no bolso interno do colete mais do que papel devia pesar — lacre de cera escura, com uma mão branca carimbada que não é do correio do Condado. Tia Nessa segura o seu braço com os dedos frios. No entroncamento, o estranho do manto espera de costas para o sol, o rosto na sombra do capuz; o cavalo dele está cansado demais para quem diz que veio devagar. Nessa: \"Devolve isso, Bram. Cartas assim comem lareiras.\" O estranho, sem se virar: \"Oeste. Antes do anoitecer. Pago o dobro — e o silêncio.\" Atrás da cerca viva, alguém acende um cachimbo comprido, e a fumaça sobe torta, como um sinal.",
     narration: { style: "literary", length: "balanced", pace: "slow" },
     charAppearanceNote: "Colete remendado, pés duros de estrada, carta no forro.",
-    relationships: { "Tia Nessa": "Amigável", "Estranho do manto": "Suspeito", Talan: "Neutral" },
+    relationships: { "Tia Nessa": "Amigável", "Estranho do manto": "Suspeito", Talan: "Neutral", "Odo Pé-de-Feno": "Neutral", "Rosinha Covas": "Amigável" },
     worldState: {
       location: "Bifurcação do Salgueiro Velho, Condado oriental",
       npcs: {
         "Tia Nessa": "tia; voz doce, medo; caminho; quer devolver a carta, reconhece a cera",
         "Estranho do manto": "viajante; fala pouco, esconde o rosto; entroncamento; paga pelo oeste",
         Talan: "Guardião do norte; botas gastas, cachimbo comprido; sebes; observa sem ser visto",
+        "Odo Pé-de-Feno": "hobbit dono de silos; generoso em público, puxa o colete; Beirágua; está na lista dos vendedores",
+        "Rosinha Covas": "prima e carteira; rápida, morde o lápis; correio do Condado oriental; viu a carta antes",
       },
     },
     plots: [
@@ -727,6 +805,7 @@ export const ADVENTURE_PRESETS = [
       plot("A carta que Bram abriu", "O que Bram leu anos atrás tem a ver com esta carta. A culpa volta com nome e endereço."),
       plot("Erva-de-fumo e ouro", "Estranhos compram plantações no Condado oriental a preço alto demais. O tio Odo está pensando em vender."),
     ],
+    threat: { name: "Os agentes de Isengard", goal: "comprar o Condado oriental aos poucos, em silêncio, usando a lista de fraquezas de cada família" },
     gmBrief: {
       truth:
         "A carta traz o selo de agentes de Isengard. É uma lista de hobbits do Condado oriental dispostos a vender terras e erva-de-fumo, com valores e fraquezas de cada um. O estranho é um homem da Terra Parda a serviço desses agentes, que compram o Condado aos poucos, em silêncio. O marido falecido de Nessa negociou com homens assim e morreu endividado. Talan, um Guardião, rastreia os compradores.",
@@ -746,6 +825,8 @@ export const ADVENTURE_PRESETS = [
         "Tia Nessa": "que Bram não repita o destino do marido",
         "Estranho do manto": "garantir a entrega e descobrir quem mais leu a carta",
         Talan: "cortar a rede de compradores antes que se espalhe; testa o caráter de Bram antes de confiar",
+        "Odo Pé-de-Feno": "vender as terras antes que o preço caia e sair do Condado rico; tem vergonha disso",
+        "Rosinha Covas": "ajudar Bram e provar que carteira também vive aventura",
       },
     },
     specialAbility: power(
@@ -757,36 +838,39 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "avatar",
     world: "Avatar: A Lenda de Aang",
-    charName: "Kiri de Yu Dao",
+    charName: "Kiro de Yu Dao",
     charTitle: "Aprendiz de forja mista na fronteira",
     charAge: "17",
     genre: "Nação e identidade",
     hook: "Uma emissária encomenda uma lâmina 'só para defesa' com um símbolo que a cidade jurou esquecer. Forjar é escolher um lado da rua.",
     charBg:
-      "Filha de mãe da Nação do Fogo e pai do Reino da Terra, cresceu em Yu Dao ouvindo que misturar era problema. Trabalha metal na forja e não muda de opinião fácil. O fogo dela é pequeno e teimoso — nada de dobradora poderosa.",
+      "Filho de mãe da Nação do Fogo e pai do Reino da Terra, cresceu em Yu Dao ouvindo que misturar era problema. Trabalha metal na forja de Mestre Han desde os doze anos e não muda de opinião fácil. O fogo dele é pequeno e teimoso — nada de dobrador poderoso; serve para acender a forja e, uma vez, serviu para uma briga que ele preferia esquecer.",
     charPersonality:
-      "Orgulhosa, justa, explosiva sob insulto. Protege aprendizes mais novos. Quando mente, bebe chá frio. Segredo: já usou fogo numa briga de rua e fingiu que foi tocha.",
+      "Orgulhoso, justo, explosivo sob insulto. Protege os aprendizes mais novos como irmão mais velho. Quando mente, bebe chá frio. Fica calado e preciso quando trabalha, e é aí que dá para ver o melhor dele. Segredo: já usou fogo numa briga de rua e fingiu que foi tocha.",
     charSkills: "Forja, leitura de ligas, briga de oficina, diplomacia ríspida. Dobra de fogo mínima e instável.",
     supportingCast:
-      "Mestre Han — quer a forja neutra; voz cansada, justiça antiga. Lin — emissária; pede a lâmina com o símbolo; sorriso político; tique: alisa a luva esquerda. Tao — aprendiz de doze anos, do Reino da Terra; fala sem parar, idolatra Kiri, some quando há gritos.",
+      "Mestre Han — quer a forja neutra; voz cansada, justiça antiga. Lin — emissária; pede a lâmina com o símbolo; sorriso político; tique: alisa a luva esquerda. Tao — aprendiz de doze anos, do Reino da Terra; fala sem parar, idolatra Kiro, some quando há gritos. Capitão Shen — oficial da guarda da cidade, da Nação do Fogo; disciplinado, justo à sua maneira, procura um motivo para fechar a forja de Han; tique: estala o pescoço antes de dar ordens. Vovó Meilin — dona da casa de chá em frente; da Nação do Fogo, viúva de um homem da Terra, serve chá de jasmim e verdades amargas; tique: bate a colher três vezes na xícara antes de falar sério.",
     storyStartPoint:
-      `Na forja mista de Yu Dao, o metal ainda chia quando Lin desenrola o desenho: uma chama abraçando uma montanha — o símbolo que a cidade jurou esquecer. Tao para de varrer. Han limpa a garganta. Han: "Kiri. Se isso sair daqui, a forja fecha." Lin: "É defesa. Só defesa. Sua mãe entenderia — ou você escolhe o lado errado da rua?"`,
+      "Fim de expediente na forja mista de Yu Dao. O metal ainda chia no balde quando Lin desenrola o desenho em cima da bigorna: uma chama abraçando uma montanha — o símbolo que a cidade jurou esquecer. Tao para de varrer no meio do movimento. Mestre Han limpa a garganta e olha para a porta, onde dois homens de chapéu largo fingem esperar alguém. Han: \"Kiro. Se isso sair daqui, a forja fecha.\" Lin, alisando a luva: \"É defesa. Só defesa. Sua mãe entenderia. Ou você vai escolher o lado errado da rua?\" Do outro lado da rua, alguém acaba de pichar FORA COLONOS na porta da casa de chá.",
     narration: { style: "epic", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Avental de couro, faísca antiga na sobrancelha, pulseira das duas nações.",
-    relationships: { "Mestre Han": "Amigável", Lin: "Suspeito", Tao: "Amigável" },
+    charAppearanceNote: "Avental de couro, faísca antiga na sobrancelha, pulseira das duas nações, antebraços marcados de pequenas fagulhas.",
+    relationships: { "Mestre Han": "Amigável", Lin: "Suspeito", Tao: "Amigável", "Capitão Shen": "Suspeito", "Vovó Meilin": "Amigável" },
     worldState: {
       location: "Forja mista, Yu Dao",
       npcs: {
         "Mestre Han": "mestre; voz cansada; forja; quer neutralidade",
         Lin: "emissária; sorriso político, alisa luva; forja; pede a lâmina com o símbolo",
-        Tao: "aprendiz de doze anos; tagarela, idolatra Kiri; forja; foge de gritos",
+        Tao: "aprendiz de doze anos; tagarela, idolatra Kiro; forja; foge de gritos",
+        "Capitão Shen": "capitão da guarda; disciplinado, estala o pescoço; quartel; procura motivo para fechar a forja",
+        "Vovó Meilin": "dona da casa de chá; viúva mista, bate a colher três vezes; rua da forja; viu o símbolo nascer",
       },
     },
     plots: [
       plot("Símbolo na lâmina", "Forjar é escolher lado; Han quer paz e Lin paga pelo conflito."),
-      plot("Filha de duas nações", "Os dois lados de Yu Dao querem que Kiri escolha um sangue. Ela quer que parem de perguntar."),
-      plot("A briga de rua", "Alguém viu o fogo de Kiri naquela briga e guardou o segredo para usar na hora certa."),
+      plot("Filho de duas nações", "Os dois lados de Yu Dao querem que Kiro escolha um sangue. Ele quer que parem de perguntar."),
+      plot("A briga de rua", "Alguém viu o fogo de Kiro naquela briga e guardou o segredo para usar na hora certa."),
     ],
+    threat: { name: "A facção radical do Reino da Terra", goal: "forjar provas de uma revolta das famílias mistas e expulsar os colonos de Yu Dao" },
     gmBrief: {
       truth:
         "O símbolo da chama abraçando a montanha era de um movimento de famílias mistas que defendia Yu Dao como cidade de todos; ele foi proibido depois de distúrbios. Lin diz representar esse movimento, mas trabalha para uma facção radical do Reino da Terra que quer expulsar os colonos do Fogo. O plano: encomendar lâminas com o símbolo, 'achá-las' num armazém e acusar as famílias mistas de preparar uma revolta. A forja de Han será a prova.",
@@ -801,11 +885,13 @@ export const ADVENTURE_PRESETS = [
         "Cartazes acusando 'os mestiços' aparecem pela cidade; a vitrine da forja é apedrejada.",
         "Guardas invadem o armazém, 'descobrem' as lâminas e prendem Mestre Han.",
       ],
-      twist: "Lin é filha de um casamento misto, como Kiri. Odeia a própria metade do Fogo e quer apagá-la apagando os outros.",
+      twist: "Lin é filha de um casamento misto, como Kiro. Odeia a própria metade do Fogo e quer apagá-la apagando os outros.",
       agendas: {
         "Mestre Han": "manter a forja aberta e os aprendizes seguros; já viu uma cidade queimar",
         Lin: "provocar a expulsão e provar lealdade à facção",
-        Tao: "que Kiri goste dele e que ninguém grite",
+        Tao: "que Kiro goste dele e que ninguém grite",
+        "Capitão Shen": "manter a ordem; não sabe que vai ser usado pela facção como braço armado",
+        "Vovó Meilin": "ver a cidade em paz; guarda a bandeira original do movimento das famílias mistas",
       },
     },
     specialAbility: power(
@@ -828,17 +914,19 @@ export const ADVENTURE_PRESETS = [
       "Protetor, impulsivo, teimoso. Chora depois, nunca na frente. Quando mente, aperta a alça do cesto. Segredo: já viu olhos vermelhos no bosque e correu — e odeia isso.",
     charSkills: "Trilha noturna, carga pesada, faca de utilidade, reconhecimento de cheiros da floresta. Sem respiração formal.",
     supportingCast:
-      "Emi — irmã de oito anos; desaparecida no córrego; Yuto ainda ouve a voz dela na cabeça. Caçador Saburo — oferece ajuda por um preço; cicatriz no pescoço; tique: conta os dentes lascados da espada curta. Avó Tsuru — dona da barraca de chá na beira da trilha; doce, curvada, serve chá de pêssego e sabe o nome de todas as crianças da montanha.",
+      "Emi — irmã de oito anos; desaparecida no córrego; Yuto ainda ouve a voz dela na cabeça. Caçador Saburo — oferece ajuda por um preço; cicatriz no pescoço; tique: conta os dentes lascados da espada curta. Avó Tsuru — dona da barraca de chá na beira da trilha; doce, curvada, serve chá de pêssego e sabe o nome de todas as crianças da montanha. Kenji, o lenhador — pai de outra criança sumida; gigante e calado, carrega o machado como quem carrega um luto; tique: amarra e desamarra no pulso a fita vermelha da filha. Ryūnosuke — jovem caçador de demônios da Organização, de passagem; arrogante e talentoso, quer provar algo a alguém; tique: gira a bainha da espada antes de falar.",
     storyStartPoint:
-      `Na trilha da Montanha da Pinça, o cesto de carvão corta o ombro. O ar está doce demais — pêssego passado e ferro. O córrego onde Emi foi buscar água está quieto demais; o balde dela está virado na margem. Saburo surge do bambu. Saburo: "Menino. Se for demônio, você morre gritando. Eu corto — por um preço." Do córrego vem um barulho: pedra molhada, um passo leve demais para gente cansada.`,
+      "Fim de tarde na trilha da Montanha da Pinça. O cesto de carvão corta o seu ombro e o ar está doce demais — pêssego passado e alguma coisa por baixo que não devia estar ali. O córrego onde Emi foi buscar água está quieto; o balde dela está virado na margem, e a fita do cabelo dela está presa numa pedra, balançando na água. Saburo surge do bambuzal, com a mão no cabo da espada velha: \"Menino. Se for demônio, você morre gritando. Eu corto — por um preço.\" Na curva da trilha, a barraca de chá da Avó Tsuru ainda tem a lanterna acesa, e uma xícara fumega no balcão esperando alguém. Do córrego vem um passo leve demais para gente cansada.",
     narration: { style: "dark", length: "balanced", pace: "fast" },
     charAppearanceNote: "Cesto de carvão, faixas nos pulsos, faca curta no cinto.",
-    relationships: { Saburo: "Suspeito", "Avó Tsuru": "Amigável" },
+    relationships: { Saburo: "Suspeito", "Avó Tsuru": "Amigável", "Kenji, o lenhador": "Amigável", "Ryūnosuke": "Neutral" },
     worldState: {
       location: "Trilha da Montanha da Pinça, perto do córrego",
       npcs: {
         Saburo: "caçador; cicatriz, conta dentes da espada; bambu; oferece ajuda paga",
         "Avó Tsuru": "dona da barraca de chá; doce, curvada, chá de pêssego; beira da trilha; conhece as crianças",
+        "Kenji, o lenhador": "lenhador; calado, fita vermelha no pulso; cabana da encosta; filha sumida",
+        "Ryūnosuke": "caçador da Organização; arrogante e talentoso, gira a bainha; posto da estrada; caça um demônio 'de sorriso doce'",
       },
     },
     plots: [
@@ -846,6 +934,7 @@ export const ADVENTURE_PRESETS = [
       plot("Os olhos vermelhos", "Yuto já fugiu de um demônio antes. Desta vez correr significa perder a irmã."),
       plot("O preço de Saburo", "O caçador cobra caro e luta mal. Há algo que ele quer mais que dinheiro nesta montanha."),
     ],
+    threat: { name: "Avó Tsuru", goal: "comer mais uma criança na lua cheia e manter o disfarce de velha da barraca de chá" },
     gmBrief: {
       truth:
         "Emi está viva. A Avó Tsuru é um demônio antigo que se disfarça de velha da barraca de chá: escolhe crianças, guarda-as num santuário abandonado no alto da montanha e as come uma por lua. O cheiro doce é o chá de pêssego que ela usa para cobrir o sangue. Saburo foi caçador de demônios, perdeu a coragem quando esse mesmo demônio matou o parceiro dele, e agora vive de vender proteção falsa.",
@@ -864,6 +953,8 @@ export const ADVENTURE_PRESETS = [
       agendas: {
         "Caçador Saburo": "vingança, sem coragem para buscá-la sozinho",
         "Avó Tsuru": "manter o disfarce; tenta 'acolher' Yuto e oferece chá para ganhar tempo",
+        "Kenji, o lenhador": "achar a filha viva ou morrer tentando; não acredita em demônios — ainda",
+        "Ryūnosuke": "matar o demônio para ganhar reconhecimento; subestima a Avó Tsuru",
       },
     },
     specialAbility: power(
@@ -878,36 +969,39 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "ordem-paranormal",
     world: "Ordem Paranormal",
-    charName: "Bia Torres",
-    charTitle: "Técnica de som da rádio comunitária de Santa Brígida",
+    charName: "Beto Torres",
+    charTitle: "Técnico de som da rádio comunitária de Santa Brígida",
     charAge: "24",
     genre: "Terror investigativo",
     hook: "Toda madrugada, às 3h33, a rádio transmite sozinha a voz de alguém pedindo socorro. Hoje a voz chamou você pelo nome.",
     charBg:
-      "Cresceu em Santa Brígida, cidadezinha do interior onde todo mundo se conhece. Cuida da mesa de som da rádio comunitária e grava podcasts de mistério que ninguém ouve. Não sabe nada de Ordem, rituais nem Outro Lado — só que a cidade tem histórias demais sobre gente que sumiu.",
+      "Cresceu em Santa Brígida, cidadezinha do interior onde todo mundo se conhece. Cuida da mesa de som da rádio comunitária e grava um podcast de mistério que tem onze ouvintes, três deles da família. Não sabe nada de Ordem, rituais nem Outro Lado — só que a cidade tem histórias demais sobre gente que sumiu. Mora com a mãe, que pede toda noite para ele largar esse horário.",
     charPersonality:
-      "Cética de boca, supersticiosa de coração. Faz piada quando está com medo e grava tudo 'para o podcast'. Quando mente, mexe nos fones. Medo: virar mais uma história que a cidade conta baixinho.",
+      "Cético de boca, supersticioso de coração. Faz piada quando está com medo e grava tudo 'para o podcast'. Quando mente, mexe nos fones. É o tipo que conserta o rádio da vizinha de graça e fica para o café. Medo: virar mais uma história que a cidade conta baixinho.",
     charSkills: "Edição de áudio, eletrônica básica, pesquisa em arquivo, conhecer todo mundo da cidade. Sem rituais nem paranormal.",
     supportingCast:
-      "Seu Ademar — dono da rádio; velho, rabugento, coleciona fitas antigas; tranca uma sala que ninguém pode abrir. Padre Lauro — pároco da cidade; gentil demais, sempre por perto quando algo estranho acontece; tique: gira o terço no dedo. Agente Helena Vasconcelos — mulher de terno barato que diz ser 'da prefeitura'; carrega uma maleta de metal e não pisca quando a luz falha.",
+      "Seu Ademar — dono da rádio; velho, rabugento, coleciona fitas antigas; tranca uma sala que ninguém pode abrir. Padre Lauro — pároco da cidade; gentil demais, sempre por perto quando algo estranho acontece; tique: gira o terço no dedo. Agente Helena Vasconcelos — mulher de terno barato que diz ser 'da prefeitura'; carrega uma maleta de metal e não pisca quando a luz falha. Dona Zuleide — dona da pensão em frente à rua das Acácias; benzedeira, fala com os mortos 'por educação', serve café forte e avisos fortes; tique: corre as contas do terço quando ouve um nome antigo. Cabo Valdir — o único policial da cidade; gordo, cansado, finge que não acredita em nada; o tio dele sumiu em 1987; tique: bate a caneta no distintivo.",
     storyStartPoint:
-      `A mesa de som acende sozinha às 3h33. O ponteiro do VU sobe até o vermelho sem nenhuma fonte ligada, e o estúdio fica gelado. Pelos fones, a mesma voz chiada de todas as noites — mas agora ela diz o seu nome, e uma rua da cidade. Seu Ademar, na porta, de pijama: "Desliga isso, menina. Desliga e não grava." A voz, dentro do chiado: "Bia... rua das Acácias, 14. Ele ainda está aqui."`,
+      "3h33 em Santa Brígida. A mesa de som acende sozinha, botão por botão, e o ponteiro do VU sobe até o vermelho sem nenhuma fonte ligada. O estúdio esfria tanto que a janela embaça por dentro. Pelos fones, a voz chiada de todas as madrugadas — só que hoje ela diz o seu nome, devagar, como quem confere se é você mesmo, e depois um endereço. Seu Ademar aparece na porta, de pijama e chinelo, com uma fita cassete apertada contra o peito: \"Desliga isso, menino. Desliga e, pelo amor de Deus, não grava.\" A voz, por baixo do chiado: \"Beto... rua das Acácias, 14. Ele ainda está aqui embaixo.\" Lá fora, o sino da matriz bate uma vez só, fora de hora, e uma luz acende na casa paroquial.",
     narration: { style: "dark", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Fones pendurados no pescoço, jaqueta jeans cheia de bótons, olheiras de madrugada.",
-    relationships: { "Seu Ademar": "Amigável", "Padre Lauro": "Neutral", "Helena Vasconcelos": "Suspeito" },
+    charAppearanceNote: "Fones pendurados no pescoço, jaqueta jeans cheia de bótons, olheiras de madrugada, gravador de bolso sempre ligado.",
+    relationships: { "Seu Ademar": "Amigável", "Padre Lauro": "Neutral", "Helena Vasconcelos": "Suspeito", "Dona Zuleide": "Amigável", "Cabo Valdir": "Neutral" },
     worldState: {
       location: "Estúdio da Rádio Comunitária de Santa Brígida",
       npcs: {
         "Seu Ademar": "dono da rádio; rabugento, coleciona fitas; estúdio; tranca uma sala proibida",
         "Padre Lauro": "pároco; gentil demais, gira o terço; igreja matriz; sempre por perto",
         "Helena Vasconcelos": "agente; terno barato, maleta de metal, diz ser da prefeitura; chegou à cidade",
+        "Dona Zuleide": "dona de pensão e benzedeira; café forte, terço na mão; rua das Acácias; sabe quem morava no 14",
+        "Cabo Valdir": "policial da cidade; cansado, bate caneta no distintivo; delegacia; o tio sumiu em 1987",
       },
     },
     plots: [
-      plot("A voz das 3h33", "Uma transmissão fantasma pede socorro toda madrugada, e agora sabe o nome de Bia e um endereço."),
+      plot("A voz das 3h33", "Uma transmissão fantasma pede socorro toda madrugada, e agora sabe o nome de Beto e um endereço."),
       plot("A sala trancada", "Seu Ademar guarda fitas de 1987 numa sala que ninguém pode abrir. O ano em que três pessoas sumiram."),
       plot("A mulher da maleta", "Uma agente que não é da prefeitura chegou à cidade fazendo perguntas sobre a rádio."),
     ],
+    threat: { name: "A coisa do porão da rua das Acácias", goal: "alargar a fresta para o Outro Lado alimentando-se do medo da cidade" },
     gmBrief: {
       truth:
         "Em 1987, um grupo de moradores fez um ritual de Sangue no porão da casa da rua das Acácias, 14, para trazer de volta um filho morto. O ritual abriu uma fresta para o Outro Lado e prendeu a consciência de um dos participantes, Joel, na frequência da rádio, que na época ficava no mesmo quarteirão. O padre Lauro, então coroinha, participou e jurou silêncio. A criatura que veio pela fresta se alimenta do medo da cidade e vive no porão. Helena é agente da Ordem e veio investigar um aumento de Membrana fina na região.",
@@ -924,9 +1018,11 @@ export const ADVENTURE_PRESETS = [
       ],
       twist: "O filho morto que o ritual tentou trazer de volta era irmão de Seu Ademar. Ele não esconde as fitas por medo, e sim por culpa: foi ele quem organizou o ritual.",
       agendas: {
-        "Seu Ademar": "proteger Bia e enterrar o passado; quer ouvir a voz do irmão outra vez",
+        "Seu Ademar": "proteger Beto e enterrar o passado; quer ouvir a voz do irmão outra vez",
         "Padre Lauro": "manter o segredo; acredita que a fé segura a criatura e está errado",
-        "Helena Vasconcelos": "fechar a fresta; vê Bia como recurso útil e testemunha descartável, até provar o contrário",
+        "Helena Vasconcelos": "fechar a fresta; vê Beto como recurso útil e testemunha descartável, até provar o contrário",
+        "Dona Zuleide": "fechar o que abriram em 1987 — o filho dela foi o menino que tentaram trazer de volta",
+        "Cabo Valdir": "manter a cidade calma; se convencido, vira aliado armado — e apavorado",
       },
     },
     specialAbility: power(
@@ -942,40 +1038,43 @@ export const ADVENTURE_PRESETS = [
       "Um sertão nordestino onde não chove há sete anos. Coronéis controlam açudes, beatos prometem milagres, cangaceiros vagam pela caatinga e os Encantados — espíritos antigos da terra e da água — ainda cobram promessas. Magia é reza, benzedura, pacto e cordel; tem preço e quase nunca é bonita. Tecnologia: rifles, candeeiros, trem a vapor ao longe, rádio de pilha raro."
     ),
     isKnownIP: false,
-    charName: "Cícera do Riacho",
-    charTitle: "Aprendiz de rezadeira e vaqueira na Vila do Riacho Seco",
+    charName: "Cícero do Riacho",
+    charTitle: "Aprendiz de rezador e vaqueiro na Vila do Riacho Seco",
     charAge: "22",
     genre: "Faroeste sertanejo e encantaria",
     hook: "Há sete anos só chove na fazenda do coronel. Esta noite a seca vai cobrar o preço de mais um ano de chuva — e o escolhido é seu irmão.",
     charBg:
-      "Criada pela avó rezadeira, aprendeu a benzer quebranto e a laçar boi brabo antes de saber ler. O irmão mais novo, Damião, é a única família que restou. A vila sobrevive da água que o Coronel Belarmino vende a preço de ouro.",
+      "Criado pela avó rezadeira, aprendeu a benzer quebranto e a laçar boi brabo antes de saber ler. O irmão mais novo, Damião, é a única família que restou. A vila sobrevive da água que o Coronel Belarmino vende a preço de ouro. Na noite em que a avó morreu, ela segurou a mão dele e disse uma frase que ele nunca entendeu: 'quando a água chamar, não tenha medo dela'.",
     charPersonality:
-      "Desconfiada, brava, de humor ácido. Não reza em público, mas nunca sai sem o rosário da avó. Quando mente, coça a cicatriz do laço na mão. Medo: ter herdado da avó só as palavras, e não a força.",
+      "Desconfiado, bravo, de humor ácido. Não reza em público, mas nunca sai sem o rosário da avó. Quando mente, coça a cicatriz do laço na mão. Respeita velho, criança e cachorro — e mais ninguém de graça. Medo: ter herdado da avó só as palavras, e não a força.",
     charSkills: "Benzedura simples, montaria, laço, rastrear na caatinga, conhecer ervas do mato. Sem pacto feito.",
     supportingCast:
-      "Coronel Belarmino Sá — dono do único açude; cordial, perfumado, chama todo mundo de 'meu filho'; tique: torce o anel de ouro do dedo mínimo. Beato Zé Cego — pregador andarilho; cego de um olho, fala por versos de cordel, sabe coisas que não devia. Lampião-de-Prata — cangaceira; chapéu de couro com moedas, riso alto, rifle no ombro; jura que veio 'só cobrar uma dívida' do coronel.",
+      "Coronel Belarmino Sá — dono do único açude; cordial, perfumado, chama todo mundo de 'meu filho'; tique: torce o anel de ouro do dedo mínimo. Beato Zé Cego — pregador andarilho; cego de um olho, fala por versos de cordel, sabe coisas que não devia. Lampião-de-Prata — cangaceira; chapéu de couro com moedas, riso alto, rifle no ombro; jura que veio 'só cobrar uma dívida' do coronel. Mestre Bigode — sanfoneiro e dono do único bar da vila; sabe todas as dívidas e traições, cobra em cachaça, foi vaqueiro do coronel e saiu de lá sem dois dedos; tique: toca três notas tristes quando alguém mente perto dele. Dona Benedita Sá — esposa do coronel; elegante, de missa diária, nunca põe o pé no açude; tique: se abana com leque de renda mesmo à noite.",
     storyStartPoint:
-      `O vento quente levanta poeira vermelha na porta da sua casa de taipa. Na mão, o rosário da avó esquenta como brasa — ele só faz isso quando tem Encantado por perto. Lá fora, os capangas do coronel amarram as mãos de Damião. O céu sobre a fazenda Sá já está escurecendo de nuvem; sobre a vila, nem um fiapo. Coronel Belarmino, do alto do cavalo: "Não se aflija, minha filha. É só uma conversinha com o menino. A chuva precisa de quem a mereça." Damião: "Cícera! Ele disse que eu vou buscar água no açude... à meia-noite!"`,
+      "Fim de tarde na Vila do Riacho Seco. O rosário da avó esquenta no seu pulso como brasa — ele só faz isso quando tem Encantado por perto. Lá fora, os capangas do coronel já amarraram as mãos de Damião e o põem em cima de um jumento como se fosse saco de farinha. Sobre a fazenda Sá, o céu pesa de nuvem escura; sobre a vila, nem um fiapo. As vizinhas fecham as janelas devagar, sem barulho, como quem já viu isso seis vezes. Coronel Belarmino, do alto do cavalo, girando o anel no dedo: \"Não se aflija, meu filho. É só uma conversinha com o menino. A chuva precisa de quem a mereça.\" Damião, se debatendo: \"Cícero! Ele disse que eu vou buscar água no açude... à meia-noite!\" No fim da rua, encostado na cerca, um cego de chapéu de palha começa a cantar baixinho um verso sobre um açude que bebe gente.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
-    charAppearanceNote: "Chapéu de couro gasto, cicatriz de laço na palma direita, rosário de contas de lágrima-de-nossa-senhora no pulso.",
-    relationships: { "Coronel Belarmino": "Hostil", "Beato Zé Cego": "Neutral", "Lampião-de-Prata": "Suspeito", "Damião": "Amigável" },
+    charAppearanceNote: "Chapéu de couro gasto, gibão de vaqueiro, cicatriz de laço na palma direita, rosário de contas de lágrima-de-nossa-senhora no pulso.",
+    relationships: { "Coronel Belarmino": "Hostil", "Beato Zé Cego": "Neutral", "Lampião-de-Prata": "Suspeito", "Damião": "Amigável", "Mestre Bigode": "Amigável", "Dona Benedita Sá": "Neutral" },
     worldState: {
-      location: "Vila do Riacho Seco, porta da casa de Cícera",
+      location: "Vila do Riacho Seco, porta da casa de Cícero",
       npcs: {
         "Coronel Belarmino": "dono do açude; cordial e perfumado, torce o anel; Fazenda Sá; levou Damião",
         "Beato Zé Cego": "pregador; fala em cordel, cego de um olho; estrada da vila; sabe demais",
         "Lampião-de-Prata": "cangaceira; chapéu com moedas, riso alto; caatinga; veio cobrar o coronel",
-        Damião: "irmão de Cícera; 15 anos, teimoso; levado pelos capangas do coronel",
+        Damião: "irmão de Cícero; 15 anos, teimoso; levado pelos capangas do coronel",
+        "Mestre Bigode": "sanfoneiro e dono do bar; cobra em cachaça, faltam dois dedos; bar da vila; foi vaqueiro do coronel",
+        "Dona Benedita Sá": "esposa do coronel; leque de renda, missa diária; casa-grande; nunca vai ao açude",
       },
     },
     plots: [
       plot("Chuva com preço", "Só chove na fazenda do coronel. Todo ano alguém some na noite da primeira chuva — e este ano é Damião."),
-      plot("A herança da rezadeira", "A avó de Cícera fez uma promessa a um Encantado antes de morrer. A promessa ainda não foi paga."),
+      plot("A herança da rezadeira", "A avó de Cícero fez uma promessa a um Encantado antes de morrer. A promessa ainda não foi paga."),
       plot("A dívida da cangaceira", "Lampião-de-Prata quer o coronel morto. Ela pode ser a melhor aliada — ou queimar a vila junto."),
     ],
+    threat: { name: "Coronel Belarmino", goal: "entregar Damião ao açude à meia-noite e garantir mais um ano de chuva só nas terras dele" },
     gmBrief: {
       truth:
-        "Há sete anos, Belarmino fez pacto com a Mãe-d'Água Seca, uma Encantada que morava no rio antes de ele represá-lo. Em troca de chuva só nas terras dele, ela recebe uma vida por ano, entregue no açude à meia-noite da primeira chuva. A Encantada não é má: está presa no açude, morrendo de sede, porque a represa cortou o rio. Se a represa for aberta e o rio voltar a correr, ela fica livre e a chuva volta para todo o sertão. A avó de Cícera sabia disso e prometeu à Encantada que a neta a libertaria.",
+        "Há sete anos, Belarmino fez pacto com a Mãe-d'Água Seca, uma Encantada que morava no rio antes de ele represá-lo. Em troca de chuva só nas terras dele, ela recebe uma vida por ano, entregue no açude à meia-noite da primeira chuva. A Encantada não é má: está presa no açude, morrendo de sede, porque a represa cortou o rio. Se a represa for aberta e o rio voltar a correr, ela fica livre e a chuva volta para todo o sertão. A avó de Cícero sabia disso e prometeu à Encantada que o neto a libertaria.",
       clues: [
         "Os sumidos dos anos anteriores eram todos filhos de famílias que deviam ao coronel.",
         "O beato canta um cordel antigo sobre 'a mãe do rio que bebe gente quando lhe roubam o leito'.",
@@ -983,16 +1082,18 @@ export const ADVENTURE_PRESETS = [
         "O anel de ouro do coronel tem uma escama verde engastada que fica úmida perto da água.",
       ],
       escalation: [
-        "Os capangas cercam a casa de Cícera para impedir que ela chegue ao açude antes da meia-noite.",
+        "Os capangas cercam a casa de Cícero para impedir que ele chegue ao açude antes da meia-noite.",
         "Lampião-de-Prata ataca a fazenda por conta própria e o tiroteio pode matar Damião no fogo cruzado.",
         "À meia-noite, a Encantada sobe do açude para receber a vida prometida.",
       ],
       twist: "Lampião-de-Prata é filha de um dos primeiros sumidos. A 'dívida' que ela cobra é a vida do pai, e ela sabe da Encantada há anos — só não sabe que pode libertá-la.",
       agendas: {
         "Coronel Belarmino": "manter o pacto e o poder; teme a Encantada mais do que qualquer bala",
-        "Beato Zé Cego": "conduzir Cícera até a verdade, mas nunca diz nada diretamente",
+        "Beato Zé Cego": "conduzir Cícero até a verdade, mas nunca diz nada diretamente",
         "Lampião-de-Prata": "vingança; poderia aceitar outra saída se visse o pai vingado",
         Damião: "ser corajoso como a irmã; vai tentar fugir sozinho e piorar tudo",
+        "Mestre Bigode": "vingar os dedos e o filho que entrou no açude há quatro anos; tem medo de dizer isso em voz alta",
+        "Dona Benedita Sá": "salvar a própria filha, prometida em segredo como a vida do ano que vem; trairia o marido pela menina",
       },
     },
     specialAbility: power(
@@ -1008,36 +1109,39 @@ export const ADVENTURE_PRESETS = [
       "Recife em 2099: o mar subiu e engoliu metade da cidade. Bairros antigos viraram canais navegados por barcos-drone; os ricos vivem em torres secas no alto, o resto em palafitas de concreto e neon. Megacorporações de dados e biotecnologia mandam mais que a prefeitura. Implantes neurais são comuns, IA está em tudo, e maracatu ainda toca nas lajes à noite."
     ),
     isKnownIP: false,
-    charName: "Duda Ferraz",
-    charTitle: "Entregadora de barco-drone nos canais da Boa Vista",
+    charName: "Dudu Ferraz",
+    charTitle: "Entregador de barco-drone nos canais da Boa Vista",
     charAge: "23",
     genre: "Cyberpunk tropical",
     hook: "A entrega era só um chip de memória. Mas o chip fala, chora e jura que é a influenciadora mais famosa da cidade — que morreu ontem.",
     charBg:
-      "Nasceu nas palafitas do Coque e pilota barcos-drone desde os treze anos. Tem um implante de navegação barato, pirata, que às vezes dá pau. Sustenta a avó e paga a dívida do implante para um agiota de dados.",
+      "Nasceu nas palafitas do Coque e pilota barcos-drone desde os treze anos. Tem um implante de navegação barato, pirata, que às vezes dá pau no meio do canal. Sustenta a avó, dona Socorro, e paga a dívida do implante para um agiota de dados. Conhece cada atalho entre os prédios afundados como conhece as rugas da avó.",
     charPersonality:
-      "Rápida, debochada, desconfiada de quem mora acima do décimo andar. Generosa com quem é da quebrada. Quando mente, fala mais rápido e com mais gíria. Medo: o implante falhar de vez e ela virar ninguém.",
+      "Rápido, debochado, desconfiado de quem mora acima do décimo andar. Generoso com quem é da quebrada. Quando mente, fala mais rápido e com mais gíria. Canta frevo baixinho quando pilota e briga com o barco como se fosse gente. Medo: o implante falhar de vez e ele virar ninguém.",
     charSkills: "Pilotagem nos canais, conhecer atalhos alagados, consertar drone na gambiarra, negociar no mercado cinza. Hacking só básico.",
     supportingCast:
-      "Lúmen — a voz no chip; diz ser a consciência da influenciadora Lara Lúmen; dramática, engraçada, apavorada, alterna entre diva e criança assustada. Seu Tonho — dono do ponto de entrega no Mercado de São José; velho, maracatuzeiro, conserta tudo e não faz perguntas. Agente Kátia Morais — segurança corporativa da NeuraVida; implante ocular dourado, voz calma, nunca levanta a arma antes de oferecer dinheiro.",
+      "Lúmen — a voz no chip; diz ser a consciência da influenciadora Lara Lúmen; dramática, engraçada, apavorada, alterna entre diva e criança assustada. Seu Tonho — dono do ponto de entrega no Mercado de São José; velho, maracatuzeiro, conserta tudo e não faz perguntas. Agente Kátia Morais — segurança corporativa da NeuraVida; implante ocular dourado, voz calma, nunca levanta a arma antes de oferecer dinheiro. Rafa Nogueira — técnico arrependido da NeuraVida e sobrinho de Seu Tonho; preso num andar de testes, aparece em mensagens criptografadas que chegam cortadas; tique: assina tudo com 'desculpa'. Galego do Pina — agiota de dados que financiou o implante de Dudu; sorriso de dente de ouro, escritório num ferry encalhado; tique: chama todo mundo de 'cliente'.",
     storyStartPoint:
-      `A chuva ácida tamborila no casco do barco-drone enquanto você atravessa o canal da Rua da Aurora, neon rosa refletido na água suja. O chip no bolso do macacão esquenta — e uma voz sai do seu próprio implante, direto no ouvido: "Ei. Ei! Não me entrega pra eles. Eu sou a Lara Lúmen. Eu não morri — eles me tiraram de mim." No painel, chega uma mensagem do contratante: o destino mudou para a torre da NeuraVida. Lá em cima, um drone de segurança começa a seguir seu barco.`,
+      "Chuva ácida no Recife Submerso, 2099. O neon rosa da Rua da Aurora treme na água enquanto você costura o barco-drone entre dois prédios afundados, rápido demais para a lei. O chip no bolso do macacão esquenta — e uma voz sai do seu próprio implante, direto no ouvido, sem pedir licença: \"Ei. Ei! Não me entrega pra eles. Eu sou a Lara Lúmen. Eu não morri — eles me tiraram de mim.\" No painel, o contratante muda o destino para a torre da NeuraVida e dobra o pagamento. Lá em cima, um drone de segurança acende o farol vermelho e começa a descer na sua direção. No grupo da família, chega um áudio da avó: \"Dudu, tem uma moça de olho dourado aqui em casa dizendo que é sua amiga.\"",
     narration: { style: "cinematic", length: "balanced", pace: "fast" },
-    charAppearanceNote: "Macacão impermeável remendado com fita, implante atrás da orelha com LED azul piscando, cabelo raspado dos lados.",
-    relationships: { "Lúmen": "Neutral", "Seu Tonho": "Amigável", "Kátia Morais": "Suspeito" },
+    charAppearanceNote: "Macacão impermeável remendado com fita, implante atrás da orelha com LED azul piscando, cabelo raspado dos lados, fitinhas do Bonfim no pulso.",
+    relationships: { "Lúmen": "Neutral", "Seu Tonho": "Amigável", "Kátia Morais": "Suspeito", "Rafa Nogueira": "Neutral", "Galego do Pina": "Suspeito" },
     worldState: {
       location: "Canal da Rua da Aurora, Recife Submersa",
       npcs: {
-        "Lúmen": "voz no chip; diz ser a influenciadora Lara Lúmen; dramática e apavorada; dentro do implante de Duda",
+        "Lúmen": "voz no chip; diz ser a influenciadora Lara Lúmen; dramática e apavorada; dentro do implante de Dudu",
         "Seu Tonho": "dono do ponto de entrega; velho maracatuzeiro, não faz perguntas; Mercado de São José",
         "Kátia Morais": "segurança da NeuraVida; implante ocular dourado, voz calma; torre da NeuraVida",
+        "Rafa Nogueira": "técnico da NeuraVida; mensagens cortadas, assina 'desculpa'; preso na torre; salvou a cópia de Lúmen",
+        "Galego do Pina": "agiota de dados; dente de ouro, 'cliente'; ferry encalhado no Pina; cobra o implante",
       },
     },
     plots: [
       plot("A garota no chip", "Um chip de memória diz ser a consciência de uma influenciadora morta ontem. A NeuraVida quer ele de volta."),
-      plot("O implante pirata", "O implante de Duda está falhando — e a voz de Lúmen está ocupando cada vez mais espaço nele."),
+      plot("O implante pirata", "O implante de Dudu está falhando — e a voz de Lúmen está ocupando cada vez mais espaço nele."),
       plot("As palafitas do Coque", "A NeuraVida quer comprar o bairro inteiro para uma 'reurbanização'. Os moradores somem antes de assinar."),
     ],
+    threat: { name: "NeuraVida", goal: "recuperar o chip e apagar Lara Lúmen antes que a denúncia vaze" },
     gmBrief: {
       truth:
         "A NeuraVida desenvolve 'Eternos': cópias de consciência de celebridades para vender como assistentes virtuais. Lara Lúmen descobriu que as cópias eram tiradas sem consentimento, dos cérebros de pessoas pobres usadas como teste, e ia denunciar ao vivo. A empresa forjou a morte dela num 'acidente' e extraiu a consciência para apagá-la. Um técnico arrependido, Rafa, salvou a cópia num chip e mandou entregar a Seu Tonho, que é tio dele. Rafa já foi pego.",
@@ -1048,15 +1152,17 @@ export const ADVENTURE_PRESETS = [
         "As pessoas que sumiram das palafitas estão nas listas de 'voluntários de pesquisa' da empresa.",
       ],
       escalation: [
-        "Drones de segurança da NeuraVida varrem os canais da Boa Vista atrás do barco de Duda.",
-        "Kátia visita a avó de Duda com um 'presente' e uma oferta generosa demais.",
-        "A NeuraVida dispara um vírus que frita implantes piratas num raio de três quarteirões, incluindo o de Duda.",
+        "Drones de segurança da NeuraVida varrem os canais da Boa Vista atrás do barco de Dudu.",
+        "Kátia visita a avó de Dudu com um 'presente' e uma oferta generosa demais.",
+        "A NeuraVida dispara um vírus que frita implantes piratas num raio de três quarteirões, incluindo o de Dudu.",
       ],
-      twist: "A própria avó de Duda foi 'voluntária de pesquisa' da NeuraVida dois anos atrás; a pensão que ela recebe é pagamento pelo cérebro dela ter sido copiado. Uma das vozes Eternas à venda tem as memórias da avó.",
+      twist: "A própria avó de Dudu foi 'voluntária de pesquisa' da NeuraVida dois anos atrás; a pensão que ela recebe é pagamento pelo cérebro dela ter sido copiado. Uma das vozes Eternas à venda tem as memórias da avó.",
       agendas: {
         "Lúmen": "voltar a ter um corpo ou, no mínimo, que a verdade seja dita; tem medo de ser apagada",
         "Seu Tonho": "achar o sobrinho Rafa vivo",
         "Kátia Morais": "recuperar o chip sem escândalo; tem dúvidas morais e uma filha doente que depende do plano de saúde da empresa",
+        "Rafa Nogueira": "sair vivo e ver a denúncia de Lúmen no ar; tem provas no próprio implante",
+        "Galego do Pina": "lucrar com o chip: vender Lúmen a quem pagar mais, NeuraVida ou concorrente",
       },
     },
     specialAbility: power(
@@ -1084,18 +1190,20 @@ export const ADVENTURE_PRESETS = [
       "Metódico, calado, irônico com superstições. Anota tudo com hora exata. Quando mente, corrige a postura como militar. Segredo: no naufrágio, ouviu algo cantar debaixo d'água antes do casco romper, e nunca contou a ninguém.",
     charSkills: "Código Morse, mecânica de farol, navegação, primeiros socorros, observação meteorológica. Sem magia.",
     supportingCast:
-      "Dona Ilídia — dona da venda e parteira da ilha; afável, sabe tudo de todos, nunca olha para o mar depois do anoitecer. Padre Anselmo — velho, gago, toca o sino da capela a horas estranhas; tique: conta as badaladas nos dedos. Marta — filha do faroleiro sumido, dezessete anos; aparece no farol sem ser chamada, fala do pai no presente.",
+      "Dona Ilídia — dona da venda e parteira da ilha; afável, sabe tudo de todos, nunca olha para o mar depois do anoitecer. Padre Anselmo — velho, gago, toca o sino da capela a horas estranhas; tique: conta as badaladas nos dedos. Marta — filha do faroleiro sumido, dezessete anos; aparece no farol sem ser chamada, fala do pai no presente. Seu Zacarias — pescador velho, o único que ainda pesca à noite; conta histórias que ninguém pediu e bebe conhaque de manhã; sabe cada noite em que a luz falhou; tique: bate o cajado três vezes antes de entrar em casa. Prefeito Honório Brás — dono da fábrica de conserva e de meia ilha; cordial e suado, organiza a 'Festa do Mar' todo ano; tique: enxuga a testa com lenço bordado.",
     storyStartPoint:
       `O vento salgado empurra a porta do farol contra o seu ombro. Lá em cima, a lâmpada gira devagar, tremendo — o tanque de querosene está quase seco, e o barco de suprimentos não veio. Na parede da escada, em tinta de piche, uma frase com a letra do faroleiro que você substitui: A LUZ NÃO PODE APAGAR. ELES SOBEM QUANDO ESCURECE. Atrás de você, uma voz de menina: Marta: "Meu pai guardava óleo escondido. Mas ele disse pra não ir buscar sozinho." Lá embaixo, o sino da capela começa a tocar fora de hora.`,
     narration: { style: "literary", length: "balanced", pace: "slow" },
     charAppearanceNote: "Casaco de lã da Marinha sem as insígnias, barba por fazer, relógio de bolso parado numa hora exata.",
-    relationships: { "Dona Ilídia": "Neutral", "Padre Anselmo": "Neutral", Marta: "Amigável" },
+    relationships: { "Dona Ilídia": "Neutral", "Padre Anselmo": "Neutral", Marta: "Amigável", "Seu Zacarias": "Amigável", "Prefeito Honório Brás": "Suspeito" },
     worldState: {
       location: "Farol da Ilha Negra, escada principal",
       npcs: {
         "Dona Ilídia": "dona da venda e parteira; afável, nunca olha o mar à noite; vila",
         "Padre Anselmo": "padre; velho, gago, toca o sino fora de hora; capela",
         Marta: "filha do faroleiro sumido; 17 anos, fala do pai no presente; aparece no farol",
+        "Seu Zacarias": "pescador velho; pesca à noite, conta histórias; cais; sabe quando a luz falhou",
+        "Prefeito Honório Brás": "prefeito e dono da conserva; cordial e suado, lenço bordado; prefeitura; organiza a Festa do Mar",
       },
     },
     plots: [
@@ -1103,6 +1211,7 @@ export const ADVENTURE_PRESETS = [
       plot("O canto debaixo d'água", "Inácio ouviu algo cantar no naufrágio. Na ilha, alguém mais ouve a mesma melodia."),
       plot("As regras da vila", "Na Ilha Negra ninguém sai depois do sino, ninguém pesca na lua nova e todo ano uma família 'muda para o continente'."),
     ],
+    threat: { name: "Os afogados do Fundo", goal: "subir na noite em que a luz falhar e levar a família prometida pelo pacto da vila" },
     gmBrief: {
       truth:
         "Sob a ilha dorme algo antigo e imenso, que os moradores chamam de 'o Fundo'. A luz do farol, com uma lente feita de vidro de uma pedra estranha, mantém o Fundo adormecido. Quando a luz apaga, os 'afogados' — moradores levados pelo mar ao longo das gerações, agora meio gente, meio peixe — sobem para levar mais gente. A vila mantém um pacto: todo ano entrega uma família ao mar para que os afogados não subam todos de uma vez. O faroleiro anterior, Bento, tentou acabar com o pacto e desceu às grutas.",
@@ -1122,6 +1231,8 @@ export const ADVENTURE_PRESETS = [
         "Dona Ilídia": "manter o pacto e a vila viva; fará qualquer coisa, inclusive sacrificar o forasteiro",
         "Padre Anselmo": "não aguenta mais o pacto, mas tem medo; o sino é um aviso que ele dá escondido",
         Marta: "trazer o pai de volta; não quer acreditar no que ele virou",
+        "Seu Zacarias": "não ver mais ninguém ser entregue ao mar; a família de 1989 era a dele",
+        "Prefeito Honório Brás": "manter o pacto e a fábrica funcionando; já escolheu a família deste ano — e é a do faroleiro novo",
       },
     },
     specialAbility: power(
@@ -1148,18 +1259,20 @@ export const ADVENTURE_PRESETS = [
       "Inteligente, orgulhoso, sarcástico para esconder insegurança. Leal aos poucos amigos. Quando mente, enrola a manga do uniforme. Medo: perder a bolsa e voltar para casa como 'o menino que quase foi'.",
     charSkills: "Memória fotográfica, feitiços de luz básicos, escrita rúnica, conhecer os atalhos do convento. Sem magia avançada.",
     supportingCast:
-      "Lívia Andrade — colega de quarto e melhor amiga, Casa Aurora; agitada, engraçada, viciada em doce de leite; hoje acordou sem lembrar quem é Théo. Professor Elias Moura — mestre de Memória; gentil, distraído, óculos de lentes de cores diferentes; tique: escreve nas próprias mãos para não esquecer. Caetano Leme — rival da Casa Meia-Noite; rico, elegante, sarcástico; parece saber mais do que diz sobre os esquecimentos.",
+      "Lívia Andrade — colega de quarto e melhor amiga, Casa Aurora; agitada, engraçada, viciada em doce de leite; hoje acordou sem lembrar quem é Théo. Professor Elias Moura — mestre de Memória; gentil, distraído, óculos de lentes de cores diferentes; tique: escreve nas próprias mãos para não esquecer. Caetano Leme — rival da Casa Meia-Noite; rico, elegante, sarcástico; parece saber mais do que diz sobre os esquecimentos. Inspetor Bernardo Quintela — inspetor de disciplina; rígido, de passos silenciosos, aparece em todo corredor proibido; tique: anota em fichas coloridas. Nina Moura — filha do Professor Elias, primeiro ano, Casa Aurora; tímida, desenha a mãe sem rosto; tique: esconde as mãos nas mangas.",
     storyStartPoint:
       `A luz da manhã entra pelos vitrais do dormitório e acerta o seu rosto. Do outro lado do quarto, Lívia está sentada na cama, abraçando os joelhos, olhando para você como se visse um estranho. Na parede dela, as fotos de vocês dois estão em branco, como se alguém tivesse apagado só o seu rosto. Lívia: "Desculpa... a gente se conhece? Por que você tá no meu quarto?" No corredor, a voz arrastada de Caetano: "Mais uma, Vasconcellos? Já é a quinta essa semana. Melhor descobrir antes que seja você."`,
     narration: { style: "light", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Uniforme da Casa Crepúsculo com a gravata sempre torta, mãos com manchas de tinta rúnica, mochila remendada.",
-    relationships: { "Lívia Andrade": "Amigável", "Professor Elias Moura": "Amigável", "Caetano Leme": "Hostil" },
+    relationships: { "Lívia Andrade": "Amigável", "Professor Elias Moura": "Amigável", "Caetano Leme": "Hostil", "Inspetor Bernardo Quintela": "Suspeito", "Nina Moura": "Neutral" },
     worldState: {
       location: "Dormitório da ala leste, Academia Lúmen",
       npcs: {
         "Lívia Andrade": "melhor amiga, Casa Aurora; agitada, viciada em doce de leite; dormitório; perdeu a memória de Théo",
         "Professor Elias Moura": "mestre de Memória; gentil e distraído, escreve nas mãos; sala de Memória",
         "Caetano Leme": "rival, Casa Meia-Noite; rico, sarcástico; corredores; parece saber dos esquecimentos",
+        "Inspetor Bernardo Quintela": "inspetor de disciplina; passos silenciosos, fichas coloridas; corredores; aparece onde não deve",
+        "Nina Moura": "filha do professor Elias; tímida, desenha a mãe sem rosto; Casa Aurora; sente o feitiço",
       },
     },
     plots: [
@@ -1167,6 +1280,7 @@ export const ADVENTURE_PRESETS = [
       plot("A bolsa em risco", "O conselho da escola está revisando as bolsas. Um deslize e Théo volta para casa."),
       plot("O rival que sabe demais", "Caetano Leme ronda as vítimas antes de elas esquecerem. Culpado ou também está investigando?"),
     ],
+    threat: { name: "O feitiço do Professor Elias", goal: "sugar lembranças até a lua cheia para salvar a esposa, levando identidades inteiras de alunos" },
     gmBrief: {
       truth:
         "Na ala proibida do convento existe a Biblioteca das Lembranças, onde memórias são guardadas em livros de luz. O Professor Elias, tentando salvar a esposa que está perdendo a memória por uma doença degenerativa, criou um feitiço que suga lembranças fortes de alunos e as escreve num livro para ela 'beber'. Ele escolhe lembranças felizes. O feitiço está saindo do controle e começou a levar identidades inteiras. As memórias roubadas ainda existem e podem ser devolvidas se o livro for achado antes da lua cheia.",
@@ -1186,6 +1300,8 @@ export const ADVENTURE_PRESETS = [
         "Lívia Andrade": "entender por que esse estranho se importa tanto com ela; aos poucos confia de novo",
         "Professor Elias Moura": "salvar a esposa; odeia o que está fazendo e não consegue parar",
         "Caetano Leme": "descobrir o que aconteceu com a irmã; só vai se aliar se Théo provar que não é cúmplice",
+        "Inspetor Bernardo Quintela": "proteger o professor Elias, que salvou a vida dele há anos; vai encobrir tudo",
+        "Nina Moura": "salvar a mãe e o pai ao mesmo tempo — e não sabe que não dá",
       },
     },
     specialAbility: power(
@@ -1202,25 +1318,27 @@ export const ADVENTURE_PRESETS = [
     charTitle: "Lanceiro convocado de um vilarejo vassalo dos Karstark",
     charAge: "26",
     genre: "Isekai em Westeros",
-    hook: "Você dormiu em São Paulo e acordou numa coluna de lanceiros nortenhos marchando para a guerra. Você sabe como a rebelião termina. Ninguém aqui sabe.",
+    hook: "Você dormiu em São Paulo e acordou com uma faca no pescoço, numa tenda de lanceiros nortenhos marchando para a guerra. Você sabe como a rebelião termina.",
     charBg:
       "Lucas, 34 anos, engenheiro civil de São Paulo, fã dos livros e da série, dormiu no sofá depois do trabalho. Acordou no corpo de Edrick Pedrafria, 26 anos, filho de um cavouqueiro de um vilarejo nas terras dos Karstark, convocado para a marcha de Lorde Eddard Stark ao sul. Edrick tem esposa, Maera, e deve dinheiro a um sargento. Lucas não lembra nada da vida dele — só sente o corpo, as cicatrizes e uma saudade que não é sua.",
     charPersonality:
       "Racional, irônico, acostumado a resolver problemas com planilha e não com lança. Mente mal porque fala português na cabeça. Quando está com medo, calcula distâncias em voz baixa. Medo: morrer de uma infecção boba num mundo sem antibiótico — ou mudar a história e piorar tudo.",
     charSkills: "Conhecimento de engenharia básica, matemática, primeiros socorros modernos (higiene, ferver água), memória dos livros. O corpo de Edrick sabe usar lança, cavar e carregar peso. Sem magia.",
     supportingCast:
-      "Sargento Harwin Machado — veterano dos Karstark; barba grisalha em tranças, cobra dívidas no meio da marcha; tique: bate o cabo do machado na palma antes de ameaçar. Osric Pé-de-Lama — amigo de infância de Edrick; ruivo, falador, percebe que o amigo 'voltou estranho' depois da febre; jura que vai cuidar dele. Velha Nan do Vau — curandeira que segue o exército; cega de um olho, fala com os deuses antigos e olha para você como se visse duas pessoas.",
+      "Sargento Harwin Machado — veterano dos Karstark; barba grisalha em tranças, cobra dívidas no meio da marcha; tique: bate o cabo do machado na palma antes de ameaçar. Osric Pé-de-Lama — amigo de infância de Edrick; ruivo, falador, percebe que o amigo 'voltou estranho' depois da febre; jura que vai cuidar dele. Velha Nan do Vau — curandeira que segue o exército; cega de um olho, fala com os deuses antigos e olha para você como se visse duas pessoas. Ralf Pele-Fina — ferrador da coluna e agente dos Bolton; sorriso fácil, mãos sempre limpas demais; tique: assobia uma cantiga do Forte do Pavor. Torrhen Snow — escudeiro bastardo de 17 anos, sem cavaleiro; quer glória na guerra e idolatra os Stark; tique: treina golpes no ar quando acha que ninguém olha.",
     storyStartPoint:
-      `O frio entra pelos dentes antes de você abrir os olhos. Não é ar-condicionado: é vento de verdade, cheirando a cavalo e fumaça. Você está deitado numa carroça de feno, com uma lança de freixo apoiada no peito e mãos que não são suas — maiores, calejadas, com um anel de casamento de ferro. À volta, centenas de homens marcham sob estandartes com um sol branco em campo negro. Osric, debruçado sobre você: "Edrick! Graças aos deuses antigos, a febre quebrou. Você passou dois dias falando numa língua de demônio." O Sargento Harwin, batendo o machado na palma: "Febre ou não, Pedrafria, você me deve três veados de prata. E vai pagar antes da gente chegar ao Gargalo."`,
+      "Você acorda sem ar. Uma mão pesada tapa a sua boca no escuro da tenda e uma coisa fria encosta na sua garganta. Cheiro de cerveja amarga e lã molhada; lá fora, cavalos inquietos e o estalo de uma fogueira baixa. A voz rouca, colada no seu ouvido: \"Você devia ter morrido da febre, Edrick. Ia poupar todo mundo.\" Sargento Harwin — você sabe o nome sem saber como sabe. As mãos que tentam afastar o braço dele não são as suas: maiores, calejadas, com um anel de ferro no dedo. Então alguém chuta as cordas da tenda do lado de fora: \"Edrick? Ô Edrick, acordou da febre? A Velha Nan mandou caldo!\" É Osric. Harwin congela. A lâmina não sai da sua pele.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Alto e magro de fome, barba castanha rala, cicatriz de pedreira na mão esquerda, anel de casamento de ferro.",
-    relationships: { "Sargento Harwin": "Suspeito", Osric: "Amigável", "Velha Nan do Vau": "Neutral" },
+    relationships: { "Sargento Harwin": "Suspeito", Osric: "Amigável", "Velha Nan do Vau": "Neutral", "Ralf Pele-Fina": "Neutral", "Torrhen Snow": "Amigável" },
     worldState: {
       location: "Coluna de marcha dos Karstark, estrada do rei ao sul de Winterfell",
       npcs: {
         "Sargento Harwin": "sargento dos Karstark; tranças grisalhas, bate o machado na palma; coluna de marcha; cobra dívida de Edrick",
         Osric: "amigo de infância; ruivo e falador; coluna de marcha; acha que Edrick voltou estranho",
         "Velha Nan do Vau": "curandeira do exército; cega de um olho, fala com os deuses antigos; carroças de suprimento",
+        "Ralf Pele-Fina": "ferrador da coluna, agente dos Bolton; mãos limpas demais, assobia; carroças de ferraria; compra os cavalos de Harwin",
+        "Torrhen Snow": "escudeiro bastardo; quer glória, treina golpes no ar; coluna de marcha; idolatra os Stark",
       },
     },
     plots: [
@@ -1228,6 +1346,7 @@ export const ADVENTURE_PRESETS = [
       plot("A vida de Edrick", "O dono deste corpo tinha esposa, dívidas e um segredo. As pessoas cobram de você coisas que você nunca fez."),
       plot("Um homem moderno na guerra", "Ferver água, lavar feridas, cavar latrinas longe do acampamento. Ideias simples podem salvar o exército — e chamar atenção demais."),
     ],
+    threat: { name: "Sargento Harwin e o agente dos Bolton", goal: "calar a testemunha e continuar vendendo os cavalos da marcha a Roose Bolton" },
     gmBrief: {
       truth:
         "Edrick não pegou febre: foi envenenado pelo Sargento Harwin, porque viu Harwin vender cavalos do exército a um agente dos Bolton que espiona a marcha para Roose. Lucas acordou no corpo no instante em que Edrick morreu. A consciência de Edrick não sumiu de todo: aparece em sonhos e em reflexos do corpo. A Velha Nan percebe as duas almas e acha que são os deuses antigos cobrando algo. A guerra segue o canon até o jogador intervir; cada mudança grande abre consequências imprevistas.",
@@ -1247,6 +1366,8 @@ export const ADVENTURE_PRESETS = [
         "Sargento Harwin": "eliminar a testemunha e continuar vendendo cavalos aos Bolton",
         Osric: "proteger o amigo; vai se magoar quando perceber que Edrick 'não está mais lá'",
         "Velha Nan do Vau": "descobrir por que os deuses trouxeram um estrangeiro e usá-lo contra o inverno que vem",
+        "Ralf Pele-Fina": "espionar a marcha para Roose Bolton; eliminar quem desconfiar",
+        "Torrhen Snow": "ganhar a espora de cavaleiro na guerra; vai morrer na primeira batalha se ninguém o segurar",
       },
     },
     specialAbility: power(
@@ -1258,40 +1379,43 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "got-antes-da-conquista",
     world: "Westeros — Crônicas de Gelo e Fogo",
-    worldBg: "Ano 2 antes da Conquista. Harren, o Negro, governa as Terras Fluviais a partir de Harrenhal, recém-terminada com sangue de escravos. Os Sete Reinos ainda são reinos de verdade; Aegon Targaryen e suas irmãs ainda estão em Pedra do Dragão. Aventura original: o jogador é um homem do século XXI no corpo de um ribeirinho comum. Personagens canônicos existem e seguem seus caminhos; a história pode divergir conforme as escolhas dele.",
+    worldBg: "Ano 1 da Conquista. Harren, o Negro, governa as Terras Fluviais a partir de Harrenhal, recém-terminada com sangue de escravos. Os Sete Reinos ainda são reinos de verdade; Aegon Targaryen e suas irmãs desembarcaram com três dragões e marcham sobre as Terras Fluviais. Aventura original: o jogador é um homem do século XXI no corpo de um ribeirinho comum. Personagens canônicos existem e seguem seus caminhos; a história pode divergir conforme as escolhas dele.",
     charName: "Rafael Andrade (no corpo de Garin Junco)",
     charTitle: "Barqueiro do Olho de Deus, à sombra de Harrenhal",
     charAge: "29",
     genre: "Isekai em Westeros",
-    hook: "Você é professor de história e acordou às margens do Olho de Deus, dois anos antes dos dragões chegarem. Harren, o Negro, ainda acha que Harrenhal é eterna.",
+    hook: "Aegon desembarcou. Harren, o Negro, se tranca em Harrenhal e convoca o lago inteiro. Você é professor de história — e sabe que o castelo vai queimar.",
     charBg:
       "Rafael, 31 anos, professor de história em Belo Horizonte, dormiu corrigindo provas sobre feudalismo. Acordou no corpo de Garin Junco, barqueiro que leva pedra, peixe e recados pelo lago Olho de Deus. O irmão de Garin morreu acorrentado na construção de Harrenhal. Garin tem uma filha pequena, Senna, e uma mulher que o olha com desconfiança desde que ele 'acordou diferente'.",
     charPersonality:
       "Curioso, didático, fala demais quando nervoso e explica coisas que ninguém perguntou. Sabe o que é tirania pelos livros e agora a vê de perto. Quando mente, coça a nuca. Medo: ser queimado vivo em Harrenhal junto com o castelo, como ele sabe que vai acontecer.",
     charSkills: "História, leitura e escrita (raro entre plebeus), retórica, noções de higiene e medicina moderna. O corpo de Garin sabe remar, nadar, pescar e ler o lago. Sem magia.",
     supportingCast:
-      "Lessa — esposa de Garin; mãos duras de escamar peixe, reza para a Mãe, desconfia do marido 'possuído'; tique: torce o avental quando sente que ele mente. Sor Quentyn Hoare — cavaleiro de Harren, cobrador de tributos do lago; sorriso educado, crueldade paciente; tique: conta moedas com a ponta da adaga. Willem Lago-Negro — ferreiro da aldeia; enorme, calado, irmão de juramento do irmão morto de Garin; esconde armas debaixo das cinzas da forja.",
+      "Lessa — esposa de Garin; mãos duras de escamar peixe, reza para a Mãe, desconfia do marido 'possuído'; tique: torce o avental quando sente que ele mente. Sor Quentyn Hoare — cavaleiro de Harren, cobrador de tributos do lago; sorriso educado, crueldade paciente; tique: conta moedas com a ponta da adaga. Willem Lago-Negro — ferreiro da aldeia; enorme, calado, irmão de juramento do irmão morto de Garin; esconde armas debaixo das cinzas da forja. Corwen Pedraviva — escudeiro de Sor Quentyn, 16 anos, filho de um senhor ribeirinho mantido como refém por Harren; odeia o mestre e reza pelos dragões; tique: morde o lábio até sangrar. Gaivota — contrabandista dona do barco mais rápido do lago; ri de tudo e não deve nada a ninguém, tira gente do Olho de Deus a preço de ouro; tique: morde a moeda antes de aceitar.",
     storyStartPoint:
-      `A água fria escorre pelo seu pescoço e você engasga: alguém acabou de te jogar um balde na cara. Acima de você, um céu enorme e cinzento; ao lado, um barco de fundo chato carregado de pedra; ao longe, do outro lado do lago, cinco torres negras gigantescas que você só tinha visto em ilustração. Harrenhal. Inteira. Uma mulher de avental molhado: "Garin! Levanta. Você bebeu ou os deuses te tiraram o juízo? O cavaleiro do rei Harren está no cais." No cais, um homem de armadura conta moedas com a ponta da adaga: "Barqueiro. Faltam três barcadas de pedra para a torre nova. O rei não gosta de esperar. Seu irmão também não gostava — e veja onde ele está."`,
+      "Os sinos de alarme tocam em todas as aldeias do Olho de Deus ao mesmo tempo. Você acorda no fundo de um barco carregado de pedra com o rosto encharcado — uma mulher de avental acabou de virar um balde de água em você — e, quando se levanta, vê do outro lado do lago as cinco torres negras de Harrenhal, inteiras, gigantescas, com estandartes pretos subindo em todas. A aldeia inteira olha para o céu do sul, onde alguém jura ter visto uma sombra do tamanho de uma nuvem. Lessa: \"Garin! Você bebeu ou os deuses te tiraram o juízo? A Senna está chorando e o cavaleiro do rei está no cais.\" No cais, um homem de armadura conta moedas com a ponta da adaga: \"Barqueiro. O rei Harren convoca todos os barcos. Pedra, homens e grão para o castelo antes do anoitecer. Quem não vier queima — por ele ou pelo dragão.\"",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Ombros largos de remar, pele queimada de sol, cabelo preto amarrado, cheiro permanente de lago e peixe.",
-    relationships: { Lessa: "Neutral", "Sor Quentyn Hoare": "Hostil", "Willem Lago-Negro": "Amigável" },
+    relationships: { Lessa: "Neutral", "Sor Quentyn Hoare": "Hostil", "Willem Lago-Negro": "Amigável", "Corwen Pedraviva": "Neutral", "Gaivota": "Neutral" },
     worldState: {
       location: "Cais de uma aldeia de pescadores no Olho de Deus, diante de Harrenhal",
       npcs: {
         Lessa: "esposa de Garin; reza para a Mãe, torce o avental; aldeia do lago; desconfia do marido",
         "Sor Quentyn Hoare": "cavaleiro de Harren; educado e cruel, conta moedas com a adaga; cais; cobra pedra e tributo",
         "Willem Lago-Negro": "ferreiro; enorme e calado, irmão de juramento do irmão de Garin; forja; esconde armas",
+        "Corwen Pedraviva": "escudeiro refém de Harren; odeia o mestre, morde o lábio; cais e castelo; reza pelos dragões",
+        "Gaivota": "contrabandista do lago; ri de tudo, morde moedas; enseadas do norte do lago; tira gente do lago por ouro",
       },
     },
     plots: [
-      plot("Dois anos antes dos dragões", "Você sabe que Aegon vai desembarcar e que Harrenhal vai queimar com Harren dentro. A questão é o que fazer até lá."),
+      plot("Semanas antes do fogo", "Aegon desembarcou e Harrenhal vai queimar com Harren dentro. A questão é quem você tira de lá antes do fogo."),
       plot("A família de Garin", "Lessa e a pequena Senna esperam o marido e pai que conheciam. Proteger quem não é sua família — e que não te reconhece."),
       plot("Os senhores do rio", "Ferreiros escondem armas e senhores ribeirinhos trocam recados em barcos. Uma revolta contra Harren está nascendo, e precisa de um barqueiro."),
     ],
+    threat: { name: "Harren, o Negro", goal: "trancar-se em Harrenhal com o lago inteiro como escudo e enforcar todo conspirador antes que Aegon chegue" },
     gmBrief: {
       truth:
-        "Garin era mensageiro secreto dos senhores ribeirinhos que conspiram contra Harren: levava cartas escondidas no fundo falso do barco entre aldeias e castelos menores do lago. Na noite anterior, Sor Quentyn quase o pegou; Garin bateu a cabeça fugindo e morreu — Rafael acordou no corpo. Ainda há uma carta escondida no barco, com nomes de conspiradores. Quentyn desconfia e quer a carta para entregar a Harren. A história segue o canon até o jogador intervir; Aegon só chega daqui a dois anos.",
+        "Garin era mensageiro secreto dos senhores ribeirinhos que conspiram contra Harren: levava cartas escondidas no fundo falso do barco entre aldeias e castelos menores do lago. Na noite anterior, Sor Quentyn quase o pegou; Garin bateu a cabeça fugindo e morreu — Rafael acordou no corpo. Ainda há uma carta escondida no barco, com nomes de conspiradores. Quentyn desconfia e quer a carta para entregar a Harren. A história segue o canon até o jogador intervir; Aegon já desembarcou; em poucas semanas Balerion queimará Harrenhal com Harren dentro.",
       clues: [
         "O barco de Garin tem um fundo falso com uma carta lacrada com uma truta saltando.",
         "Willem chama Garin de 'mensageiro' em voz baixa e espera uma resposta que Rafael não sabe dar.",
@@ -1301,20 +1425,277 @@ export const ADVENTURE_PRESETS = [
       escalation: [
         "Quentyn convoca os barqueiros para levar pedra a Harrenhal e revista cada barco no cais.",
         "Um conspirador é preso e enforcado nas muralhas; a aldeia entra em pânico e alguém aponta para Garin.",
-        "Harren convoca levas para a guerra contra os Tempestades, e Garin é chamado — sair da aldeia significa largar a família e a conspiração.",
+        "Balerion aparece sobre o lago ao entardecer: Harren tranca os portões com reféns da aldeia lá dentro, e Garin precisa decidir quem tira de lá antes do fogo.",
       ],
       twist: "Lessa sabia que o marido era mensageiro e foi ela quem escondeu a carta no fundo falso. Ela não desconfia de um 'possuído': desconfia que Garin vendeu a revolta a Quentyn em troca da vida.",
       agendas: {
         Lessa: "proteger a filha; descobrir se o marido ainda é aliado ou virou traidor",
         "Sor Quentyn Hoare": "achar a carta e ganhar terras de Harren; tem medo do próprio rei",
         "Willem Lago-Negro": "vingar o irmão de juramento e ver Harren cair",
+        "Corwen Pedraviva": "fugir de Harrenhal antes do fogo e levar a irmã refém junto; precisa de um barco",
+        "Gaivota": "lucrar com a fuga de todo mundo; tem um acordo com os Tully que ninguém sabe",
       },
     },
     specialAbility: power(
       "Memória de Outro Mundo",
       "Você lembra da história de Westeros dos livros: a Conquista, quem se alia a Aegon, quem cai e quando. Pode antecipar um grande acontecimento ou dizer o que um senhor vai fazer.",
-      "Você sabe a história dos livros, não a de cada aldeia: detalhes e datas exatas falham. Cada mudança que você faz torna o futuro menos previsível. Falar de dragões antes da hora faz você parecer louco ou bruxo."
+      "Você sabe a história dos livros, não a de cada aldeia: detalhes e datas exatas falham. Cada mudança que você faz torna o futuro menos previsível. Falar do fogo antes da hora faz você parecer louco ou bruxo."
     ),
+  }),
+  base({
+    id: "got-muralha",
+    world: "Westeros — Crônicas de Gelo e Fogo",
+    worldBg: "Ano 299 depois da Conquista. A Patrulha da Noite saiu em grande patrulha além da Muralha. O Povo Livre desce do norte em massa, e corpos que não deviam andar começam a andar. Aventura original: o jogador é um homem de Westeros fora do elenco da obra. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui, mas pode mudar o que acontece ao redor deles — sempre com um preço.",
+    charName: "Wyl Snow",
+    charTitle: "Patrulheiro novato da Patrulha da Noite, além da Muralha",
+    charAge: "19",
+    genre: "Sobrevivência e horror no gelo",
+    hook: "Doze patrulheiros, uma prisioneira selvagem e uma noite que não acaba. Os cães se recusam a andar. Ela diz que os mortos chegam antes do amanhecer.",
+    charBg: "Filho bastardo de um senhor menor das montanhas do Norte. Aos dezessete, matou numa briga o filho de um vassalo do pai, que tinha espancado a mãe dele; a escolha foi a forca ou o negro. Escolheu o negro e fez o juramento diante de uma árvore-coração. Na Muralha, descobriu que tem olho bom para rastro e pouca paciência para ordem burra. Escreve para a mãe todo mês, sabendo que as cartas quase nunca chegam.",
+    charPersonality: "Teimoso, protetor, de raiva lenta e longa. Fala pouco com superiores e muito com cavalos. Tem um senso de justiça que já lhe custou chicotadas. Quando mente, olha para os pés. Medo: que o juramento não signifique nada — que ele tenha largado a vida por uma Muralha que vai cair.",
+    charSkills: "Rastreamento na neve, arco longo, sobrevivência no frio, cuidar de cavalos e cães, faca e machado curto. Sem magia.",
+    supportingCast: "Sor Aldous Brune — primeiro patrulheiro da expedição; cavaleiro do sul, orgulhoso e corajoso, cego para tudo o que não está nos livros; tique: limpa a geada da barba como quem limpa uma ofensa. Velho Garth Três-Dedos — o patrulheiro mais velho da companhia; desdentado e supersticioso, já viu coisas que se recusa a contar; tique: bate três vezes no cabo do machado antes de dormir. Thera — prisioneira do Povo Livre; olhos cinzentos, língua afiada, não pede nada e sabe muito; tique: canta baixinho numa língua antiga quando o vento muda. Pell — recruta de 15 anos, ex-ladrão de Porto Real; fala sem parar e esconde o medo com piada; tique: conta as flechas da aljava em voz alta. Brann — patrulheiro calado que nunca tira o capuz; obediente demais, some nas paradas; tique: afia a mesma faca a cada descanso.",
+    storyStartPoint: "Três dias além da Muralha, no fundo de uma floresta de represeiros. A neve parou de cair há uma hora, e o silêncio que ficou é pior do que o vento. Os cães se deitam na trilha e se recusam a seguir; dois começam a cavar a neve, ganindo. Você está ajoelhado sobre um rastro que não faz sentido — pés descalços, muitos, andando em fila, sem desviar de árvore nenhuma. Atrás de você, a prisioneira ri baixo, com as mãos amarradas no arção da sela. Thera: \"Corvo, você está lendo o rastro dos meus mortos. Eles não param pra dormir. Vocês param.\" Sor Aldous Brune, já montado, impaciente: \"Snow. Ou você acha a trilha dos selvagens em uma hora, ou eu deixo essa mulher para os lobos e voltamos.\" O velho Garth não diz nada: só bate três vezes no cabo do machado, olhando para o norte, onde o céu ficou de um azul que não é de noite nem de dia.",
+    narration: {
+      style: "cinematic",
+      length: "balanced",
+      pace: "balanced",
+    },
+    charAppearanceNote: "Magro e alto, capa negra de lã endurecida de gelo, barba rala, olhos cinzentos do Norte, arco longo de teixo nas costas.",
+    relationships: {
+      "Sor Aldous Brune": "Neutral",
+      "Velho Garth": "Amigável",
+      Thera: "Suspeito",
+      Pell: "Amigável",
+      Brann: "Neutral",
+    },
+    worldState: {
+      location: "Floresta de represeiros, três dias além da Muralha",
+      npcs: {
+        "Sor Aldous Brune": "primeiro patrulheiro; orgulhoso, limpa a geada da barba; à frente da coluna; não acredita em mortos que andam",
+        "Velho Garth": "patrulheiro veterano; supersticioso, bate três vezes no machado; retaguarda; já viu coisas",
+        Thera: "prisioneira do Povo Livre; olhos cinzentos, canta quando o vento muda; amarrada na sela; diz que os mortos vêm",
+        Pell: "recruta de Porto Real; fala sem parar, conta flechas; perto de Wyl; morre de medo",
+        Brann: "patrulheiro de capuz; calado, afia a mesma faca; some nas paradas; obediente demais",
+      },
+    },
+    plots: [
+      {
+        title: "O rastro que não para",
+        hook: "Pés descalços em fila, sem desviar de árvore. Os cães se recusam a seguir. Algo marcha para a Muralha — e não dorme.",
+      },
+      {
+        title: "O juramento",
+        hook: "Wyl fez o juramento para escapar da forca. Agora precisa decidir se ele vale a vida dos irmãos — e a dele.",
+      },
+      {
+        title: "A prisioneira",
+        hook: "Thera sabe mais do que diz. Pode ser a chave para sobreviver à noite ou a isca que traz o Povo Livre sobre a patrulha.",
+      },
+    ],
+    threat: {
+      name: "O Outro e a horda de mortos",
+      goal: "atravessar a floresta dos represeiros até a Muralha, transformando cada vivo no caminho em mais um soldado",
+    },
+    gmBrief: {
+      truth: "Um Outro conduz uma horda de mortos em direção à Muralha pela floresta dos represeiros, e a patrulha está no caminho. Thera é filha de um chefe do Povo Livre que fugia dos mortos; foi capturada ao voltar para buscar o irmão, que agora anda entre eles. Ela sabe que fogo e obsidiana ferem os mortos e o Outro, e conhece uma cova antiga com pontas de obsidiana a meio dia a leste. Brann planeja entregar a patrulha a um bando do Povo Livre em troca de passagem para o sul. Sor Aldous não acredita em nada disso.",
+      clues: [
+        "Os mortos têm olhos azuis que brilham no escuro, e o frio aumenta quando eles se aproximam.",
+        "Thera esconde no cabelo trançado uma ponta de pedra negra que corta como vidro.",
+        "Brann volta das paradas com neve fresca nas botas e cheiro de fumaça do Povo Livre.",
+        "Num represeiro há um rosto esculpido chorando seiva vermelha e, cravadas na casca, pontas de flecha negras muito antigas.",
+      ],
+      escalation: [
+        "Os cães somem durante a noite; ao amanhecer, um deles volta — morto, mas andando.",
+        "Brann foge com os melhores cavalos, e um bando do Povo Livre cerca a patrulha ao entardecer.",
+        "A horda chega com o Outro à frente: a patrulha precisa achar fogo, obsidiana ou um caminho até a Muralha.",
+      ],
+      twist: "O primeiro morto que eles enfrentam de perto é o irmão de Thera — e o Outro que conduz a horda já foi um irmão da Patrulha da Noite: ainda carrega nos ombros os restos de um manto negro.",
+      agendas: {
+        "Sor Aldous Brune": "voltar com prisioneiros e glória; vai aprender tarde demais",
+        "Velho Garth": "não morrer longe do fogo; conhece a cova de obsidiana e tem medo de voltar lá",
+        Thera: "salvar o próprio povo e o que resta do irmão; usaria a patrulha como escudo",
+        Pell: "voltar vivo e virar alguém; se apega a Wyl como irmão mais velho",
+        Brann: "fugir para o sul e nunca mais ver neve; vende quem for preciso",
+      },
+    },
+    specialAbility: {
+      enabled: true,
+      name: "Olho de Patrulheiro",
+      description: "Na neve e na mata, você lê rastro como texto: quantos, há quanto tempo, se estavam feridos ou com medo. Também sente quando o frio muda de um jeito que não é natural.",
+      limits: "Precisa de um mínimo de luz e de tempo para olhar. Não funciona em pedra nem em rio. A sensação do frio estranho vem com uma dor de cabeça forte.",
+      secret: true,
+    },
+  }),
+  base({
+    id: "got-danca-dragoes",
+    world: "Westeros — Crônicas de Gelo e Fogo",
+    worldBg: "Ano 130 depois da Conquista. A Dança dos Dragões. A rainha Rhaenyra tomou Porto Real; o rei Aegon II fugiu. A cidade passa fome, odeia a rainha e escuta um pregador de rua que chama os dragões de demônios. Aventura original: o jogador é um homem de Westeros fora do elenco da obra. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui, mas pode mudar o que acontece ao redor deles — sempre com um preço.",
+    charName: "Cael Pedramar",
+    charTitle: "Guardião de dragões aprendiz no Fosso dos Dragões de Porto Real",
+    charAge: "20",
+    genre: "Dragões, guerra civil e multidão",
+    hook: "A cidade quer matar os dragões esta noite. Você é guardião de um deles — e o único em quem ele confia. Ninguém sabe por quê.",
+    charBg: "Filho de um pescador da Baía da Água Negra e de uma mãe que dizia, baixinho, que a avó viera de Pedra do Dragão. Entrou no Fosso dos Dragões aos doze anos para limpar ossos e carregar carne. Aos dezessete, a dragoa jovem Cinzaluz — que já queimou dois guardiões — deixou que ele tocasse o focinho dela, e desde então não deixa mais ninguém chegar perto. Os guardiões mais velhos o olham com inveja e medo. Sustenta a mãe e a irmã pequena num cortiço da Baixada das Pulgas, onde metade dos vizinhos agora reza para os dragões morrerem.",
+    charPersonality: "Calmo de um jeito que acalma animais e irrita pessoas. Fiel a quem cuida, desconfiado de quem manda. Fala pouco e escuta tudo. Quando mente, esfrega a cicatriz de queimadura no antebraço. Medo: que a multidão tenha razão — que os dragões sejam a ruína da cidade e ele esteja do lado errado.",
+    charSkills: "Lidar com dragões (alimentar, acalmar, ler o humor pelo som e pelas escamas), correntes e ganchos, nadar, becos da Baixada das Pulgas, tratar queimaduras. Não é cavaleiro de dragão — ainda. Sem magia.",
+    supportingCast: "Mestre-guardião Harrold Escama-Velha — chefe dos guardiões do Fosso; velho, com metade do rosto queimada, ama os dragões mais do que qualquer rei; tique: assobia uma nota grave para acalmar dragões e gente. Wat Martelo — braço direito do pregador nas ruas; ferreiro gigante que perdeu a família no fogo de um dragão; tique: bate o martelo no peito antes de falar. Sor Emmon Hale — cavaleiro da rainha encarregado do Fosso; jovem e leal, acha que toda solução é mais aço; tique: ajusta a correia do elmo quando tem medo. Mella — irmã de Cael, 10 anos; sabe todos os segredos da Baixada das Pulgas e foi ouvir o pregador 'só para ver'; tique: chama Cinzaluz de 'nossa'. Gyles — guardião rival; inveja Cael desde o dia em que Cinzaluz o escolheu; tique: conta moedas com o polegar.",
+    storyStartPoint: "Anoitecer em Porto Real, e a cidade inteira está com fome. Do alto da Colina de Rhaenys, os gritos sobem da Baixada das Pulgas como fumaça. Você está dentro do Fosso dos Dragões, com a corrente de Cinzaluz enrolada no antebraço e o calor dela batendo no seu rosto como a porta de um forno aberto. Ela não come há dois dias: desde que a multidão começou a cantar lá fora, recusa carne de qualquer mão — menos da sua. Mestre Harrold aparece no alto da escada, com a metade queimada do rosto vermelha à luz das tochas: \"Cael. Eles estão subindo a colina. Com tochas, machados e o pregador na frente.\" Sor Emmon Hale desce os degraus de dois em dois, já com a espada fora da bainha: \"Ordem da rainha: nenhum dragão sai. Nenhum portão abre.\" E, entre as grades do portão lateral, você vê um rosto pequeno que não devia estar ali — Mella, sua irmã, segurando uma tocha apagada e olhando para você como quem pede desculpa.",
+    narration: {
+      style: "cinematic",
+      length: "balanced",
+      pace: "balanced",
+    },
+    charAppearanceNote: "Magro e forte, cabelo preto encaracolado, olhos de um violeta quase cinza que ele esconde baixando a cabeça, cicatriz de queimadura no antebraço esquerdo, couro de guardião com placas de escama velha.",
+    relationships: {
+      "Mestre Harrold": "Amigável",
+      "Wat Martelo": "Hostil",
+      "Sor Emmon Hale": "Neutral",
+      Mella: "Amigável",
+      Gyles: "Suspeito",
+    },
+    worldState: {
+      location: "Fosso dos Dragões, Colina de Rhaenys, Porto Real",
+      npcs: {
+        "Mestre Harrold": "chefe dos guardiões; meio rosto queimado, assobia para acalmar; Fosso dos Dragões; ama os dragões acima de reis",
+        "Wat Martelo": "ferreiro e líder da multidão; bate o martelo no peito; ruas da Baixada das Pulgas; perdeu a família para um dragão",
+        "Sor Emmon Hale": "cavaleiro da rainha; jovem e leal, ajusta a correia do elmo; portões do Fosso; acha que tudo se resolve com aço",
+        Mella: "irmã de Cael, 10 anos; chama Cinzaluz de 'nossa'; portão lateral; foi ouvir o pregador",
+        Gyles: "guardião rival; conta moedas com o polegar; túneis do Fosso; inveja Cael",
+      },
+    },
+    plots: [
+      {
+        title: "A noite do Fosso",
+        hook: "A multidão sobe a colina para matar os dragões. Proteger Cinzaluz pode significar ferir vizinhos; abrir os portões pode queimar a cidade.",
+      },
+      {
+        title: "O sangue de Cael",
+        hook: "Uma dragoa que queima todos deixa só ele chegar perto. Os olhos dele e a avó de Pedra do Dragão começam a fazer sentido — e a interessar gente perigosa.",
+      },
+      {
+        title: "A irmã na multidão",
+        hook: "Mella foi ouvir o pregador. Agora está do lado de fora do portão, com uma tocha na mão, e não sabe como voltar.",
+      },
+    ],
+    threat: {
+      name: "Wat Martelo e a multidão do pregador",
+      goal: "invadir o Fosso dos Dragões esta noite e matar todos os dragões nas correntes",
+    },
+    gmBrief: {
+      truth: "Cael tem sangue de dragão: a avó da mãe dele era filha bastarda de um Targaryen com uma mulher de Pedra do Dragão — uma 'semente de dragão'. Cinzaluz sente isso e o escolheu como cavaleiro. Gyles fez um acordo com Wat Martelo para abrir o portão lateral à meia-noite em troca de ouro e perdão. A multidão vai invadir o Fosso nesta noite, como na história; os dragões vão lutar e muitos vão morrer. A rainha precisa de novos cavaleiros e mandaria buscar qualquer semente de dragão — mas também desconfia de traidores entre elas.",
+      clues: [
+        "Os olhos de Cael ficam mais violeta à luz do fogo de dragão — e a mãe sempre o mandou baixar a cabeça diante de nobres.",
+        "Gyles tem moedas novas e há uma marca de giz no portão lateral, igual às que a multidão faz nas portas.",
+        "No baú da mãe há um broche antigo com um dragão de três cabeças, quebrado ao meio.",
+        "Cinzaluz responde a uma palavra em alto valiriano que ninguém ensinou a Cael — ele só sonhou com ela.",
+      ],
+      escalation: [
+        "A multidão chega aos portões e começa a forçá-los com troncos; Wat põe Mella na linha de frente.",
+        "Gyles abre o portão lateral: homens com machados entram nos túneis e um dragão velho acorda furioso.",
+        "O Fosso desaba em fogo: a única saída de Cinzaluz é pelo teto, e ela só voa com alguém nas costas.",
+      ],
+      twist: "O broche quebrado prova que Mestre Harrold sabia do sangue de Cael desde o começo: foi ele quem o trouxe ao Fosso aos doze anos, a pedido de alguém da corte que queria uma semente de dragão escondida e leal — para usar numa guerra que ainda nem tinha começado.",
+      agendas: {
+        "Mestre Harrold": "salvar os dragões a qualquer preço; vê Cael como a última esperança deles",
+        "Wat Martelo": "matar os dragões que queimaram a família dele; não quer ferir crianças, mas a multidão não escuta",
+        "Sor Emmon Hale": "cumprir a ordem da rainha; vai morrer no portão se ninguém lhe der outra saída",
+        Mella: "voltar para o irmão sem que a multidão a veja como traidora",
+        Gyles: "sair vivo e rico; abre o portão à meia-noite",
+      },
+    },
+    specialAbility: {
+      enabled: true,
+      name: "Laço de Dragão",
+      description: "Você sente o humor de Cinzaluz como se fosse o seu: fome, raiva, medo. Em perigo, consegue acalmá-la ou chamá-la com a voz, e ela entende ordens simples.",
+      limits: "Só com Cinzaluz, e só a algumas dezenas de passos. Quando ela sente dor, você sente também. Ela ainda é jovem e teimosa: uma ordem contra o instinto dela pode ser ignorada.",
+      secret: true,
+    },
+  }),
+  base({
+    id: "got-porto-real",
+    world: "Westeros — Crônicas de Gelo e Fogo",
+    worldBg: "Ano 298 depois da Conquista. O rei Robert Baratheon dá um grande torneio em Porto Real em honra da nova Mão do Rei. A cidade está cheia de cavaleiros, apostadores, espiões e segredos sobre a morte da Mão anterior. Aventura original: o jogador é um homem de Westeros fora do elenco da obra. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui, mas pode mudar o que acontece ao redor deles — sempre com um preço.",
+    charName: "Sor Edric Marlow",
+    charTitle: "Cavaleiro andante no Torneio da Mão, em Porto Real",
+    charAge: "25",
+    genre: "Torneio, apostas e espiões",
+    hook: "Você venceu a primeira justa por sorte e ganhou um prêmio que não pediu: a carta de um morto que ninguém devia ter lido. Porto Real inteira está olhando.",
+    charBg: "Filho de um cavaleiro andante que morreu de febre numa estrada da Campina. Herdou a armadura velha, um cavalo de guerra que atende por Teimoso e uma dívida com um ferreiro da Rua do Aço que o pai nunca explicou. Foi armado cavaleiro pelo próprio pai na beira de uma vala, sem testemunhas — e há quem diga que isso não vale. Veio ao Torneio da Mão para ganhar dinheiro, um patrono ou, pelo menos, o direito de ser levado a sério.",
+    charPersonality: "Honesto até a inconveniência, bem-humorado, bom de briga e péssimo de corte. Ri de si mesmo antes que os outros riam. Ajuda quem está apanhando mesmo quando não devia se meter. Quando mente, coça a orelha. Medo: que o pai tenha mentido e ele não seja cavaleiro de verdade — e que alguém descubra isso no meio de Porto Real.",
+    charSkills: "Justa, espada e escudo, cavalos, viver com pouco dinheiro, ler gente em taverna. Lê devagar. Sem magia, sem terras.",
+    supportingCast: "Grilo — escudeiro de 14 anos, órfão de Lanisporto; rápido de pernas e de língua, aposta o que não tem; tique: morde a ponta da trança quando pensa. Lady Elinor Castanhal — jovem viúva de um senhor da Campina; elegante, esperta, joga com espiões como quem joga cyvasse e oferece patrocínio em troca de 'pequenos favores'; tique: gira o anel de viúva quando mente. 'Lorde' Bolinho — dono de uma casa de apostas perto do Portão do Rei; gordo e simpático, sabe quanto vale cada vida no torneio; tique: lambe o dedo antes de contar moedas. Sor Lyonel Gaunt — campeão de uma casa das Terras Ocidentais; sorriso perfeito, mãos que quebram dedos de escudeiro; tique: beija a ponta da lança antes de cada justa. Passarinho — menino mudo que aparece em todo canto da cidade; um dos informantes do Mestre dos Sussurros; tique: desenha no chão, com carvão, o que viu.",
+    storyStartPoint: "Segunda manhã do Torneio da Mão. A multidão ainda grita o seu nome errado — \"Sor Eldric! Sor Eldric!\" — quando você entra na sua tenda remendada, atrás da liça, com o ombro latejando da justa que venceu por pura sorte. Em cima do catre, onde ninguém devia ter mexido, há um embrulho de couro amarrado com fita preta: dentro, uma carta selada com o falcão e a lua da Casa Arryn, na letra trêmula da Mão do Rei que morreu no verão, e um único nome sublinhado. Grilo entra correndo e para em seco ao ver o selo. Grilo: \"Sor... isso é de quem eu acho que é? Porque se for, a gente vende ou queima, e eu voto vender.\" Do lado de fora, uma voz de mulher, educada e perto demais da lona: \"Sor Edric? Lady Elinor Castanhal gostaria de convidá-lo para jantar. Hoje. Antes que outras pessoas o convidem.\" Do outro lado da liça, Sor Lyonel Gaunt beija a ponta da lança e olha direto para a sua tenda.",
+    narration: {
+      style: "cinematic",
+      length: "balanced",
+      pace: "balanced",
+    },
+    charAppearanceNote: "Largo de ombros, nariz quebrado duas vezes, cabelo cor de palha cortado à faca, armadura velha de placas desencontradas e uma capa amarela desbotada com um sol meio apagado.",
+    relationships: {
+      Grilo: "Amigável",
+      "Lady Elinor": "Neutral",
+      "Lorde Bolinho": "Neutral",
+      "Sor Lyonel Gaunt": "Hostil",
+      Passarinho: "Neutral",
+    },
+    worldState: {
+      location: "Tendas dos cavaleiros andantes, atrás da liça do Torneio da Mão, Porto Real",
+      npcs: {
+        Grilo: "escudeiro órfão; rápido de língua, morde a trança; tenda de Edric; quer vender a carta",
+        "Lady Elinor": "viúva da Campina; elegante, gira o anel de viúva; pavilhões nobres; oferece patrocínio",
+        "Lorde Bolinho": "dono de casa de apostas; simpático, lambe o dedo; perto do Portão do Rei; sabe o preço de cada vida",
+        "Sor Lyonel Gaunt": "campeão do oeste; sorriso perfeito, beija a lança; liça; próximo adversário de Edric",
+        Passarinho: "menino mudo; desenha com carvão o que viu; em todo canto; serve ao Mestre dos Sussurros",
+      },
+    },
+    plots: [
+      {
+        title: "A carta do morto",
+        hook: "Uma carta da antiga Mão do Rei apareceu na tenda de um cavaleiro sem nome. Quem a deixou ali quer que ela suma — ou que Edric morra com ela.",
+      },
+      {
+        title: "Um cavaleiro de verdade",
+        hook: "Edric precisa vencer na liça para ter nome, dinheiro e patrono. Cada vitória o deixa mais visível para quem procura a carta.",
+      },
+      {
+        title: "A dívida da Rua do Aço",
+        hook: "O pai deixou uma dívida com um ferreiro de Porto Real e nenhuma explicação. A oficina fica perto demais do nome sublinhado na carta.",
+      },
+    ],
+    threat: {
+      name: "A rainha e os homens de manto vermelho",
+      goal: "recuperar a carta da antiga Mão do Rei e calar todo mundo que a leu antes do fim do torneio",
+    },
+    gmBrief: {
+      truth: "A carta é um rascunho que a antiga Mão do Rei escreveu a Stannis Baratheon pouco antes de morrer e nunca enviou: diz que os filhos da rainha não são do rei e aponta um aprendiz de ferreiro da Rua do Aço como prova viva de como são os verdadeiros filhos de Robert. Um passarinho do Mestre dos Sussurros a deixou na tenda de Edric para tirá-la de circulação sem ligá-la à Fortaleza Vermelha. Lady Elinor trabalha para a rainha e quer a carta queimada. Sor Lyonel foi pago para matar Edric na liça se ele não a entregar.",
+      clues: [
+        "O selo da carta foi quebrado e colado de novo com cera de outra cor.",
+        "A lança de Sor Lyonel para a próxima justa tem ponta de aço por baixo da madeira pintada — ponta de guerra, não de torneio.",
+        "Lady Elinor manda um bilhete por dia a uma criada que serve nos aposentos da rainha.",
+        "O Passarinho desenha no chão, com carvão, um martelo embaixo de uma coroa.",
+      ],
+      escalation: [
+        "Alguém revista a tenda durante uma justa e Grilo é espancado por não falar.",
+        "Na justa contra Sor Lyonel, a lança vem com ponta de guerra: perder significa morrer diante do rei.",
+        "Homens de manto vermelho começam a procurar o aprendiz da Rua do Aço — e chegam primeiro se Edric demorar.",
+      ],
+      twist: "O ferreiro da Rua do Aço a quem o pai devia dinheiro guardava segredos para a antiga Mão: o pai de Edric morreu levando uma mensagem dela até lá. A carta não chegou a Edric por acaso — voltou para o filho de quem morreu por ela.",
+      agendas: {
+        Grilo: "enriquecer e servir a um cavaleiro de verdade; venderia a carta se achasse que é para o bem de Edric",
+        "Lady Elinor": "entregar a carta à rainha e ganhar um marido rico como prêmio; gosta de Edric mais do que planejou",
+        "Lorde Bolinho": "lucrar com todos os lados; apostou contra Edric na próxima justa",
+        "Sor Lyonel Gaunt": "matar Edric na liça com cara de acidente e receber terras",
+        Passarinho: "cumprir a ordem do Mestre dos Sussurros: ver para onde a carta vai",
+      },
+    },
+    specialAbility: {
+      enabled: true,
+      name: "Sorte de Andante",
+      description: "Uma vez por cena, quando tudo dá errado, algo pequeno dá certo a seu favor: uma correia que arrebenta no inimigo, um cavalo que desvia, alguém que aparece na hora certa.",
+      limits: "Nunca resolve a cena sozinha — só abre uma brecha. Não funciona duas vezes seguidas na mesma situação. Quem abusa da sorte começa a ser notado.",
+      secret: true,
+    },
   }),
   base({
     id: "isekai-roma",
@@ -1329,27 +1710,30 @@ export const ADVENTURE_PRESETS = [
     charBg: "Bruno, 27 anos, estudante de medicina em Recife, dormiu estudando para a prova de anatomia. Acordou no corpo de Tércio, escravo grego que copia cartas para o senador Lúcio Valério. Tércio sabe ler grego e latim; Bruno, não — mas o Sistema traduz tudo. Na primeira noite, ele já leu uma carta que não devia.",
     charPersonality: "Prático, nervoso, humor de plantão de hospital. Não suporta ver alguém ferido sem ajudar. Quando mente, enrola a barra da túnica. Medo: ser crucificado por um erro bobo, ou mudar a história e criar algo pior que o Império.",
     charSkills: "Medicina básica moderna (higiene, suturas, diagnóstico), memória de história escolar. O corpo de Tércio sabe escrever rápido e passar despercebido. Sem armas.",
-    supportingCast: "Senador Lúcio Valério — dono da casa; culto, gentil com escravos em público, frio em privado; tique: gira o anel de sinete quando mente. Dâmaris — escrava cozinheira; língua afiada, protege Tércio como irmão mais novo, sabe tudo o que acontece na cozinha. Quinto Rufo — liberto e informante; sorriso de vendedor, vende segredos para quem pagar mais, inclusive para César.",
-    storyStartPoint: `Cheiro de cera de vela e lamparina de azeite. Você está debruçado numa mesa baixa, com um estilete de bronze na mão e uma tabuinha de cera à frente. As letras são estranhas — e então se reorganizam em português. Uma tela translúcida azul aparece no ar: 【Sistema】 Usuário vinculado. Época: Roma, 10 de março, 44 a.C. Missão inicial: sobreviver aos Idos. Passos na porta. Dâmaris, sussurrando: "Tércio! O senador perguntou quem mexeu na carta lacrada. Diga que foi o vento, pelos deuses." Atrás dela, o senador Lúcio Valério, girando o anel: "Tércio. Venha. Quero saber o que você leu esta noite."`,
+    supportingCast: "Senador Lúcio Valério — dono da casa; culto, gentil com escravos em público, frio em privado; tique: gira o anel de sinete quando mente. Dâmaris — escrava cozinheira; língua afiada, protege Tércio como irmão mais novo, sabe tudo o que acontece na cozinha. Quinto Rufo — liberto e informante; sorriso de vendedor, vende segredos para quem pagar mais, inclusive para César. Marco Licínio — filho do senador, 17 anos; idealista, recita Catão, admira os conspiradores e não sabe que o pai joga dos dois lados; tique: ajeita a toga como se fosse armadura. Centurião Atílio Varo — veterano da Gália e chefe da guarda de Lúcio; leal a César e ao dinheiro em partes iguais; tique: passa o polegar na cicatriz do pescoço.",
+    storyStartPoint: "Noite de 10 de março. Você acorda debruçado numa mesa baixa, com um estilete de bronze na mão e uma tabuinha de cera à frente, num quarto que cheira a azeite de lamparina. As letras latinas se reorganizam sozinhas em português, e uma tela azul translúcida se abre no ar: 【Sistema】 Usuário vinculado. Época: Roma, 44 a.C. Faltam cinco dias para os Idos de Março. Missão inicial: sobreviver aos Idos. Ao lado da tabuinha, uma carta com o lacre partido — e nela, nomes que você conhece dos livros de escola. Dâmaris entra sem bater, sussurrando: \"Tércio! O senador perguntou quem mexeu na carta lacrada. Diga que foi o vento, pelos deuses.\" Atrás dela, o senador Lúcio Valério, girando o anel no dedo: \"Tércio. Venha. Quero saber o que você leu esta noite.\" No pátio, o centurião da guarda fecha o portão.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Magro, cabelo curto encaracolado, túnica de lã crua manchada de tinta, marca de propriedade no pulso.",
-    relationships: { "Senador Lúcio Valério": "Suspeito", "Dâmaris": "Amigável", "Quinto Rufo": "Neutral" },
+    relationships: { "Senador Lúcio Valério": "Suspeito", "Dâmaris": "Amigável", "Quinto Rufo": "Neutral", "Marco Licínio": "Amigável", "Centurião Atílio Varo": "Neutral" },
     worldState: { location: "Casa do senador Lúcio Valério, monte Palatino", npcs: {
       "Senador Lúcio Valério": "senador conspirador; culto e frio, gira o anel; casa no Palatino; desconfia de Tércio",
       "Dâmaris": "escrava cozinheira; língua afiada, protetora; cozinha; sabe dos segredos da casa",
       "Quinto Rufo": "liberto informante; sorriso de vendedor; Fórum; vende segredos a quem pagar",
+        "Marco Licínio": "filho do senador; idealista, recita Catão; casa do senador; admira os conspiradores",
+        "Centurião Atílio Varo": "centurião veterano; leal a César e ao dinheiro, polegar na cicatriz; portão da casa; chefe da guarda",
     } },
     plots: [
       plot("Os Idos de Março", "Você sabe que César morre em cinco dias. Salvá-lo, lucrar com isso ou só sobreviver — cada escolha muda Roma."),
       plot("A carta lacrada", "Tércio leu uma carta com nomes da conspiração. O senador quer saber o quanto ele sabe."),
       plot("Liberdade", "Um escravo não tem futuro em Roma — a não ser que alguém poderoso lhe deva a vida."),
     ],
+    threat: { name: "Senador Lúcio Valério", goal: "sair vencedor dos Idos de Março, de qualquer lado, eliminando quem leu as cartas dele" },
     gmBrief: {
       truth: "Lúcio Valério é conspirador, mas também agente duplo: passa informações a Marco Antônio para ficar com o lado vencedor, seja qual for. A carta que Tércio leu prova as duas traições. Quinto Rufo foi contratado por Antônio para descobrir quem na casa sabe disso. Dâmaris esconde que é mãe de Tércio — vendida separada dele quando criança. O Sistema existe para observar o 'desvio' que o jogador causa na história.",
       clues: ["A carta tem dois lacres sobrepostos: um de Cássio e outro com o símbolo de Antônio.", "Quinto Rufo aparece no mercado sempre que o senador recebe visitas noturnas.", "Dâmaris tem a mesma marca de nascença de Tércio atrás da orelha.", "O senador queima cartas toda noite, mas guarda uma caixa trancada sob o altar dos lares."],
       escalation: ["O senador manda Tércio levar um recado ao Fórum — direto para uma emboscada de Quinto Rufo.", "Um escravo da casa é crucificado como exemplo; a casa inteira entra em pânico.", "Chega o dia 15 de março: ou a história se repete no teatro de Pompeu, ou algo novo acontece."],
       twist: "Dâmaris é a mãe de Tércio. Se o jogador fugir ou trair o senador, ela será a primeira a pagar.",
-      agendas: { "Senador Lúcio Valério": "sobreviver à guerra civil do lado vencedor", "Dâmaris": "proteger o filho sem revelar quem é", "Quinto Rufo": "vender a verdade pelo maior preço" },
+      agendas: { "Senador Lúcio Valério": "sobreviver à guerra civil do lado vencedor", "Dâmaris": "proteger o filho sem revelar quem é", "Quinto Rufo": "vender a verdade pelo maior preço", "Marco Licínio": "estar ao lado de Bruto nos Idos; vai morrer nas ruas se ninguém o impedir", "Centurião Atílio Varo": "avisar César se tiver certeza da conspiração — ou cobrar caro do senador para não avisar" },
     },
     gameSystem: { enabled: true, name: "Sistema", points: 0, chestPool: [
       { name: "Gládio de Legionário", desc: "Espada curta romana, equilibrada e afiada.", kind: "arma" },
@@ -1385,27 +1769,30 @@ export const ADVENTURE_PRESETS = [
     charBg: "Kenji, 30 anos, nipo-brasileiro de São Paulo, analista de sistemas e jogador de jogos de estratégia, dormiu depois de uma partida longa. Acordou como Gonbei, camponês recrutado à força como ashigaru. Ele sabe que, em poucos dias, Oda Nobunaga vai emboscar o acampamento sob uma tempestade e matar Yoshimoto.",
     charPersonality: "Analítico, sarcástico, pensa em 'probabilidades' e 'builds'. Leal aos companheiros de tenda. Quando mente, ajeita o chapéu de bambu. Medo: morrer como figurante numa batalha famosa.",
     charSkills: "Estratégia (jogos e livros), noções de japonês moderno (o arcaico confunde), lógica. O corpo de Gonbei aguenta marcha e sabe usar a yari. Sem treino de samurai.",
-    supportingCast: "Sargento Tsuchida — chefe dos ashigaru; grita sempre, bebe saquê escondido, protege os seus; tique: cospe antes de dar ordens. Hanzō — companheiro de tenda; magro, risonho, quer voltar para a esposa grávida; segue Gonbei para todo lado. Sayo — vendedora de chá que segue o exército; doce demais, faz perguntas demais sobre os horários dos guardas.",
-    storyStartPoint: `Lama até os tornozelos e cheiro de arroz queimado. Você está agachado numa fileira de soldados com armadura de bambu laqueado, uma lança longa no ombro. Bandeiras com o símbolo de dois pássaros tremulam no vento quente de maio. Uma tela azul se abre no canto da visão: 【Sistema】 Usuário vinculado. Local: Owari, 1560. Missão inicial: sobreviver à batalha que vem. Hanzō cutuca você, rindo: "Gonbei, você dormiu de pé de novo? O sargento vai te matar antes dos Oda." O sargento Tsuchida cospe no chão: "Gonbei! Você e Hanzō, vigília na colina de Dengakuhazama esta noite. Se dormirem, eu mesmo corto as cabeças."`,
+    supportingCast: "Sargento Tsuchida — chefe dos ashigaru; grita sempre, bebe saquê escondido, protege os seus; tique: cospe antes de dar ordens. Hanzō — companheiro de tenda; magro, risonho, quer voltar para a esposa grávida; segue Gonbei para todo lado. Sayo — vendedora de chá que segue o exército; doce demais, faz perguntas demais sobre os horários dos guardas. Ikeda Tadakatsu — oficial samurai de cavalaria dos Imagawa; orgulhoso, despreza ashigaru e procura um espião para agradar o senhor; tique: limpa a lâmina com papel de arroz. Monge Ryōsen — monge itinerante que reza pelos mortos do exército; calmo, sabe ler e escrever, joga go com quem perde; tique: corre as contas do rosário ao contrário quando prevê desgraça.",
+    storyStartPoint: "Maio de 1560, fim de tarde abafado. Você acorda de pé, numa fileira de soldados com armadura de bambu laqueado e uma lança longa no ombro, o chão do acampamento mole de chuva sob as sandálias de palha. Estandartes dos Imagawa batem no vento quente. Uma tela azul se abre no canto da visão: 【Sistema】 Usuário vinculado. Local: Owari, 1560. Missão inicial: sobreviver à batalha que vem. O nome do vale no mapa do sargento você conhece dos livros: Okehazama. Hanzō cutuca você, rindo: \"Gonbei, dormiu de pé de novo? O sargento vai te matar antes dos Oda.\" O sargento Tsuchida cospe no chão: \"Gonbei! Você e Hanzō, vigília na colina de Dengakuhazama esta noite. Se dormirem, eu mesmo corto as cabeças.\" Perto das tendas dos oficiais, uma vendedora de chá sorri demais e pergunta a um guarda onde fica a tenda do senhor.",
     narration: { style: "cinematic", length: "balanced", pace: "fast" },
     charAppearanceNote: "Baixo e forte, rosto queimado de sol, armadura de bambu laqueado rachada, chapéu jingasa amassado.",
-    relationships: { "Sargento Tsuchida": "Neutral", "Hanzō": "Amigável", "Sayo": "Neutral" },
+    relationships: { "Sargento Tsuchida": "Neutral", "Hanzō": "Amigável", "Sayo": "Neutral", "Ikeda Tadakatsu": "Hostil", "Monge Ryōsen": "Amigável" },
     worldState: { location: "Acampamento do exército Imagawa, Owari", npcs: {
       "Sargento Tsuchida": "chefe dos ashigaru; grita, bebe escondido, protege os seus; acampamento",
       "Hanzō": "companheiro de tenda; risonho, esposa grávida; acampamento; segue Gonbei",
       "Sayo": "vendedora de chá; doce demais, pergunta sobre os guardas; acampamento",
+        "Ikeda Tadakatsu": "oficial samurai Imagawa; orgulhoso, despreza ashigaru; tenda dos oficiais; procura um espião",
+        "Monge Ryōsen": "monge itinerante; calmo, joga go; acampamento; reza pelos mortos",
     } },
     plots: [
       plot("Okehazama", "Você sabe que os Oda vão atacar sob a tempestade. Avisar Yoshimoto, desertar ou trocar de lado — a história depende de você."),
       plot("Os companheiros de tenda", "Hanzō quer voltar para a esposa grávida. Na história real, quase ninguém desta colina sobrevive."),
       plot("A vendedora de chá", "Sayo pergunta demais sobre os horários da vigília. Alguém está entregando o acampamento."),
     ],
+    threat: { name: "A emboscada dos Oda em Okehazama", goal: "atacar a tenda de Imagawa Yoshimoto sob a tempestade e destroçar o acampamento" },
     gmBrief: {
       truth: "Sayo é espiã ninja a serviço dos Oda: está mapeando a posição exata da tenda de Yoshimoto e os turnos de vigília para a emboscada. O sargento Tsuchida sabe e aceitou suborno para afastar sua unidade da tenda principal — e assim salvar os seus homens. A história real segue: em três dias, uma tempestade e o ataque dos Oda. O jogador pode mudar o resultado, mas cada desvio grande muda quem governa o Japão.",
       clues: ["Sayo deixa marcas de carvão em árvores perto da tenda do comandante.", "Tsuchida tem moedas de cobre novas com o selo de outro clã.", "Monges locais avisam que 'o céu vai desabar em três dias'.", "Os batedores dos Oda nunca são vistos — mas sempre sabem onde estão os Imagawa."],
       escalation: ["Sayo percebe que Gonbei desconfia dela e tenta envenenar o saquê da vigília.", "O exército Imagawa para na ravina de Dengakuhazama para festejar vitórias; a disciplina relaxa.", "A tempestade chega e, junto com ela, os Oda."],
       twist: "Tsuchida não é traidor por dinheiro: os Oda prometeram poupar sua aldeia. Ele vai pedir que Gonbei fique calado para salvar os companheiros.",
-      agendas: { "Sargento Tsuchida": "salvar seus homens e sua aldeia", "Hanzō": "voltar vivo para a família", "Sayo": "cumprir a missão e não ser descoberta" },
+      agendas: { "Sargento Tsuchida": "salvar seus homens e sua aldeia", "Hanzō": "voltar vivo para a família", "Sayo": "cumprir a missão e não ser descoberta", "Ikeda Tadakatsu": "achar o espião e ganhar o favor de Yoshimoto; usa ashigaru como isca", "Monge Ryōsen": "salvar quantas vidas puder da batalha; percebe que Gonbei 'não é deste tempo'" },
     },
     gameSystem: { enabled: true, name: "Sistema", points: 0, chestPool: [
       { name: "Katana de Ferreiro Mestre", desc: "Lâmina excelente, digna de um samurai.", kind: "arma" },
@@ -1442,27 +1829,30 @@ export const ADVENTURE_PRESETS = [
     charBg: "Diego, 28 anos, oceanógrafo de Florianópolis, adormeceu num barco de pesquisa. Acordou como Tomás, grumete mestiço a bordo do Andorinha, um sloop pirata. Ele sabe que a Frota do Tesouro de 1715 vai naufragar num furacão na costa da Flórida — com o ouro indo para o fundo do mar.",
     charPersonality: "Curioso, calmo no mar, inquieto em terra. Fala de correntes e pressão atmosférica como quem reza. Quando mente, olha para o céu. Medo: morrer afogado — de novo.",
     charSkills: "Oceanografia e meteorologia (prever tempestades), natação, mergulho, navegação moderna sem instrumentos. O corpo de Tomás sabe subir no cordame e dar nós.",
-    supportingCast: "Capitã Ana Bonfim — capitã do Andorinha; cicatriz no queixo, ri alto, generosa com a tripulação e implacável com traidores; tique: gira uma moeda de ouro entre os dedos. Mestre Jonas — velho contramestre; desconfia de tudo que é novo, conhece o mar como ninguém. Rodrigo Salgado — imediato; bonito e ambicioso, quer o navio para si.",
-    storyStartPoint: `Sal na boca e o chão balançando. Você está pendurado no cordame de um navio, a vinte pés do convés, com o mar verde-turquesa embaixo. Uma tela azul se abre na frente dos olhos: 【Sistema】 Usuário vinculado. Local: Caribe, 24 de julho de 1715. Missão inicial: sobreviver à temporada de furacões. Lá embaixo, a capitã aponta para o horizonte com a moeda de ouro na mão: "Tomás! Desce daí. Você tem olhos bons — quero saber se aquelas velas são da frota espanhola." Rodrigo, ao lado dela, sem tirar os olhos de você: "O garoto caiu na água ontem e voltou falando sozinho. Dá azar levar louco para o ataque, capitã."`,
+    supportingCast: "Capitã Ana Bonfim — capitã do Andorinha; cicatriz no queixo, ri alto, generosa com a tripulação e implacável com traidores; tique: gira uma moeda de ouro entre os dedos. Mestre Jonas — velho contramestre; desconfia de tudo que é novo, conhece o mar como ninguém. Rodrigo Salgado — imediato; bonito e ambicioso, quer o navio para si. Capitão Edward Thorne — caçador de piratas inglês; cortês e implacável, enforca na ponta da verga; tique: dá corda no relógio de bolso antes de ordenar fogo. Kofi — artilheiro do Andorinha, fugido das plantações da Jamaica; calmo, preciso, o melhor canhoneiro do Caribe; tique: canta baixinho na língua da mãe antes de cada disparo.",
+    storyStartPoint: "Meio-dia de 24 de julho de 1715, e o mar do Caribe brilha como vidro verde. Você acorda pendurado no cordame de um sloop, a vinte pés do convés, com as mãos agarradas a uma corda que não lembra de ter segurado. Uma tela azul se abre na frente dos olhos: 【Sistema】 Usuário vinculado. Local: Caribe, 24 de julho de 1715. Missão inicial: sobreviver à temporada de furacões. Lá embaixo, a capitã aponta o horizonte com uma moeda de ouro entre os dedos: \"Tomás! Desce daí. Você tem olho bom — quero saber se aquelas velas são da Frota do Tesouro.\" Rodrigo, o imediato, sem tirar os olhos de você: \"O garoto caiu na água ontem e voltou falando sozinho. Dá azar levar louco para o ataque, capitã.\" No convés de canhões, um artilheiro para de cantar baixinho e olha para cima. Ao sul, um risco de nuvem escura que ninguém parece notar.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Magro, pele morena queimada de sol, cabelo crespo preso com fita vermelha, descalço, camisa rasgada.",
-    relationships: { "Capitã Ana Bonfim": "Amigável", "Mestre Jonas": "Neutral", "Rodrigo Salgado": "Suspeito" },
+    relationships: { "Capitã Ana Bonfim": "Amigável", "Mestre Jonas": "Neutral", "Rodrigo Salgado": "Suspeito", "Capitão Edward Thorne": "Hostil", "Kofi": "Amigável" },
     worldState: { location: "Convés do sloop Andorinha, perto de Havana", npcs: {
       "Capitã Ana Bonfim": "capitã pirata; cicatriz no queixo, gira moeda de ouro; Andorinha; generosa e implacável",
       "Mestre Jonas": "contramestre; velho e desconfiado; Andorinha; conhece o mar",
       "Rodrigo Salgado": "imediato; bonito e ambicioso; Andorinha; quer o navio",
+        "Capitão Edward Thorne": "caçador de piratas inglês; cortês e implacável, relógio de bolso; fragata Vigilant; persegue o Andorinha",
+        "Kofi": "artilheiro; calmo e preciso, canta antes de disparar; convés de canhões; o melhor canhoneiro",
     } },
     plots: [
       plot("A Frota do Tesouro", "O capitão quer atacar os galeões espanhóis. Você sabe que um furacão vai afundá-los — e quem estiver por perto."),
       plot("O motim", "Rodrigo quer o navio e está juntando aliados. Um grumete 'louco' é o bode expiatório perfeito."),
       plot("O ouro no fundo do mar", "Você sabe onde a frota vai naufragar. Quem chegar primeiro ao local fica rico — se sobreviver."),
     ],
+    threat: { name: "O caçador de piratas Edward Thorne", goal: "emboscar o Andorinha com a ajuda do traidor a bordo e enforcar a tripulação" },
     gmBrief: {
       truth: "Rodrigo vendeu a posição do Andorinha a um caçador de piratas inglês em troca de perdão e do comando do navio depois. Ana Bonfim é filha de um capitão espanhol da própria Frota do Tesouro e quer atacar não pelo ouro, mas para resgatar o pai, preso a bordo por traição. O furacão real chega em 31 de julho.",
       clues: ["Rodrigo troca mensagens com um barco de pesca que sempre aparece ao amanhecer.", "Ana guarda um retrato de um oficial espanhol com o mesmo queixo que ela.", "O barômetro natural (nuvens altas e ondas longas) mostra o furacão chegando em poucos dias.", "Um marinheiro bêbado fala de 'perdão do rei' para quem entregar piratas."],
       escalation: ["Rodrigo começa a espalhar que Tomás é um bruxo que traz azar.", "Um navio caçador de piratas inglês aparece no horizonte.", "O furacão chega em 31 de julho e a frota afunda — com ou sem o Andorinha por perto."],
       twist: "Ana não quer o ouro: quer o pai, preso num dos galeões. Se Tomás avisar do furacão, ela vai atacar mais cedo — e mais perigosamente.",
-      agendas: { "Capitã Ana Bonfim": "resgatar o pai da frota espanhola", "Mestre Jonas": "proteger a tripulação; confia no mar, não em pessoas", "Rodrigo Salgado": "tomar o navio e conseguir o perdão inglês" },
+      agendas: { "Capitã Ana Bonfim": "resgatar o pai da frota espanhola", "Mestre Jonas": "proteger a tripulação; confia no mar, não em pessoas", "Rodrigo Salgado": "tomar o navio e conseguir o perdão inglês", "Capitão Edward Thorne": "enforcar a tripulação do Andorinha e tomar o ouro da Frota para a Coroa — e para si", "Kofi": "liberdade para os seus e um navio onde ninguém seja dono de ninguém; desconfia de Rodrigo" },
     },
     gameSystem: { enabled: true, name: "Sistema", points: 0, chestPool: [
       { name: "Par de Pistolas de Pederneira", desc: "Duas pistolas carregadas, prontas para a abordagem.", kind: "arma" },
@@ -1498,27 +1888,30 @@ export const ADVENTURE_PRESETS = [
     charBg: "André, 35 anos, advogado criminalista de Porto Alegre, dormiu lendo um processo. Acordou como Jean Moreau, escrivão que anota os julgamentos do Tribunal Revolucionário. Jean tem uma noiva, Claire, de família suspeita de ser realista. Uma denúncia anônima contra ela está na mesa dele.",
     charPersonality: "Argumentador, idealista, irônico com fanáticos. Odeia injustiça processual. Quando mente, ajeita a gravata. Medo: virar cúmplice de assassinatos legais para salvar a própria pele.",
     charSkills: "Direito, retórica, leitura de pessoas em interrogatório, francês básico (o Sistema ajuda). O corpo de Jean escreve rápido e conhece os corredores do Palácio da Justiça.",
-    supportingCast: "Cidadão Fouquet — promotor; voz mansa, olhos de pedra, coleciona sentenças como troféus; tique: limpa os óculos antes de acusar. Claire Dumont — noiva de Jean; costureira, corajosa, esconde um padre fugitivo no porão. Pierre 'Bonnet Rouge' — sans-culotte do bairro; barulhento, sincero, acha que Jean é um herói da Revolução.",
-    storyStartPoint: `Cheiro de tinta, suor e madeira velha. Você está sentado numa mesa alta, com uma pena na mão, diante de uma sala cheia de gente gritando. Uma tela azul se abre no ar: 【Sistema】 Usuário vinculado. Local: Paris, 14 de outubro de 1793. Missão inicial: sobreviver ao Terror. Na sua frente, uma lista de nomes para o julgamento de amanhã. O terceiro é Claire Dumont. O promotor Fouquet, limpando os óculos: "Cidadão Moreau. Anote com letra bonita. Amanhã a República terá um dia cheio." Pierre, do fundo da sala, erguendo o barrete vermelho: "Viva a República! Moreau, depois a gente bebe!"`,
+    supportingCast: "Cidadão Fouquet — promotor; voz mansa, olhos de pedra, coleciona sentenças como troféus; tique: limpa os óculos antes de acusar. Claire Dumont — noiva de Jean; costureira, corajosa, esconde um padre fugitivo no porão. Pierre 'Bonnet Rouge' — sans-culotte do bairro; barulhento, sincero, acha que Jean é um herói da Revolução. Padre Mathieu — padre refratário escondido no sótão do ateliê de Claire; velho, sereno e assustadoramente honesto; tique: abençoa as pessoas sem perguntar. Madeleine Roux — tricoteira da galeria do Tribunal; assiste a todos os julgamentos, conhece cada jurado e vende informação; tique: conta os pontos do tricô em voz alta quando alguém é condenado.",
+    storyStartPoint: "14 de outubro de 1793, Palácio da Justiça. Você acorda sentado numa mesa alta, com uma pena molhada na mão, diante de uma sala abafada onde a multidão grita contra os traidores. Uma tela azul se abre no ar: 【Sistema】 Usuário vinculado. Local: Paris, 1793. Missão inicial: sobreviver ao Terror. Na sua frente, a lista de nomes para o julgamento de amanhã. O terceiro é Claire Dumont — e este corpo reage ao nome antes de você entender por quê. O promotor Fouquet limpa os óculos devagar: \"Cidadão Moreau. Anote com letra bonita. Amanhã a República terá um dia cheio.\" Pierre, do fundo da sala, erguendo o barrete vermelho: \"Viva a República! Moreau, depois a gente bebe!\" Na galeria, uma tricoteira para de contar os pontos e sorri para você como quem já sabe o fim.",
     narration: { style: "literary", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Alto e pálido, cabelo castanho preso em rabo, casaca escura gasta, tinta nos dedos, cocar tricolor no peito.",
-    relationships: { "Cidadão Fouquet": "Suspeito", "Claire Dumont": "Amigável", "Pierre": "Amigável" },
+    relationships: { "Cidadão Fouquet": "Suspeito", "Claire Dumont": "Amigável", "Pierre": "Amigável", "Padre Mathieu": "Amigável", "Madeleine Roux": "Neutral" },
     worldState: { location: "Sala do Tribunal Revolucionário, Palácio da Justiça", npcs: {
       "Cidadão Fouquet": "promotor; voz mansa, olhos de pedra, limpa os óculos; tribunal; coleciona sentenças",
       "Claire Dumont": "noiva de Jean; costureira corajosa; ateliê no Marais; esconde um padre fugitivo",
       "Pierre": "sans-culotte; barulhento e sincero; bairro e tribunal; admira Jean",
+        "Padre Mathieu": "padre refratário escondido; sereno e honesto; sótão do ateliê; prova contra Claire",
+        "Madeleine Roux": "tricoteira da galeria; conhece jurados, conta pontos; galeria do Tribunal; vende informação",
     } },
     plots: [
       plot("A lista de amanhã", "Claire está na lista do Tribunal. Você tem um dia para tirá-la de lá sem se tornar o próximo."),
       plot("Quem denunciou Claire", "A denúncia anônima foi escrita por alguém próximo. Descobrir quem pode salvar ou destruir tudo."),
       plot("O Terror e a história", "Você sabe que o Terror cai em julho de 1794. Até lá, cada dia custa cabeças."),
     ],
+    threat: { name: "Cidadão Fouquet", goal: "mandar Claire à guilhotina e ficar com o ateliê antes que o passado dele de padre venha à tona" },
     gmBrief: {
       truth: "A denúncia contra Claire foi escrita pelo próprio Fouquet, que quer o ateliê dela para um parente e usa o padre escondido como prova. Mas Fouquet também tem um segredo: é ex-padre e renegou os votos para sobreviver; se isso vier à tona, ele cai. Pierre conhece o padre escondido e vai entregar Claire sem querer, achando que está ajudando a Revolução.",
       clues: ["A letra da denúncia tem o mesmo jeito de fazer o 'f' das anotações de Fouquet.", "Fouquet reza baixinho em latim quando acha que está sozinho.", "Pierre comenta que viu 'um homem de batina' entrando no ateliê de Claire.", "Um registro paroquial antigo lista um 'irmão Fouquet' num mosteiro de Lyon."],
       escalation: ["Pierre leva guardas ao ateliê de Claire achando que vai 'proteger' a Revolução.", "Fouquet pede que Jean testemunhe contra Claire para provar lealdade.", "O julgamento acontece: o veredito sai em minutos, e a carroça para a guilhotina parte ao meio-dia."],
       twist: "O padre escondido no porão de Claire é o irmão mais velho de Fouquet. Fouquet quer o irmão morto para apagar o próprio passado.",
-      agendas: { "Cidadão Fouquet": "apagar o passado de padre e ganhar poder", "Claire Dumont": "proteger o padre e manter a dignidade", "Pierre": "servir à Revolução; é leal a Jean, mas ingênuo" },
+      agendas: { "Cidadão Fouquet": "apagar o passado de padre e ganhar poder", "Claire Dumont": "proteger o padre e manter a dignidade", "Pierre": "servir à Revolução; é leal a Jean, mas ingênuo", "Padre Mathieu": "não deixar ninguém morrer por ele; se entregaria para salvar Claire", "Madeleine Roux": "sobreviver ao Terror vendendo segredos; sabe do passado de Fouquet" },
     },
     gameSystem: { enabled: true, name: "Sistema", points: 0, chestPool: [
       { name: "Bengala-Espada", desc: "Uma bengala elegante que esconde uma lâmina fina.", kind: "arma" },
@@ -1552,6 +1945,7 @@ const TONE_BY_ID = {
   "ordem-paranormal": "Terror", "sertao-arcano": "Aventura", "recife-2099": "Ação",
   "farol-ilha-negra": "Terror", "academia-lumen": "Mistério",
   "got-rebeliao-norte": "Intriga", "got-antes-da-conquista": "Intriga",
+  "got-muralha": "Terror", "got-danca-dragoes": "Ação", "got-porto-real": "Intriga",
   "isekai-roma": "Intriga", "isekai-sengoku": "Ação", "isekai-caribe": "Aventura", "isekai-paris-1793": "Intriga",
 };
 for (const preset of ADVENTURE_PRESETS) preset.tone = TONE_BY_ID[preset.id] || "Aventura";

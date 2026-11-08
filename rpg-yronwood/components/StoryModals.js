@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { endingSummary, tensionLabel, clampTension } from "../lib/story-progress.mjs";
+import { asThreat, THREAT_STAGES } from "../lib/drama.mjs";
 import { createAmbience, moodForCampaign, AMBIENCE_MOODS } from "../lib/ambience.js";
 import { PortraitImage } from "./AppearanceCreator";
 
@@ -106,6 +107,21 @@ export function EndingScreen({ campaign, onClose, onSaveAsTemplate, onExport, on
         </section>
       ) : null}
     </Modal>
+  );
+}
+
+/** Ameaça central e quanto o plano dela já avançou. */
+export function ThreatChip({ threat }) {
+  const t = asThreat(threat);
+  if (!t || t.defeated) return null;
+  const st = THREAT_STAGES[t.stage];
+  return (
+    <div className={`threat-chip s${t.stage}`} title={`${t.name}${t.goal ? ` — quer ${t.goal}` : ""}. Ela avança se você não agir.`} aria-label={`Ameaça: ${t.name}, estágio ${t.stage} de 4, ${st.label}`}>
+      <i className="ti ti-skull" aria-hidden="true" />
+      <span className="threat-name">{t.name}</span>
+      <span className="threat-dots" aria-hidden="true">{[1, 2, 3, 4].map((i) => <span key={i} className={i <= t.stage ? "on" : ""} />)}</span>
+      <span className="threat-stage">{st.label}</span>
+    </div>
   );
 }
 

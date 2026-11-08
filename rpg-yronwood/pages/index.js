@@ -37,6 +37,7 @@ import {
 } from "../lib/timeSystem";
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
+import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
@@ -69,7 +70,7 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  stripSystemTags(stripStoryTags(stripIdentityTags(
+  stripDramaTags(stripSystemTags(stripStoryTags(stripIdentityTags(
     normalizeDialogueText(
       stripTimeSkipTags(
         stripHpTags(
@@ -78,7 +79,7 @@ const cleanText = (t) =>
         )
       )
     )
-  ))).trim();
+  ))).trim());
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
@@ -185,6 +186,7 @@ const buildPromptBody = (c, loreExtra, gameTime) => {
     `ESTADO CONFIRMADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience, items: c.items, missions: c.missions, plots: c.plots, attributes: c.attributes, skills: c.skills, world: c.worldState })}`,
     plotPromptLines(c.plots),
     ...storyProgressLines(c),
+    ...dramaPromptLines(c, { busy: isOffscreenDue(c) }),
     ...systemPromptLines(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
@@ -324,7 +326,7 @@ const buildPromptBody = (c, loreExtra, gameTime) => {
       : `- NÃO inclua IMAGE_PROMPT nas respostas.`,
     ``,
     `REGRA 12 — MECÂNICA DE JOGO E DADOS.`,
-    `Ação difícil, incerta ou arriscada: interrompa com [TESTE:Atributo|DC:n] e uma descrição curta (Força, Destreza, Mente ou Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Exemplo: [TESTE:Força|DC:12] Arrombar a porta. Pare e aguarde o total que o jogo enviar (d20 + modificador + perícia vs DC). Narre só esse resultado: 1 no dado = falha crítica; 20 = sucesso crítico; senão sucesso, parcial ou falha. Não invente faixas 1-5/16-20 nem role por conta própria.`,
+    `Ação difícil, incerta ou arriscada: interrompa com [TESTE:Atributo|DC:n] e uma descrição curta (Força, Destreza, Mente ou Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Exemplo: [TESTE:Força|DC:12] Arrombar a porta. Pare e aguarde o total que o jogo enviar (d20 + modificador + perícia vs DC). Narre só esse resultado: 1 no dado = falha crítica; 20 = sucesso crítico; senão sucesso, parcial ou falha. Falha NUNCA é "nada acontece": a situação muda para pior ou abre outro caminho, com preço. Sucesso crítico dá algo além do pedido (uma vantagem, uma informação, alguém impressionado). Não invente faixas 1-5/16-20 nem role por conta própria.`,
     ``,
     `REGRA 13 — RELACIONAMENTOS E FACÇÕES.`,
     `Atitudes dos NPCs em relação ao jogador:`,
@@ -339,7 +341,7 @@ const buildPromptBody = (c, loreExtra, gameTime) => {
     `Exemplos: [TIME_SKIP: unidade=horas, quantidade=4] · [TIME_SKIP: unidade=dias, quantidade=1] · [TIME_SKIP: unidade=semanas, quantidade=2]`,
   );
 
-  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral sob tensão: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. O ritmo e o tamanho de cada resposta seguem o TEMPO DESTA CENA, no fim deste prompt. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|função; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
+  lines.push(`REGRAS FINAIS — prevalecem sobre exemplos anteriores: não crie falas, pensamentos nem decisões do jogador. Narração visceral sob tensão: corpo involuntário, sentidos crus, visão de túnel, frases curtas, ação desajeitada; sem assustador/aterrorizante/caótico/épico/horrível. Alterne tensão, descoberta e descanso pelo corpo, sem lista decorativa nem panorama. O ritmo e o tamanho de cada resposta seguem o TEMPO DESTA CENA, no fim deste prompt. Para testes use [TESTE:Força|DC:12] (ou Destreza, Mente, Carisma; DC 8 fácil, 12 normal, 16 difícil, 20 extremo). Aguarde o resultado calculado pelo jogo e respeite-o. Não aplique as faixas antigas de resultado. Registre apenas mudanças confirmadas: [LOCAL:nome], [NPC:nome|função; o que quer; do que tem medo; o que esconde; jeito de falar; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [ITEM:nome do item recebido], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Nunca adicione algo apenas mencionado. Não revele segredos a NPCs sem testemunho. Não escreva essas tags no diálogo.`);
   lines.push(buildNarrationDirection(c.narration, c.disp || c.msgs, {
     voices: recentSpeakers(c.disp || c.msgs, c.charName),
     skipConsequence: Boolean(paceCommandOf(c.paceInput)),
@@ -1066,6 +1068,8 @@ export default function RPG() {
       chapters: save.chapters || [],
       turn: save.turn || 0,
       lastOffscreenTurn: save.lastOffscreenTurn || 0,
+      threat: save.threat ?? null,
+      midpointTurn: save.midpointTurn || 0,
       lastProgressTurn: save.lastProgressTurn ?? save.turn ?? 0,
       places: save.places || [],
       gameSystem: save.gameSystem || active.gameSystem,
@@ -1723,6 +1727,7 @@ export default function RPG() {
         lastProgressTurn: progressed ? nextTurn : (Number(camp.lastProgressTurn) || 0),
         ...(systemResult.system ? { gameSystem: systemResult.system } : {}),
         lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
+        ...dramaPatch(camp, raw, nextTurn),
         ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
       };
@@ -1841,7 +1846,7 @@ export default function RPG() {
       items: [],
       hp: 100,
       gameTime: defaultTime,
-      clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, lastProgressTurn: 0, places: [], achievements: [],
+      clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, threat: null, midpointTurn: 0, lastProgressTurn: 0, places: [], achievements: [],
       systemSkills: [],
       gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", level: 1, kills: 0, purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],

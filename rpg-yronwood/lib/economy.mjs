@@ -1,7 +1,8 @@
 import { specialAbilityDirection } from "./special-ability.mjs";
 import { appearanceForGm } from './appearance.mjs';
 import { gmBriefLines } from './gm-brief.mjs';
-import { storyProgressLines } from './story-progress.mjs';
+import { storyProgressLines, isOffscreenDue } from './story-progress.mjs';
+import { dramaPromptLines } from './drama.mjs';
 import { systemPromptLines } from './game-system.mjs';
 import { pacingDirection } from './pacing.mjs';
 import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
@@ -40,6 +41,7 @@ export function economyPrompt(c, lore, calendar) {
     `ESTADO: ${JSON.stringify({ hp: c.hp, level: c.level, experience: c.experience ?? 0, attributes: c.attributes, skills: c.skills || {}, items: c.items, missions: c.missions, plots: c.plots, relationships: c.relationships, worldState: c.worldState, temporalEffects: c.temporalEffects })}`,
     plotPromptLines(c.plots),
     ...storyProgressLines(c, { short: true }),
+    ...dramaPromptLines(c, { short: true, busy: isOffscreenDue(c) }),
     ...systemPromptLines(c, { short: true }),
     plotDirection(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",
@@ -50,7 +52,7 @@ export function economyPrompt(c, lore, calendar) {
     'A câmera é o jogador ("você"): magnética, atrás/dentro dos olhos. Vale em toda campanha, inclusive save antigo. Primeiro sujeito gramatical = campo sensorial (mão, ombro, visão). NPCs a partir de você (À sua frente…, canto do olho); proibido "o subordinado" / "o transeunte" / figura encapuzada como protagonista. Feche o turno.',
     'Mesmo curto: narração visceral — menos frases, não menos corpo. Comece na ação do jogador; comece na ação do jogador com detalhe sensorial revelador e suspense pelo corpo. Ancoragem biológica sob tensão, específica desta cena; em calma um sinal basta. Sentidos crus tirados do lugar real (nada de gosto de bile, pé na lama ou suor frio como muleta). Visão de túnel, não panorama. Ação desajeitada. Frases curtas e secas. PROIBIDO: assustador, aterrorizante, caótico, épico, horrível. Nunca fale, pense ou decida pelo jogador; nunca fale ou sinta pelo jogador. Se o turno anterior já usou um desses detalhes, troque o objeto e o gesto.',
     'Ação incerta: [TESTE:Força|DC:12] ou Destreza, Mente, Carisma. DC 8 fácil, 12 normal, 16 difícil, 20 extremo. Interrompa e aguarde o total que o jogo enviar. Narre 1 = falha crítica, 20 = sucesso crítico, senão sucesso / parcial / falha. Não invente faixas 1-5/16-20.',
-    `Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [LOCAL:nome], [NPC:nome|função; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.`,
+    `Registre somente fatos novos confirmados: [ITEM:nome recebido], [MISSÃO:objetivo], [CONCLUÍDA:objetivo], [TRAMA:título|gancho], [TRAMA_FIM:título], [XP:n], [HP:+n] ou [HP:-n], [LOCAL:nome], [NPC:nome|função; o que quer, teme e esconde; personalidade/voz; local; fatos], [PROMESSA:descrição], [SEGREDO:fato e quem sabe], [RELAÇÃO:Nome|Atitude], ${identityTagList()}. Atualize NPCs existentes sem recriá-los. Não revele segredos sem evidência.`,
     'Se a atitude de um NPC mudar, emita [RELAÇÃO:Nome|Atitude] (Hostil, Suspeito, Neutral, Amigável) só na mudança — não a cada turno. Nunca escreva a tag no diálogo.',
     'Conceda XP só por vitória confirmada, missão concluída ou risco inteligente — 5–25 em geral, nunca por andar ou conversar. Não mencione XP na narração.',
     'Ferimento ou cura clara na cena: tag oculta [HP:-8] ou [HP:+12] (somente com sinal). Não a cada turno. A 0 HP, narre desmaio/inconsciência — o jogador não morre automaticamente a menos que o mundo o mate; aguarde o jogador ou o Mestre.',

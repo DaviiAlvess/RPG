@@ -10,7 +10,7 @@ import NarrationSettings from "./NarrationSettings";
 import Head from "next/head";
 import NarrativeContent from "./NarrativeContent";
 import AppearanceCreator, { PortraitImage } from "./AppearanceCreator";
-import { RecapModal, EndingScreen, TensionMeter, AmbienceControl } from "./StoryModals";
+import { RecapModal, EndingScreen, TensionMeter, ThreatChip, AmbienceControl } from "./StoryModals";
 import { npcPortraitUrl } from "../lib/appearance.mjs";
 import { asClueList } from "../lib/story-progress.mjs";
 import { suggestActions } from "../lib/codex.mjs";
@@ -539,6 +539,7 @@ export default function PlayView(props) {
 
           <div className="story-strip">
             {c.gmBrief || (c.tension ?? 0) > 0 ? <TensionMeter value={c.tension ?? 0} /> : null}
+            <ThreatChip threat={c.threat} />
             {c.gameSystem?.enabled ? (
               <button type="button" className="story-chip story-chip-sys" onClick={() => setPlayPanel("system")} title="Abrir o Sistema">
                 <i className="ti ti-device-gamepad-2" /> Nv {c.gameSystem.level || 1} · Rank {c.gameSystem.rank || "E"} · {c.gameSystem.points || 0} pts

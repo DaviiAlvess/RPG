@@ -60,8 +60,8 @@ test('Os seis estilos mudam a orientação e preservam escolhas e regras', () =>
     assert.ok(config.instruction.includes('canto do olho'));
     assert.equal(/^o (transeunte|mensageiro)/i.test(config.sample.trim()), false);
   }
-  assert.ok(buildNarrationDirection({ length: 'balanced' }).includes('200–320'));
-  assert.ok(buildNarrationDirection({ length: 'rich' }).includes('300–450'));
+  assert.ok(buildNarrationDirection({ length: 'balanced' }).includes('250–400'));
+  assert.ok(buildNarrationDirection({ length: 'rich' }).includes('400–600'));
 });
 test('buildStartPrompt nunca usa a receita antiga de 3 elementos', () => {
   const camps = [

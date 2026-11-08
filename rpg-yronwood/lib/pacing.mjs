@@ -161,7 +161,7 @@ export function detectScene({ action = "", lastGm = "", tension = 0, pendingTest
   return scene;
 }
 
-const BASE_WORDS = { short: [80, 140], balanced: [200, 320], rich: [300, 450] };
+const BASE_WORDS = { short: [90, 150], balanced: [250, 400], rich: [400, 600] };
 const round10 = (n) => Math.max(40, Math.round(n / 10) * 10);
 
 /** Faixa de palavras desta cena, a partir do tamanho escolhido nos Ajustes. */

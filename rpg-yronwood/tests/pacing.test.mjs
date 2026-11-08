@@ -39,9 +39,9 @@ test('comandos de ritmo do jogador', () => {
 });
 
 test('tamanho acompanha a cena e o tamanho escolhido', () => {
-  assert.deepEqual(wordsFor('balanced', 'combate'), [120, 190]);
-  assert.deepEqual(wordsFor('balanced', 'exploracao'), [200, 320]);
-  assert.deepEqual(wordsFor('short', 'combate'), [50, 80]);
+  assert.deepEqual(wordsFor('balanced', 'combate'), [150, 240]);
+  assert.deepEqual(wordsFor('balanced', 'exploracao'), [250, 400]);
+  assert.deepEqual(wordsFor('short', 'combate'), [50, 90]);
   const [lo, hi] = wordsFor('rich', 'contemplacao');
   assert.ok(lo > 300 && hi > 450);
   for (const key of Object.keys(SCENES)) assert.ok(SCENES[key].rhythm && SCENES[key].focus && SCENES[key].ending, key);
@@ -50,7 +50,7 @@ test('tamanho acompanha a cena e o tamanho escolhido', () => {
 test('bloco do Mestre traz ritmo, tamanho, fechamento variado e corte de cena', () => {
   const combat = pacingDirection({ narration: { length: 'balanced' } }, { action: 'Ataco o capitão' });
   assert.match(combat, /TEMPO DESTA CENA — COMBATE/);
-  assert.match(combat, /120–190 palavras/);
+  assert.match(combat, /150–240 palavras/);
   assert.match(combat, /nem toda resposta termina com alguém te encarando/);
   const travel = pacingDirection({}, { action: 'Partimos para Porto Real' });
   assert.match(travel, /VIAGEM/);

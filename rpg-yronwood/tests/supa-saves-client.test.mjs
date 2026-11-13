@@ -27,3 +27,18 @@ test('envio ao Supabase vai compactado e volta igual', async () => {
   assert.deepEqual(await readLoadedCampaign({ data: camp }), camp);
   assert.equal(await gunzipBase64(zlib.gzipSync(Buffer.from('olá')).toString('base64')), 'olá');
 });
+
+test('escolha de onde salvar fica guardada por jogador e muda o status', async () => {
+  const { readSaveMode, writeSaveMode } = await import('../lib/supa-saves-client.mjs');
+  const mem = new Map();
+  const storage = { getItem: (k) => (mem.has(k) ? mem.get(k) : null), setItem: (k, v) => mem.set(k, String(v)) };
+  assert.equal(readSaveMode(storage, 'ana'), 'cloud');
+  writeSaveMode(storage, 'ana', 'local');
+  assert.equal(readSaveMode(storage, 'ana'), 'local');
+  assert.equal(readSaveMode(storage, 'bia'), 'cloud');
+  writeSaveMode(storage, 'ana', 'qualquer');
+  assert.equal(readSaveMode(storage, 'ana'), 'cloud');
+  assert.equal(readSaveMode({ getItem: () => { throw new Error('bloqueado'); } }, 'ana'), 'cloud');
+  assert.equal(cloudStatusText({ mode: 'local', local: true, firebase: 'fail' }), 'Salvo neste aparelho');
+  assert.equal(cloudStatusText({ mode: 'local', local: false }), 'Falha ao salvar neste aparelho');
+});

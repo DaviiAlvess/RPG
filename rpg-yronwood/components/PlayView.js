@@ -494,6 +494,8 @@ export default function PlayView(props) {
     onSetPartyTurn,
     onEndCombat,
     cloudErrors = {},
+    saveMode = "cloud",
+    onChangeSaveMode,
     onRetryCloud,
     onTestOnline,
     onlineCheck,
@@ -690,7 +692,7 @@ export default function PlayView(props) {
                 <h2>{panel.label}</h2>
               </div>
               <p title={panelSubtitle}>{panelSubtitle}</p>
-              {/pendente|Falha/.test(String(props.saveStatus || "")) && onRetryCloud ? (
+              {saveMode !== "local" && /pendente|Falha/.test(String(props.saveStatus || "")) && onRetryCloud ? (
                 <button type="button" className="save-indicator save-retry" onClick={onRetryCloud} title={[cloudErrors.firebase && `Firebase: ${cloudErrors.firebase}`, cloudErrors.supabase && `Supabase: ${cloudErrors.supabase}`].filter(Boolean).join(" · ") || "Tentar salvar na nuvem de novo"}>
                   <i className="ti ti-cloud-upload" aria-hidden="true" /> {props.saveStatus} · tentar de novo
                 </button>
@@ -1616,22 +1618,38 @@ export default function PlayView(props) {
                 <span>Exportar aventura para livro</span>
               </button>
               <div className="settings-block">
-                <div className="section-label">Nuvem e conexão</div>
-                <p className="panel-sub">A história fica salva neste aparelho e em duas nuvens. Cada jogador só tem acesso às próprias histórias.{lastSaved ? <> Última gravação na nuvem: {fmtTime(lastSaved)}.</> : null}</p>
-                <ul className="online-check">
-                  {[["firebase", "Nuvem 1 (Firebase)"], ["supabase", "Nuvem 2 (Supabase)"]].map(([key, label]) => (
-                    <li key={key} className={cloudErrors[key] ? "bad" : "ok"}>
-                      <i className={`ti ${cloudErrors[key] ? "ti-alert-triangle" : "ti-cloud-check"}`} aria-hidden="true" />
-                      <span>
-                        <strong>{label}</strong>
-                        <small>{cloudErrors[key] ? `Falhou: ${cloudErrors[key]}` : "Sem erro na última gravação."}</small>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <div className="section-label">Onde salvar</div>
+                <div className="save-mode-options" role="radiogroup" aria-label="Onde salvar as histórias">
+                  <label className="economy-setting">
+                    <input type="radio" name="save-mode" checked={saveMode !== "local"} onChange={() => onChangeSaveMode?.("cloud")} />
+                    <span><strong>Nuvem e aparelho{saveMode !== "local" ? " · ativo" : ""}</strong><small>Salva aqui e em duas nuvens protegidas. Dá para continuar em outro celular e nada se perde se o navegador for limpo.</small></span>
+                  </label>
+                  <label className="economy-setting">
+                    <input type="radio" name="save-mode" checked={saveMode === "local"} onChange={() => onChangeSaveMode?.("local")} />
+                    <span><strong>Só neste aparelho{saveMode === "local" ? " · ativo" : ""}</strong><small>Nada novo vai para a nuvem. Se limpar o navegador ou trocar de celular, a história se perde. O espaço do navegador é pequeno para histórias muito longas.</small></span>
+                  </label>
+                </div>
+                {saveMode === "local" ? (
+                  <p className="settings-hint">As cópias que já estavam na nuvem continuam lá, só não são mais atualizadas. Salas online continuam usando a nuvem da sala.</p>
+                ) : (
+                  <>
+                    <p className="panel-sub">Cada jogador só tem acesso às próprias histórias.{lastSaved ? <> Última gravação na nuvem: {fmtTime(lastSaved)}.</> : null}</p>
+                    <ul className="online-check">
+                      {[["firebase", "Nuvem 1 (Firebase)"], ["supabase", "Nuvem 2 (Supabase)"]].map(([key, label]) => (
+                        <li key={key} className={cloudErrors[key] ? "bad" : "ok"}>
+                          <i className={`ti ${cloudErrors[key] ? "ti-alert-triangle" : "ti-cloud-check"}`} aria-hidden="true" />
+                          <span>
+                            <strong>{label}</strong>
+                            <small>{cloudErrors[key] ? `Falhou: ${cloudErrors[key]}` : "Sem erro na última gravação."}</small>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
                 <button className="settings-action" onClick={onRetryCloud} type="button">
                   <i className="ti ti-cloud-upload" />
-                  <span>Salvar na nuvem agora</span>
+                  <span>{saveMode === "local" ? "Mandar uma cópia desta história para a nuvem" : "Salvar na nuvem agora"}</span>
                 </button>
                 <button className="settings-action" onClick={onTestOnline} type="button" disabled={onlineCheck?.running}>
                   <i className="ti ti-plug-connected" />

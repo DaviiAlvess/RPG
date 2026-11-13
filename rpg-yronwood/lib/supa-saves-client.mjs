@@ -55,7 +55,8 @@ export async function readLoadedCampaign(reply) {
 }
 
 /** Monta a frase do status a partir do estado de cada nuvem. */
-export function cloudStatusText({ firebase = "idle", supabase = "idle", local = false, conflict = false } = {}) {
+export function cloudStatusText({ firebase = "idle", supabase = "idle", local = false, conflict = false, mode = "cloud" } = {}) {
+  if (mode === "local") return local ? "Salvo neste aparelho" : "Falha ao salvar neste aparelho";
   if (conflict) return "Nuvem mais recente — reabra a campanha";
   const ok = [firebase === "ok" && "Firebase", supabase === "ok" && "Supabase"].filter(Boolean);
   const syncing = firebase === "sync" || supabase === "sync";
@@ -63,4 +64,19 @@ export function cloudStatusText({ firebase = "idle", supabase = "idle", local = 
   if (ok.length === 1) return `Salvo na nuvem (${ok[0]})${syncing ? " · sincronizando…" : ""}`;
   if (syncing) return local ? "Salvo neste aparelho · sincronizando…" : "Sincronizando…";
   return local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente";
+}
+
+// Onde o jogador quer salvar, escolhido por aparelho: "cloud" (aparelho + nuvens) ou "local" (só o aparelho).
+export const SAVE_MODES = { cloud: "Nuvem e aparelho", local: "Só neste aparelho" };
+export const saveModeKey = (uid) => `rpg-save-mode:${uid || "anon"}`;
+export function readSaveMode(storage, uid) {
+  try {
+    const v = storage?.getItem(saveModeKey(uid));
+    return v === "local" ? "local" : "cloud";
+  } catch {
+    return "cloud";
+  }
+}
+export function writeSaveMode(storage, uid, mode) {
+  try { storage?.setItem(saveModeKey(uid), mode === "local" ? "local" : "cloud"); } catch {}
 }

@@ -781,3 +781,9 @@ button:disabled { cursor: not-allowed; }
 .online-check li.ok > .ti { color: #7fc493; }
 .online-check li.bad > .ti { color: #e0a24a; }
 .room-warning { margin: 0; padding: 8px 10px; border-radius: 10px; font-size: 13px; background: rgba(224, 162, 74, .1); border: 1px solid rgba(224, 162, 74, .4); }
+
+/* Onde salvar */
+.save-mode-options { display: flex; flex-direction: column; gap: 8px; }
+.save-mode-options .economy-setting { margin: 0; }
+.save-mode-pick { display: flex; align-items: center; gap: 8px; margin: 0 20px 12px; font-size: 14px; color: var(--text-secondary, inherit); }
+.save-mode-pick select { font: inherit; padding: 5px 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text, inherit); }

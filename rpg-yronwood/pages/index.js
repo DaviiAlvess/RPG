@@ -40,7 +40,7 @@ import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
 import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload } from "../lib/rooms.mjs";
-import { buildSaveBody, readLoadedCampaign, cloudStatusText, canGzip } from "../lib/supa-saves-client.mjs";
+import { buildSaveBody, readLoadedCampaign, cloudStatusText, canGzip, readSaveMode, writeSaveMode } from "../lib/supa-saves-client.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
@@ -514,6 +514,10 @@ export default function RPG() {
   const supaRunRef = useRef(null);
   const supaIndexRef = useRef(new Map());
   const supaBackfillRef = useRef(false);
+  const localFullWarnedRef = useRef(false);
+  // Onde salvar (escolha do jogador neste aparelho): "cloud" ou "local".
+  const [saveMode, setSaveModeState] = useState("cloud");
+  const saveModeRef = useRef("cloud");
   const [authMessage, setAuthMessage] = useState(null);
 
   const gameTimeRef = useRef(gameTime);
@@ -650,7 +654,7 @@ export default function RPG() {
     } else setCloudOk(false);
     setIdx(fb || sb ? merged : local);
     // Primeira vez nesta sessão: manda para o Supabase as histórias deste aparelho que ainda não estão lá.
-    if (sb && !supaBackfillRef.current) {
+    if (sb && !supaBackfillRef.current && saveModeRef.current !== "local") {
       supaBackfillRef.current = true;
       let queued = 0;
       for (const item of merged) {
@@ -738,7 +742,10 @@ export default function RPG() {
     (async () => {
       const userId = getUserId(user);
       if (!userId) return;
-      await migrateLocalCampaigns(userId);
+      const mode = readSaveMode(window.localStorage, userId);
+      saveModeRef.current = mode;
+      setSaveModeState(mode);
+      if (mode !== "local") await migrateLocalCampaigns(userId);
       await reloadCampaigns(userId);
       const { cloudListTemplates } = await import("../lib/rpg-cloud");
       const tpl = await cloudListTemplates();
@@ -848,7 +855,7 @@ export default function RPG() {
   // A nuvem falhou: guarda o motivo para mostrar na tela e no relatório de problemas (uma vez por motivo).
   const showCloudStatus = () => {
     const st = cloudStateRef.current;
-    setSaveStatus(cloudStatusText(st));
+    setSaveStatus(cloudStatusText({ ...st, mode: saveModeRef.current }));
     if (st.firebase === "ok" || st.supabase === "ok") setCloudOk(true);
     else if (st.firebase === "fail" && st.supabase !== "sync") setCloudOk(false);
   };
@@ -916,13 +923,24 @@ export default function RPG() {
   };
   const flushSupaSave = () => supaRunRef.current?.();
 
-  const saveCamp = useCallback(async (id, d) => {
+  const saveCamp = useCallback(async (id, d, { forceCloud = false } = {}) => {
     if (!user) return { ok: false, local: false };
     const persistId = id || d?.id;
     const snapshot = buildCampaignSnapshot(d, { id: persistId });
     if (!snapshot) return { ok: false, local: false };
     let local = false;
     try { localStorage.setItem(campKey(snapshot.id), JSON.stringify(snapshot)); local = true; } catch {}
+    // "Só neste aparelho": nada vai para a nuvem (a não ser que o jogador mande na mão).
+    if (saveModeRef.current === "local" && !forceCloud) {
+      cloudStateRef.current.local = local;
+      showCloudStatus();
+      if (local) setLastSaved(Date.now());
+      else if (!localFullWarnedRef.current) {
+        localFullWarnedRef.current = true;
+        showNotification("Este aparelho ficou sem espaço para salvar a história. Ligue a nuvem em Ajustes para não perder o progresso.", "error", { duration: 12000 });
+      }
+      return { ok: local, local, localOnly: true };
+    }
     const st = cloudStateRef.current;
     st.local = local;
     st.conflict = false;
@@ -1138,7 +1156,7 @@ export default function RPG() {
     if (!active) return;
     try {
       const result = await saveCamp(active.id, buildCampaignSnapshot(active));
-      if (!silent) showNotification(result?.ok ? "Jogo salvo na nuvem!" : result?.local ? "Salvo neste aparelho. A nuvem será tentada novamente." : "Não foi possível salvar.", result?.ok ? "success" : "warning");
+      if (!silent) showNotification(result?.localOnly ? (result.ok ? "Jogo salvo neste aparelho." : "Não deu para salvar neste aparelho (sem espaço).") : result?.ok ? "Jogo salvo na nuvem!" : result?.local ? "Salvo neste aparelho. A nuvem será tentada novamente." : "Não foi possível salvar.", result?.ok ? "success" : "warning");
       if (!result?.ok || silent) return;
       if (soundEnabled) {
         const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
@@ -1348,7 +1366,7 @@ export default function RPG() {
 
   const retryCloudSave = async () => {
     if (!active) return;
-    const fb = await saveCamp(active.id, active);
+    const fb = await saveCamp(active.id, active, { forceCloud: true });
     const sb = await flushSupaSave();
     const okNames = [fb?.ok && "Firebase", sb?.ok && "Supabase"].filter(Boolean);
     if (okNames.length === 2) showNotification("História salva nas duas nuvens.", "success");
@@ -1358,6 +1376,29 @@ export default function RPG() {
       const why = [fb?.error && `Firebase: ${fb.error}`, sb?.error && `Supabase: ${sb.error}`].filter(Boolean).join(" · ");
       showNotification(`Não salvou na nuvem. ${why || "Erro desconhecido."}`, "error", { duration: 10000 });
     }
+  };
+
+  const changeSaveMode = async (mode) => {
+    const next = mode === "local" ? "local" : "cloud";
+    if (next === saveModeRef.current) return;
+    saveModeRef.current = next;
+    setSaveModeState(next);
+    writeSaveMode(window.localStorage, getUserId(user), next);
+    localFullWarnedRef.current = false;
+    if (next === "local") {
+      // Larga o que estava na fila para a nuvem.
+      const q = supaQueueRef.current;
+      if (q.timer) { clearTimeout(q.timer); q.timer = null; }
+      q.pending.clear();
+      cloudStateRef.current = { ...cloudStateRef.current, firebase: "idle", supabase: cloudStateRef.current.supabase === "off" ? "off" : "idle", conflict: false };
+      showCloudStatus();
+      showNotification("Pronto: as histórias agora ficam só neste aparelho.", "info", { duration: 7000 });
+      return;
+    }
+    showNotification("Nuvem ligada: as histórias voltam a ser salvas na nuvem.", "success");
+    supaBackfillRef.current = false;
+    if (active) await saveCamp(active.id, active);
+    await reloadCampaigns(getUserId(user));
   };
 
   // Testa cada peça do jogo online e explica o que falta.
@@ -3032,7 +3073,15 @@ export default function RPG() {
             <span className="user-email" title={user.email}>{user.email}</span>
             <button type="button" className="btn-logout" onClick={handleSignOut}>Sair</button>
           </div>
-          {!cloudOk ? (
+          <label className="save-mode-pick">
+            <i className={`ti ${saveMode === "local" ? "ti-device-mobile" : "ti-cloud"}`} aria-hidden="true" />
+            <span>Salvar em</span>
+            <select value={saveMode} onChange={(e) => changeSaveMode(e.target.value)} aria-label="Onde salvar as histórias">
+              <option value="cloud">Nuvem e aparelho</option>
+              <option value="local">Só neste aparelho</option>
+            </select>
+          </label>
+          {!cloudOk && saveMode !== "local" ? (
             <div className="auth-alert auth-alert-warning" style={{ margin: "0 20px 12px" }}>
               A nuvem não aceitou o save. As aventuras continuam neste aparelho; dá para jogar.
               {cloudErrors.firebase ? <><br /><small>Firebase: {cloudErrors.firebase}</small></> : null}
@@ -3224,6 +3273,8 @@ export default function RPG() {
       onUpdateParty={updateParty}
       onEndCombat={endCombat}
       cloudErrors={cloudErrors}
+      saveMode={saveMode}
+      onChangeSaveMode={changeSaveMode}
       onRetryCloud={retryCloudSave}
       onTestOnline={testOnline}
       onlineCheck={onlineCheck}

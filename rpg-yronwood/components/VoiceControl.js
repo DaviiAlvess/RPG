@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createNarrator, readVoicePrefs, VOICE_PREF_KEY } from "../lib/voice-narration.mjs";
+import { parseNarrativeBlocks } from "../lib/dialogueFormat";
+
+/** Narração em partes: texto do narrador e falas de cada personagem (cada um com sua voz). */
+const segmentsOf = (text) => parseNarrativeBlocks(String(text || "")).map((b) => ({ text: b.text || "", speaker: b.type === "dialogue" ? b.speaker : "" })).filter((s) => s.text.trim());
+const speakText = (n, text, prefs) => (n.speakSegments ? n.speakSegments(segmentsOf(text), prefs) || n.speak(text, prefs) : n.speak(text, prefs));
 
 let narrator = null;
 const getNarrator = () => {
@@ -27,7 +32,7 @@ export function ListenButton({ text }) {
   const n = getNarrator();
   if (!n?.supported) return null;
   return (
-    <button type="button" className="listen-btn" onClick={() => n.speak(text, loadPrefs())} title="Ouvir esta parte" aria-label="Ouvir esta parte da narração">
+    <button type="button" className="listen-btn" onClick={() => speakText(n, text, loadPrefs())} title="Ouvir esta parte" aria-label="Ouvir esta parte da narração">
       <i className="ti ti-volume" aria-hidden="true" />
     </button>
   );
@@ -66,7 +71,7 @@ export default function VoiceControl({ disp }) {
     if (!last || last.streaming) return;
     if (last.text !== seen.current) {
       seen.current = last.text;
-      if (prefs.auto) getNarrator()?.speak(last.text, prefs);
+      if (prefs.auto) { const n = getNarrator(); if (n) speakText(n, last.text, prefs); };
     }
   }, [disp, prefs]);
 
@@ -103,7 +108,7 @@ export default function VoiceControl({ disp }) {
           <div className="voice-actions">
             {speaking
               ? <button type="button" className="btn-ghost" onClick={() => getNarrator()?.stop()}><i className="ti ti-player-stop" /> Parar</button>
-              : <button type="button" className="btn-ghost" onClick={() => getNarrator()?.speak(lastGm(disp), prefs)} disabled={!lastGm(disp)}><i className="ti ti-player-play" /> Ouvir a última cena</button>}
+              : <button type="button" className="btn-ghost" onClick={() => { const n = getNarrator(); if (n) speakText(n, lastGm(disp), prefs); }} disabled={!lastGm(disp)}><i className="ti ti-player-play" /> Ouvir a última cena</button>}
           </div>
         </div>
       ) : null}

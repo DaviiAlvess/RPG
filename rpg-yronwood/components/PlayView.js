@@ -20,6 +20,106 @@ const CodexPanel = dynamic(() => import("./CodexPanel"), { loading: () => <p cla
 const SystemPanel = dynamic(() => import("./SystemPanel"), { loading: () => <p className="panel-sub">Abrindo o Sistema…</p> });
 import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
+import { asCombat, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
+
+/** Botão de refazer na última resposta do Mestre, com o jeito da nova versão. */
+function RedoMenu({ styles = [], onRedo }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="redo-wrap">
+      <button type="button" className="listen-btn redo-btn" onClick={() => setOpen((v) => !v)} aria-expanded={open} title="Refazer esta resposta" aria-label="Refazer esta resposta do Mestre">
+        <i className="ti ti-refresh" aria-hidden="true" />
+      </button>
+      {open ? (
+        <span className="redo-menu" role="menu">
+          {styles.map((st) => (
+            <button key={st.id} type="button" role="menuitem" onClick={() => { setOpen(false); onRedo?.(st.id); }}>
+              <i className={`ti ${st.icon}`} aria-hidden="true" /> {st.label}
+            </button>
+          ))}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** Inimigos em cena e ações rápidas (preenchem a caixa de texto). */
+function CombatBar({ campaign, onPick }) {
+  const state = asCombat(campaign?.combat);
+  const [target, setTarget] = useState("");
+  if (!state) return null;
+  const actions = combatActions(campaign, target);
+  return (
+    <div className="combat-bar" role="region" aria-label="Combate em curso">
+      <div className="combat-enemies">
+        <i className="ti ti-swords" aria-hidden="true" />
+        {state.enemies.map((e) => (
+          <button key={e.name} type="button" className={`enemy-chip ${ENEMY_STATUSES[e.status].tone} ${target === e.name ? "on" : ""}`} onClick={() => setTarget(target === e.name ? "" : e.name)} title="Escolher como alvo">
+            {e.name}<small>{ENEMY_STATUSES[e.status].label}</small>
+          </button>
+        ))}
+      </div>
+      <div className="combat-actions">
+        {actions.map((a) => (
+          <button key={a.id} type="button" className="combat-action" onClick={() => onPick(a.text)}>
+            <i className={`ti ${a.icon}`} aria-hidden="true" /> {a.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Quem joga agora (grupo no mesmo aparelho). */
+function PartyTurn({ campaign, onSetTurn }) {
+  const roster = partyRoster(campaign);
+  if (roster.length < 2) return null;
+  const actor = partyActor(campaign);
+  const index = roster.findIndex((p) => p.id === actor.id);
+  return (
+    <div className="party-turn" role="group" aria-label="Vez de jogar">
+      <i className="ti ti-users" aria-hidden="true" />
+      <span>Vez de</span>
+      <select value={index} onChange={(e) => onSetTurn?.(Number(e.target.value))} aria-label="Escolher quem joga agora">
+        {roster.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** Ajustes: companheiros de mesa no mesmo aparelho. */
+function PartyEditor({ campaign, onUpdate }) {
+  const party = Array.isArray(campaign?.party) ? campaign.party : [];
+  const [name, setName] = useState("");
+  const [concept, setConcept] = useState("");
+  const add = () => {
+    if (!name.trim()) return;
+    onUpdate?.([...party, { id: `p${Date.now().toString(36)}`, name: name.trim(), concept: concept.trim() }]);
+    setName(""); setConcept("");
+  };
+  return (
+    <div className="party-editor">
+      <p className="panel-sub">Jogue com amigos no mesmo aparelho: cada um tem o próprio personagem e o Mestre alterna a vez.</p>
+      {party.length ? (
+        <ul className="party-list">
+          {party.map((p) => (
+            <li key={p.id}>
+              <strong>{p.name}</strong>{p.concept ? <span> — {p.concept}</span> : null}
+              <button type="button" className="btn-ghost" onClick={() => onUpdate?.(party.filter((x) => x.id !== p.id))} aria-label={`Tirar ${p.name} do grupo`}><i className="ti ti-x" aria-hidden="true" /></button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {party.length < 5 ? (
+        <div className="party-add">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do personagem" maxLength={40} aria-label="Nome do novo jogador" />
+          <input value={concept} onChange={(e) => setConcept(e.target.value)} placeholder="Quem é (ex.: arqueira caçadora de recompensas)" maxLength={200} aria-label="Quem é o personagem" />
+          <button type="button" className="settings-action" onClick={add} disabled={!name.trim()}><i className="ti ti-user-plus" /> <span>Adicionar à mesa</span></button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 import { hasDialogueBlocks, isDialogueHeavy } from "../lib/dialogueFormat";
 import { fmtTime, attrMod, relationClass } from "../lib/rpg-ui-helpers";
 import {
@@ -311,6 +411,14 @@ export default function PlayView(props) {
     toggleTheme,
     executeTimeSkip,
     exportToBook,
+    canRedo,
+    redoStyles,
+    onRedo,
+    problemCount,
+    onCopyProblems,
+    onClearProblems,
+    onUpdateParty,
+    onSetPartyTurn,
     saveSlot,
     loadSlot,
     deleteSlot,
@@ -694,8 +802,8 @@ export default function PlayView(props) {
                         )
                       )}
                       <div className={talky ? "msg-scene" : undefined}>
-                        {isUser && c?.charName && !hasDialogueBlocks(message?.text) ? (
-                          <div className="msg-speaker">{c.charName}</div>
+                        {isUser && (message?.speaker || c?.charName) && !hasDialogueBlocks(message?.text) ? (
+                          <div className="msg-speaker">{message?.speaker || c.charName}</div>
                         ) : null}
                         <div className={talky ? "msg-scene-body" : "msg-bubble"}>
                           {isError ? (
@@ -707,6 +815,7 @@ export default function PlayView(props) {
                         {timeLabel || (!isUser && !isError && !message?.streaming) ? (
                           <div className="msg-time">
                             {!isUser && !isError && !message?.streaming ? <ListenButton text={message?.text} /> : null}
+                            {canRedo && !isUser && !isError && index === disp.length - 1 ? <RedoMenu styles={redoStyles} onRedo={onRedo} /> : null}
                             {timeLabel}
                           </div>
                         ) : null}
@@ -731,6 +840,8 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
+              <CombatBar campaign={c} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
+              <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} />
               <div className="chat-input-row">
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
@@ -1393,6 +1504,24 @@ export default function PlayView(props) {
                 <i className="ti ti-book-download" />
                 <span>Exportar aventura para livro</span>
               </button>
+              <div className="settings-block">
+                <div className="section-label">Jogar em grupo</div>
+                <PartyEditor campaign={c} onUpdate={onUpdateParty} />
+              </div>
+              <div className="settings-block">
+                <div className="section-label">Problemas registrados ({problemCount || 0})</div>
+                <p className="panel-sub">Quando algo falha, o jogo anota aqui. Copie o relatório e cole na conversa para o defeito ser achado e corrigido.</p>
+                <button className="settings-action" onClick={onCopyProblems} type="button" disabled={!problemCount}>
+                  <i className="ti ti-clipboard-text" />
+                  <span>Copiar relatório de problemas</span>
+                </button>
+                {problemCount ? (
+                  <button className="settings-action" onClick={onClearProblems} type="button">
+                    <i className="ti ti-trash" />
+                    <span>Limpar registro</span>
+                  </button>
+                ) : null}
+              </div>
               <button className="settings-action" onClick={saveSlot} type="button">
                 <i className="ti ti-bookmark-plus" />
                 <span>Criar save slot</span>

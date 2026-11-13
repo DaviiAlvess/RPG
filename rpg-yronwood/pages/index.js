@@ -39,6 +39,7 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
+import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, applyCombatTags, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
@@ -71,7 +72,7 @@ const extractItems = (text) => {
   return matches.map(m => m[1].trim());
 };
 const cleanText = (t) =>
-  stripDramaTags(stripSystemTags(stripStoryTags(stripIdentityTags(
+  stripCombatTags(stripDramaTags(stripSystemTags(stripStoryTags(stripIdentityTags(
     normalizeDialogueText(
       stripTimeSkipTags(
         stripHpTags(
@@ -80,7 +81,7 @@ const cleanText = (t) =>
         )
       )
     )
-  ))).trim());
+  ))).trim()));
 const uid = () => `c${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 const fmtDate = (ts) =>
   ts ? new Date(ts).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "2-digit" }) : "";
@@ -189,6 +190,8 @@ const buildPromptBody = (c, loreExtra, gameTime) => {
     ...storyProgressLines(c),
     ...dramaPromptLines(c, { busy: isOffscreenDue(c) }),
     ...loreNotesLines(c, c.loreFocus),
+    ...partyPromptLines(c),
+    ...combatPromptLines(c),
     ...systemPromptLines(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
@@ -401,6 +404,7 @@ export default function RPG() {
   const [active, setActive] = useState(null);
   // Versão mais recente da campanha, para respostas que chegam depois de o jogador comprar, abrir o baú etc.
   const activeRef = useRef(null);
+  const turnSnapshotRef = useRef(null);
   useEffect(() => { activeRef.current = active; }, [active]);
   const [step, setStep]     = useState(0);
   const [form, setForm]     = useState({
@@ -724,6 +728,7 @@ export default function RPG() {
 
   // ─── Storage (cache local + nuvem Firebase por conta) ─────────────
   const showNotification = useCallback((text, type = "info", meta = {}) => {
+    if (type === "error" && typeof window !== "undefined") recordError(window.localStorage, { kind: "aviso", message: text, where: meta.where || "" });
     const enriched = { ...meta };
     if (!enriched.undoItem && /item (adicionado|detectado)/i.test(text)) {
       const match = text.match(/(?:adicionado|detectado):\s*(.+)$/i);
@@ -1037,6 +1042,13 @@ export default function RPG() {
   const loadSlot = async (save) => {
     if (!active || !confirm("Carregar este save? O progresso não salvo será perdido.")) return;
     clearAuto();
+    turnSnapshotRef.current = null;
+    await applySave(save);
+    showNotification("Save carregado!", "success");
+  };
+
+  // Volta a campanha para um save (ou para a foto de antes do último turno, ao refazer).
+  const applySave = async (save) => {
     const updated = {
       ...active,
       msgs: save.msgs || [],
@@ -1077,6 +1089,9 @@ export default function RPG() {
       gameSystem: save.gameSystem || active.gameSystem,
       systemSkills: save.systemSkills || [],
       achievements: active.achievements || save.achievements || [],
+      combat: save.combat ?? null,
+      npcSeen: save.npcSeen || active.npcSeen || {},
+      partyTurn: save.partyTurn ?? active.partyTurn ?? 0,
     };
     setActive(updated);
     pendingMasterNoteRef.current = updated.pendingMasterNote || "";
@@ -1094,7 +1109,51 @@ export default function RPG() {
     setInput("");
     setPlayPanel("narrator");
     await saveCamp(active.id, updated);
-    showNotification("Save carregado!", "success");
+    return updated;
+  };
+
+  // ─── Refazer a última resposta do Mestre ─────────────────────────
+  const canRedo = Boolean(
+    turnSnapshotRef.current && active && turnSnapshotRef.current.campId === active.id && !loading &&
+    disp.length && disp[disp.length - 1]?.type === "gm" && !disp[disp.length - 1]?.streaming &&
+    msgs.length === turnSnapshotRef.current.args.baseMsgs.length + 2
+  );
+  const redoLastTurn = async (styleId = "outra") => {
+    const snap = turnSnapshotRef.current;
+    if (!canRedo || !snap || sending.current) return;
+    const previous = disp[disp.length - 1]?.text || "";
+    clearAuto();
+    const restored = await applySave(snap.save);
+    pendingLevelNoteRef.current = [snap.pendingLevelNote, redoNote(styleId, previous)].filter(Boolean).join(" ");
+    await sendMsg(snap.args.text, snap.args.baseMsgs, snap.args.baseDisp, restored, snap.args.lore, false, snap.args.skipPlan);
+  };
+
+  // ─── Relatório de problemas (para copiar e mandar) ───────────────
+  const readProblems = () => (typeof window === "undefined" ? [] : readErrorLog(window.localStorage));
+  const copyProblemReport = async () => {
+    const report = errorReport(readProblems(), { now: Date.now(), agent: navigator.userAgent, campaign: active?.world || "", version: process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || "" });
+    try { await navigator.clipboard.writeText(report); showNotification("Relatório copiado. Cole na conversa para eu ver.", "success"); }
+    catch {
+      const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: "relatorio-rpg.txt" });
+      a.click(); URL.revokeObjectURL(a.href);
+      showNotification("Relatório baixado como arquivo.", "success");
+    }
+  };
+  const clearProblemReport = () => { clearErrorLog(window.localStorage); showNotification("Registro de problemas limpo.", "info"); };
+
+  // ─── Grupo no mesmo aparelho ─────────────────────────────────────
+  const updateParty = (party) => {
+    if (!active) return;
+    const next = { ...active, party: asParty(party), partyTurn: 0 };
+    setActive(next);
+    saveCamp(active.id, next);
+  };
+  const setPartyTurn = (index) => {
+    if (!active) return;
+    const next = { ...active, partyTurn: Math.max(0, index) };
+    setActive(next);
+    saveCamp(active.id, next);
   };
 
   const deleteSlot = (saveId) => {
@@ -1165,8 +1224,14 @@ export default function RPG() {
     if (!active) return;
     const html = buildBookHtml({ ...active, level }, { disp, missions });
     const w = window.open("", "_blank");
-    if (w) { w.document.write(html); w.document.close(); }
-    else alert("Permita pop-ups neste site para gerar o livro.");
+    if (w) { w.document.write(html); w.document.close(); return; }
+    // Pop-up bloqueado: baixa o livro como arquivo (abre em qualquer navegador e imprime em PDF).
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const name = `${String(active.charName || "aventura").replace(/[^\p{L}\p{N}]+/gu, "-").toLowerCase()}-livro.html`;
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    showNotification("Livro baixado. Abra o arquivo para ler ou imprimir em PDF.", "success");
   };
 
   // ─── Auto mode ────────────────────────────────────────────────────
@@ -1522,7 +1587,9 @@ export default function RPG() {
     const isStartBeat = isStartBeatMessage(text);
     const isTestResult = /^Resultado do teste\b/i.test(text.trim());
     const paceKind = paceCommandOf(text);
-    const playerDisplay = formatPlayerTurnDisplay(text, camp?.charName);
+    // Grupo no mesmo aparelho: "[Nome] ação" mostra o nome de quem agiu.
+    const actorTag = partyRoster(camp).length > 1 ? text.match(/^\[([^\]]{1,60})\]\s*/) : null;
+    const playerDisplay = formatPlayerTurnDisplay(actorTag ? text.slice(actorTag[0].length) : text, actorTag ? actorTag[1] : camp?.charName);
     const newMsgs = [...baseMsgs, { role: "user", content: text }];
     const newDisp = [
       ...baseDisp,
@@ -1531,10 +1598,19 @@ export default function RPG() {
         : [{
             type: paceKind ? "pace_ctx" : isTimeSkipContext || isMasterBeat || isStartBeat ? "time_skip_ctx" : (isAuto ? "auto" : "user"),
             ...(paceKind ? { pace: paceKind } : {}),
+            ...(actorTag ? { speaker: actorTag[1] } : {}),
             text: paceKind ? paceDisplay(text) : skipPlan?.intent ? `${skipPlan.separator.text} · Foco: ${skipPlan.intent.focus}\nPlano: ${skipPlan.intent.intention || "Seguir a rotina atual, sem assumir compromissos novos."}` : isSystemBeat ? systemBeatDisplay() : isMasterBeat ? masterBeatDisplay() : isStartBeat ? startBeatDisplay() : isTimeSkipContext ? text.replace(/^\[|\]$/g, "") : playerDisplay,
           }]),
     ];
     setMsgs(newMsgs); setDisp(newDisp);
+    // Foto do turno: "Refazer" volta exatamente para cá (XP, itens e vida não contam duas vezes).
+    turnSnapshotRef.current = {
+      campId: camp.id,
+      args: { text, baseMsgs, baseDisp, lore, skipPlan },
+      save: { ...buildCampaignSnapshot(camp), msgs: baseMsgs, disp: baseDisp, hp: camp.hp ?? hp, img: sceneImg, missions: asMissionList(camp.missions ?? missions), plots: asPlotList(camp.plots), items: asItemList(camp.items), relationships: { ...(camp.relationships || {}) }, combat: camp.combat ?? null, npcSeen: camp.npcSeen || {}, partyTurn: camp.partyTurn || 0 },
+      pendingLevelNote: pendingLevelNoteRef.current,
+      done: false,
+    };
     let retryCamp = camp;
     let pendingLevelNote = "";
     let pendingMasterNote = "";
@@ -1589,7 +1665,7 @@ export default function RPG() {
       // Enquanto o Mestre narrava, o jogador pode ter comprado, aberto o baú ou falado com o Mestre.
       // Parte do estado MAIS RECENTE para nada disso sumir quando a resposta chega.
       const latest = activeRef.current && String(activeRef.current.id) === String(camp.id) ? activeRef.current : camp;
-      const LIVE_FIELDS = ["gameSystem", "items", "systemSkills", "bodyChanges", "appearance", "attributes", "skills", "masterChat", "masterAgreements", "era", "eraChecked", "level", "experience", "loreNotes", "loreTried", "lore", "loreContextAt"];
+      const LIVE_FIELDS = ["party", "gameSystem", "items", "systemSkills", "bodyChanges", "appearance", "attributes", "skills", "masterChat", "masterAgreements", "era", "eraChecked", "level", "experience", "loreNotes", "loreTried", "lore", "loreContextAt"];
       for (const key of LIVE_FIELDS) if (latest[key] !== undefined && latest[key] !== camp[key]) camp = { ...camp, [key]: latest[key] };
       const lists = storyListsFor(camp.id, camp, { activeId: camp.id, items: camp.items, missions, plots: latest.plots || camp.plots });
       const updatedMissions = parseMissions(raw, lists.missions);
@@ -1772,6 +1848,9 @@ export default function RPG() {
         ...(systemResult.system ? { gameSystem: systemResult.system } : {}),
         lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
         ...dramaPatch(camp, raw, nextTurn),
+        combat: applyCombatTags(camp.combat, raw, nextTurn),
+        npcSeen: updateNpcSeen({ ...camp, worldState: nextWorldState ?? camp.worldState }, raw, nextTurn),
+        partyTurn: actorTag ? nextPartyTurn(camp) : (camp.partyTurn || 0),
         ...(newEnding ? { ending: newEnding } : {}),
         updatedAt: Date.now(),
       };
@@ -1828,6 +1907,7 @@ export default function RPG() {
       setMsgs(baseMsgs); setDisp(baseDisp); setInput(text);
       const waitSec = baseMsgs.length === 0 ? 0 : Math.min(300, Math.max(0, Number(error.retryAfter) || 0));
       setFailedAction({ text, baseMsgs, baseDisp, camp: retryCamp, lore, skipPlan, errorMessage: error.message, retryAt: Date.now() + waitSec * 1000 });
+      recordError(window.localStorage, { kind: "narração", code: error.code || error.status || "", message: error.message, where: camp.economyMode ? "economia" : "narração" });
       showNotification(error.message || "Erro ao contatar o Mestre. Sua ação foi preservada.", "error");
       if (autoRef.current) {
         const delayMs = Math.max(autoDelay * 1000, waitSec * 1000 || 0);
@@ -1878,12 +1958,13 @@ export default function RPG() {
 
     if (failedAction && (input === failedAction.text || (failedAction.skipPlan && input.trim().startsWith("[O jogador avançou o tempo:")))) {
       sendMsg(input, failedAction.baseMsgs, failedAction.baseDisp, failedAction.camp, failedAction.lore, false, failedAction.skipPlan);
-    } else sendMsg(input, msgs, disp, active, campLore, false);
+    } else sendMsg(actorPrefix(active, input), msgs, disp, active, campLore, false);
   };
 
   const resetChat = async () => {
     if (!active || !confirm("Recomeçar do início? O histórico será apagado.")) return;
     clearAuto(); setAutoMode(false); autoRef.current = false;
+    turnSnapshotRef.current = null;
     const defaultTime = createDefaultGameTime();
     const updated = {
       ...active,
@@ -1896,6 +1977,7 @@ export default function RPG() {
       hp: 100,
       gameTime: defaultTime,
       clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, threat: null, midpointTurn: 0, lastProgressTurn: 0, places: [], achievements: [],
+      combat: null, npcSeen: {}, partyTurn: 0,
       systemSkills: [],
       gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", level: 1, kills: 0, purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],
@@ -2186,6 +2268,15 @@ export default function RPG() {
     if (sys.lastRestockDay === day) throw new Error("A loja já renovou hoje. Volte amanhã na história.");
     await expandShopForRank(active, sys.rank, { restockDay: day });
   };
+
+  // Registro de erros do site (fica no aparelho; o jogador copia o relatório em Ajustes).
+  useEffect(() => {
+    const onError = (e) => recordError(window.localStorage, { kind: "script", message: e?.message || String(e?.error || ""), where: `${e?.filename || ""}:${e?.lineno || ""}`.replace(/^.*\//, ""), stack: e?.error?.stack });
+    const onReject = (e) => recordError(window.localStorage, { kind: "promessa", message: e?.reason?.message || String(e?.reason || ""), stack: e?.reason?.stack });
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onReject);
+    return () => { window.removeEventListener("error", onError); window.removeEventListener("unhandledrejection", onReject); };
+  }, []);
 
   // Campanhas de obra conhecida já em andamento: refaz a lore uma vez, agora com o recorte da história.
   const loreRefreshRef = useRef(new Set());
@@ -2717,6 +2808,14 @@ export default function RPG() {
       toggleTheme={toggleTheme}
       executeTimeSkip={executeTimeSkip}
       exportToBook={exportToBook}
+      canRedo={canRedo}
+      redoStyles={REDO_STYLES}
+      onRedo={redoLastTurn}
+      problemCount={readProblems().length}
+      onCopyProblems={copyProblemReport}
+      onClearProblems={clearProblemReport}
+      onUpdateParty={updateParty}
+      onSetPartyTurn={setPartyTurn}
       saveSlot={saveSlot}
       loadSlot={loadSlot}
       deleteSlot={deleteSlot}

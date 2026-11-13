@@ -71,6 +71,30 @@ export function readVoicePrefs(storage) {
 }
 
 /** Narrador único da página: falar uma nova mensagem cancela a anterior. */
+/** Hash estável do nome: o mesmo personagem sempre recebe a mesma voz. */
+const nameHash = (name) => {
+  let h = 0;
+  for (const ch of String(name || "").toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+};
+
+/**
+ * Voz de cada fala: o narrador usa a voz escolhida; cada personagem ganha uma voz
+ * própria (outra voz em português, se houver) e um tom diferente, sempre o mesmo.
+ */
+export function speakerVoice(speaker, voices = [], prefs = DEFAULT_VOICE_PREFS) {
+  const base = pickVoice(voices, prefs.voiceURI);
+  if (!speaker) return { voice: base, pitch: prefs.pitch || 1, rate: prefs.rate || 1 };
+  const h = nameHash(speaker);
+  const pt = sortVoices(voices).filter((v) => /^pt/i.test(v.lang || ""));
+  const pool = pt.length > 1 ? pt : [];
+  const voice = pool.length ? pool[h % pool.length] : base;
+  const pitches = [0.8, 0.9, 1.1, 1.2, 1.3, 0.85, 1.15];
+  const pitch = Math.min(1.5, Math.max(0.5, (prefs.pitch || 1) * pitches[h % pitches.length]));
+  const rate = Math.min(1.6, Math.max(0.6, (prefs.rate || 1) * (0.94 + (h % 5) * 0.03)));
+  return { voice, pitch, rate };
+}
+
 export function createNarrator(synth = typeof window !== "undefined" ? window.speechSynthesis : null, Utterance = typeof window !== "undefined" ? window.SpeechSynthesisUtterance : null) {
   let token = 0;
   const listeners = new Set();
@@ -83,6 +107,30 @@ export function createNarrator(synth = typeof window !== "undefined" ? window.sp
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     voices() { return synth ? sortVoices(synth.getVoices()) : []; },
     stop() { token++; if (synth) synth.cancel(); emit(false); },
+    /** Lê partes em sequência: [{ text, speaker }] — narração na voz do narrador, falas na voz de cada um. */
+    speakSegments(segments = [], prefs = DEFAULT_VOICE_PREFS) {
+      if (!synth || !Utterance) return false;
+      const all = synth.getVoices();
+      const parts = [];
+      for (const seg of segments) {
+        const plan = speakerVoice(seg.speaker, all, prefs);
+        for (const chunk of chunkForSpeech(seg.text)) parts.push({ chunk, ...plan });
+      }
+      if (!parts.length) return false;
+      const my = ++token;
+      synth.cancel();
+      emit(true);
+      parts.forEach((p, i) => {
+        const u = new Utterance(p.chunk);
+        if (p.voice) { u.voice = p.voice; u.lang = p.voice.lang; } else u.lang = "pt-BR";
+        u.rate = p.rate;
+        u.pitch = p.pitch;
+        if (i === parts.length - 1) u.onend = () => { if (my === token) emit(false); };
+        u.onerror = () => { if (my === token) emit(false); };
+        synth.speak(u);
+      });
+      return true;
+    },
     speak(text, prefs = DEFAULT_VOICE_PREFS) {
       if (!synth || !Utterance) return false;
       const chunks = chunkForSpeech(text);

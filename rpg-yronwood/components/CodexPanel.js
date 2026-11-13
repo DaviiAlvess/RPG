@@ -13,7 +13,17 @@ export default function CodexPanel({ campaign }) {
   const choices = asChoiceList(c.choices);
   const npcs = c.worldState?.npcs || {};
   const rel = c.relationships || {};
-  const people = [...new Set([...Object.keys(npcs), ...Object.keys(rel)])];
+  const seen = c.npcSeen || {};
+  const turn = Number(c.turn) || 0;
+  const loreNotes = c.loreNotes || {};
+  const loreOf = (name) => {
+    const n = name.toLowerCase();
+    const key = Object.keys(loreNotes).find((k) => k.toLowerCase() === n || k.toLowerCase().endsWith(` ${n}`) || n.endsWith(` ${k.toLowerCase()}`));
+    return key ? loreNotes[key] : "";
+  };
+  // Quem apareceu por último vem primeiro.
+  const people = [...new Set([...Object.keys(npcs), ...Object.keys(rel)])]
+    .sort((a, b) => (seen[b]?.turn ?? -1) - (seen[a]?.turn ?? -1));
   const achievements = achievementView(c);
   const unlocked = achievements.filter((a) => a.unlocked).length;
   const current = c.worldState?.location || "";
@@ -42,6 +52,8 @@ export default function CodexPanel({ campaign }) {
                     {rel[name] ? <span className={`codex-attitude ${ATTITUDE_CLASS[rel[name]] || ""}`}>{rel[name]}</span> : null}
                   </div>
                   {npcs[name] ? <p>{npcs[name]}</p> : null}
+                  {loreOf(name) ? <p className="codex-lore"><i className="ti ti-book-2" aria-hidden="true" /> {loreOf(name)}</p> : null}
+                  {seen[name] ? <p className="codex-seen">{seen[name].turn >= turn - 1 ? "Em cena agora" : `Visto pela última vez há ${Math.max(1, turn - seen[name].turn)} ${turn - seen[name].turn === 1 ? "cena" : "cenas"}`}{seen[name].place ? ` · ${seen[name].place}` : ""}</p> : null}
                 </div>
               </div>
             ))}

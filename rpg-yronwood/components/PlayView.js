@@ -45,21 +45,63 @@ function RedoMenu({ styles = [], onRedo }) {
   );
 }
 
+// Como a barra de combate aparece neste aparelho: completa, compacta (uma linha) ou escondida.
+const COMBAT_BAR_KEY = "rpg-combat-bar";
+const COMBAT_BAR_MODES = { full: "Completa", compact: "Compacta", off: "Escondida" };
+const COMBAT_BAR_ORDER = ["full", "compact", "off"];
+function readCombatBarMode() {
+  try {
+    const saved = localStorage.getItem(COMBAT_BAR_KEY);
+    if (COMBAT_BAR_MODES[saved]) return saved;
+    // No celular a tela é curta: começa recolhida.
+    return window.matchMedia?.("(max-width: 640px)")?.matches ? "compact" : "full";
+  } catch {
+    return "full";
+  }
+}
+
 /** Inimigos em cena e ações rápidas (preenchem a caixa de texto). */
-function CombatBar({ campaign, onPick }) {
+function CombatBar({ campaign, mode = "full", onMode, onEnd, onPick }) {
   const state = asCombat(campaign?.combat);
   const [target, setTarget] = useState("");
-  if (!state) return null;
+  if (!state || mode === "off") return null;
+  const standing = state.enemies.filter((e) => !["down", "flee"].includes(ENEMY_STATUSES[e.status].tone));
+  const endButton = onEnd ? (
+    <button type="button" className="combat-icon-btn" onClick={onEnd} title="Encerrar luta" aria-label="Encerrar luta e tirar a barra">
+      <i className="ti ti-x" aria-hidden="true" />
+    </button>
+  ) : null;
+  if (mode === "compact") {
+    return (
+      <div className="combat-bar compact" role="region" aria-label="Combate em curso">
+        <button type="button" className="combat-summary" onClick={() => onMode?.("full")} aria-expanded="false" title="Mostrar inimigos e ações">
+          <i className="ti ti-swords" aria-hidden="true" />
+          <strong>Combate</strong>
+          <span className="combat-names">{standing.length ? standing.map((e) => e.name).join(", ") : "ninguém de pé"}</span>
+          <i className="ti ti-chevron-up" aria-hidden="true" />
+        </button>
+        {endButton}
+      </div>
+    );
+  }
   const actions = combatActions(campaign, target);
   return (
     <div className="combat-bar" role="region" aria-label="Combate em curso">
-      <div className="combat-enemies">
-        <i className="ti ti-swords" aria-hidden="true" />
-        {state.enemies.map((e) => (
-          <button key={e.name} type="button" className={`enemy-chip ${ENEMY_STATUSES[e.status].tone} ${target === e.name ? "on" : ""}`} onClick={() => setTarget(target === e.name ? "" : e.name)} title="Escolher como alvo">
-            {e.name}<small>{ENEMY_STATUSES[e.status].label}</small>
+      <div className="combat-head">
+        <div className="combat-enemies">
+          <i className="ti ti-swords" aria-hidden="true" />
+          {state.enemies.map((e) => (
+            <button key={e.name} type="button" className={`enemy-chip ${ENEMY_STATUSES[e.status].tone} ${target === e.name ? "on" : ""}`} onClick={() => setTarget(target === e.name ? "" : e.name)} title="Escolher como alvo">
+              {e.name}<small>{ENEMY_STATUSES[e.status].label}</small>
+            </button>
+          ))}
+        </div>
+        <div className="combat-tools">
+          <button type="button" className="combat-icon-btn" onClick={() => onMode?.("compact")} aria-expanded="true" title="Recolher" aria-label="Recolher a barra de combate">
+            <i className="ti ti-chevron-down" aria-hidden="true" />
           </button>
-        ))}
+          {endButton}
+        </div>
       </div>
       <div className="combat-actions">
         {actions.map((a) => (
@@ -334,6 +376,13 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
 
 export default function PlayView(props) {
   const [masterChatOpen, setMasterChatOpen] = useState(false);
+  const [combatBarMode, setCombatBarModeState] = useState("full");
+  useEffect(() => { setCombatBarModeState(readCombatBarMode()); }, []);
+  const setCombatBarMode = (mode) => {
+    if (!COMBAT_BAR_MODES[mode]) return;
+    setCombatBarModeState(mode);
+    try { localStorage.setItem(COMBAT_BAR_KEY, mode); } catch { /* sem armazenamento: vale só nesta sessão */ }
+  };
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
     const update = () => setRetrySeconds(Math.max(0, Math.ceil(((props.failedAction?.retryAt || 0) - Date.now()) / 1000)));
@@ -423,6 +472,7 @@ export default function PlayView(props) {
     onClearProblems,
     onUpdateParty,
     onSetPartyTurn,
+    onEndCombat,
     myUid,
     roomBusy,
     onCreateRoom,
@@ -849,7 +899,7 @@ export default function PlayView(props) {
                 <div ref={bottomRef} />
               </div>
 
-              <CombatBar campaign={c} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
+              <CombatBar campaign={c} mode={combatBarMode} onMode={setCombatBarMode} onEnd={onEndCombat} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
               <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
               {c.roomId && !isMyTurn(c, myUid) ? (
                 <div className="room-wait" role="status"><i className="ti ti-hourglass" aria-hidden="true" /> Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>. A história atualiza sozinha quando ele jogar.</div>
@@ -1449,6 +1499,24 @@ export default function PlayView(props) {
                 <p className="settings-hint">
                   A história segue sozinha, inclusive rolando testes. Só para quando você clicar em <strong>Intervir agora</strong> ou desligar o auto.
                 </p>
+              ) : null}
+
+              <div className="settings-item">
+                <div className="settings-item-label">
+                  <i className="ti ti-swords" />
+                  <span>Barra de combate</span>
+                </div>
+                <button
+                  className={`settings-toggle ${combatBarMode !== "off" ? "on" : ""}`}
+                  onClick={() => setCombatBarMode(COMBAT_BAR_ORDER[(COMBAT_BAR_ORDER.indexOf(combatBarMode) + 1) % COMBAT_BAR_ORDER.length])}
+                  type="button"
+                  title="Tocar para trocar: completa, compacta ou escondida"
+                >
+                  {COMBAT_BAR_MODES[combatBarMode]}
+                </button>
+              </div>
+              {combatBarMode === "off" ? (
+                <p className="settings-hint">A barra não aparece, mas o Mestre continua acompanhando a luta normalmente.</p>
               ) : null}
 
               <div className="settings-item">

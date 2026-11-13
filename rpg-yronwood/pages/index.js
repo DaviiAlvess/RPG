@@ -1308,6 +1308,14 @@ export default function RPG() {
     setActive(next);
     saveCamp(active.id, next);
   };
+  // O jogador encerra a luta à mão quando o Mestre esquece de fechar o combate.
+  const endCombat = () => {
+    if (!active?.combat) return;
+    const next = { ...active, combat: null };
+    setActive(next);
+    saveCamp(active.id, next);
+    if (next.roomId && isMyTurn(next, user?.uid)) void pushRoom(next, { keepTurn: true });
+  };
   const setPartyTurn = (index) => {
     if (!active) return;
     const next = { ...active, partyTurn: Math.max(0, index) };
@@ -2983,6 +2991,7 @@ export default function RPG() {
       onCopyProblems={copyProblemReport}
       onClearProblems={clearProblemReport}
       onUpdateParty={updateParty}
+      onEndCombat={endCombat}
       onSetPartyTurn={active?.roomId ? (index) => { const m = (active.roomMembers || [])[index]; if (m) setRoomTurn(m.uid); } : setPartyTurn}
       myUid={user?.uid || ""}
       roomBusy={roomBusy}

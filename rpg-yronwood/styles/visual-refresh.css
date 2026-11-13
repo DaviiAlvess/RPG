@@ -722,6 +722,18 @@ button:disabled { cursor: not-allowed; }
 .enemy-chip.on { outline: 2px solid #d98a72; outline-offset: 1px; }
 .combat-action { display: inline-flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255, 255, 255, .03); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
 .combat-action:hover, .combat-action:focus-visible { border-color: #d98a72; }
+.combat-head { display: flex; align-items: flex-start; gap: 6px; }
+.combat-head .combat-enemies { flex: 1; min-width: 0; }
+.combat-tools { display: flex; gap: 4px; flex-shrink: 0; }
+.combat-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary, inherit); font-size: 16px; cursor: pointer; flex-shrink: 0; }
+.combat-icon-btn:hover, .combat-icon-btn:focus-visible { border-color: #d98a72; color: inherit; }
+/* Versão compacta: uma linha só */
+.combat-bar.compact { flex-direction: row; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 12px; }
+.combat-summary { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 5px 0; border: 0; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.combat-summary .ti-swords { color: #d98a72; }
+.combat-summary strong { font-weight: 600; }
+.combat-names { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary, inherit); }
+.combat-bar.compact .combat-icon-btn { width: 28px; height: 28px; border-color: transparent; }
 
 /* Grupo no mesmo aparelho */
 .party-turn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; color: var(--text-secondary); }

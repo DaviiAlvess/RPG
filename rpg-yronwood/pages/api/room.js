@@ -174,8 +174,55 @@ export async function handleRoomAction(db, uid, body = {}) {
   throw httpError(400, "Ação desconhecida.", "BAD_ACTION");
 }
 
+const DEFAULT_RTDB_URL = "https://siterpg32-default-rtdb.firebaseio.com";
+
+/**
+ * Situação do modo online (salas no Supabase) e do banco da nuvem (Firebase),
+ * para o jogo explicar o que falta. Não devolve nenhuma chave nem dado de jogador.
+ */
+export async function onlineStatus(env = process.env, fetchImpl = fetch) {
+  const timed = (url, opts = {}) => fetchImpl(url, { ...opts, signal: AbortSignal.timeout(8000) });
+  const out = { rooms: { configured: false, ok: false, detail: "" }, cloud: { ok: false, open: false, status: 0, detail: "" } };
+  try {
+    const db = supabaseRest(env, timed);
+    out.rooms.configured = true;
+    await db.select("rpg_rooms", "select=id&limit=1");
+    out.rooms.ok = true;
+    out.rooms.detail = "Servidor ligado ao banco das salas.";
+  } catch (error) {
+    out.rooms.detail = error.name === "TimeoutError" ? "O Supabase não respondeu (o projeto pode estar pausado)." : String(error.message || "Erro no Supabase").slice(0, 200);
+  }
+  try {
+    const base = String(env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || DEFAULT_RTDB_URL).replace(/\/$/, "");
+    const res = await timed(`${base}/.json?shallow=true`);
+    out.cloud.status = res.status;
+    const text = (await res.text()).slice(0, 400);
+    let message = text;
+    try { message = JSON.parse(text)?.error || text; } catch {}
+    if (res.status === 401) {
+      out.cloud.ok = true;
+      out.cloud.detail = "Banco da nuvem ligado e fechado para quem não está logado.";
+    } else if (res.status === 200) {
+      out.cloud.ok = true;
+      out.cloud.open = true;
+      out.cloud.detail = "Banco da nuvem ligado, mas aberto para qualquer pessoa ler.";
+    } else {
+      out.cloud.detail = String(message || `Firebase respondeu ${res.status}`).slice(0, 200);
+    }
+  } catch (error) {
+    out.cloud.detail = error.name === "TimeoutError" ? "O banco da nuvem não respondeu." : String(error.message || "Erro no Firebase").slice(0, 200);
+  }
+  return out;
+}
+
 export default async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
+  if (req.method === "GET") {
+    const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "?").split(",")[0].trim();
+    const rate = takeRateLimit(`room-status:${ip}`, { limit: 20 });
+    if (!rate.ok) return res.status(429).json({ error: "Espere alguns segundos.", code: "RATE_LIMIT" });
+    return res.status(200).json(await onlineStatus());
+  }
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
   let uid;
   try {

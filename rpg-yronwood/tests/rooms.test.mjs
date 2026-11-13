@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRoomAction, supabaseRest } from '../pages/api/room.js';
+import { handleRoomAction, supabaseRest, onlineStatus } from '../pages/api/room.js';
 import { newRoomCode, roomCampaignPayload, nextTurnUid, roomPartyFields, isMyTurn, inviteLink, normalizeRoomCode } from '../lib/rooms.mjs';
 import { partyActor, actorPrefix } from '../lib/play-extras.mjs';
 
@@ -82,4 +82,32 @@ test('regras puras das salas e servidor sem chave avisa o que falta', () => {
   assert.equal(big.img, undefined);
   assert.equal(big.disp.length, 400);
   assert.throws(() => supabaseRest({}), /SUPABASE_SECRET_KEY/);
+});
+
+test('situação do online: diz o que falta sem expor a chave', async () => {
+  const reply = (status, body) => ({ ok: status < 300, status, text: async () => JSON.stringify(body) });
+  // sem chave do Supabase; Firebase ligado e fechado
+  let seen = [];
+  let st = await onlineStatus({}, async (url) => { seen.push(url); return reply(401, { error: 'Permission denied' }); });
+  assert.equal(st.rooms.configured, false);
+  assert.equal(st.rooms.ok, false);
+  assert.match(st.rooms.detail, /SUPABASE_SECRET_KEY/);
+  assert.equal(st.cloud.ok, true);
+  assert.equal(st.cloud.open, false);
+  assert.ok(seen.every((u) => !u.includes('rest/v1')));
+  // chave certa
+  st = await onlineStatus({ SUPABASE_SECRET_KEY: 'sb_secret_abc' }, async (url) => url.includes('rest/v1') ? reply(200, []) : reply(401, { error: 'Permission denied' }));
+  assert.equal(st.rooms.ok, true);
+  assert.ok(!JSON.stringify(st).includes('sb_secret_abc'));
+  // chave errada e banco desligado
+  st = await onlineStatus({ SUPABASE_SECRET_KEY: 'sb_publishable_x' }, async (url) => url.includes('rest/v1') ? reply(401, { message: 'Invalid API key' }) : reply(423, { error: 'The Firebase database has been disabled.' }));
+  assert.equal(st.rooms.configured, true);
+  assert.equal(st.rooms.ok, false);
+  assert.match(st.rooms.detail, /Invalid API key/);
+  assert.equal(st.cloud.ok, false);
+  assert.match(st.cloud.detail, /disabled/);
+  // banco aberto para qualquer um
+  st = await onlineStatus({}, async () => reply(200, { users: true }));
+  assert.equal(st.cloud.open, true);
+  assert.ok(!JSON.stringify(st).includes('users'));
 });

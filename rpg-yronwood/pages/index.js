@@ -502,6 +502,10 @@ export default function RPG() {
   const [authBusy, setAuthBusy] = useState(false);
   const [firebaseOk, setFirebaseOk] = useState(true);
   const [cloudOk, setCloudOk] = useState(true);
+  const [cloudError, setCloudError] = useState("");
+  const [onlineCheck, setOnlineCheck] = useState(null);
+  const [serverOnline, setServerOnline] = useState(null);
+  const lastCloudErrorRef = useRef("");
   const [authMessage, setAuthMessage] = useState(null);
 
   const gameTimeRef = useRef(gameTime);
@@ -804,6 +808,17 @@ export default function RPG() {
     };
   }, [active, msgs, disp, hp, missions, sceneImg, campLore, charInitialAge, gameTime, temporalEffects, timelineEvents, experience, level, attributes, skills]);
 
+  // A nuvem falhou: guarda o motivo para mostrar na tela e no relatório de problemas (uma vez por motivo).
+  const noteCloudFailure = (result = {}) => {
+    setCloudOk(false);
+    const message = result.error || "A nuvem não aceitou o save.";
+    setCloudError(message);
+    if (lastCloudErrorRef.current !== message) {
+      lastCloudErrorRef.current = message;
+      recordError(window.localStorage, { kind: "nuvem", code: result.code, message, where: "salvar na nuvem" });
+    }
+  };
+
   const saveCamp = useCallback(async (id, d) => {
     if (!user) return { ok: false, local: false };
     const persistId = id || d?.id;
@@ -816,13 +831,14 @@ export default function RPG() {
       try {
         const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
         const result = await cloudSaveCampaign(snapshot);
-        if (result.ok) { setLastSaved(Date.now()); setSaveStatus("Salvo na nuvem"); setCloudOk(true); }
+        if (result.ok) { setLastSaved(Date.now()); setSaveStatus("Salvo na nuvem"); setCloudOk(true); setCloudError(""); lastCloudErrorRef.current = ""; }
         else {
-          if (!result.conflict) setCloudOk(false);
+          if (!result.conflict) noteCloudFailure(result);
           setSaveStatus(result.conflict ? "Nuvem mais recente — reabra a campanha" : local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
         }
         return { ...result, local };
       } catch (error) {
+        noteCloudFailure({ code: "CLOUD_ERROR", error: error.message });
         setSaveStatus(local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
         return { ok: false, local, error: error.message };
       }
@@ -1189,6 +1205,59 @@ export default function RPG() {
   };
   const syncFromRoomRef = useRef(syncFromRoom);
   syncFromRoomRef.current = syncFromRoom;
+
+  // Situação do servidor: salas online (Supabase) e banco da nuvem (Firebase).
+  const loadServerStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/room", { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const status = res.ok ? data : { error: data.error || `O servidor respondeu ${res.status}.` };
+      setServerOnline(status);
+      return status;
+    } catch (error) {
+      const status = { error: "Não deu para falar com o servidor do jogo." };
+      setServerOnline(status);
+      return status;
+    }
+  }, []);
+  useEffect(() => { if (user) loadServerStatus(); }, [user, loadServerStatus]);
+
+  const retryCloudSave = async () => {
+    if (!active) return;
+    const result = await saveCamp(active.id, active);
+    if (result?.ok) showNotification("História salva na nuvem.", "success");
+    else if (result?.conflict) showNotification(result.error, "warning", { duration: 8000 });
+    else showNotification(`Não salvou na nuvem: ${result?.error || "erro desconhecido"}${result?.fix ? ` ${result.fix}` : ""}`, "error", { duration: 10000 });
+  };
+
+  // Testa cada peça do jogo online e explica o que falta.
+  const testOnline = async () => {
+    setOnlineCheck({ running: true, items: [] });
+    const items = [];
+    items.push({ id: "conta", label: "Conta", ok: Boolean(user), detail: user ? "Você está logado." : "Você não está logado.", fix: user ? "" : "Entre na sua conta." });
+    const net = typeof navigator === "undefined" || navigator.onLine !== false;
+    items.push({ id: "internet", label: "Internet", ok: net, detail: net ? "O aparelho está conectado." : "O aparelho está sem internet.", fix: net ? "" : "Ligue o Wi-Fi ou os dados móveis." });
+    try {
+      const { cloudPing } = await import("../lib/rpg-cloud");
+      const ping = await cloudPing();
+      items.push({ id: "nuvem", label: "Salvar na nuvem (Firebase)", ok: ping.ok, detail: ping.ok ? `Gravou e leu de volta em ${ping.ms} ms.` : ping.error, fix: ping.ok ? "" : ping.fix || "" });
+    } catch (error) {
+      items.push({ id: "nuvem", label: "Salvar na nuvem (Firebase)", ok: false, detail: error.message, fix: "" });
+    }
+    const status = await loadServerStatus();
+    const rooms = status?.rooms || {};
+    items.push({
+      id: "salas",
+      label: "Salas online (Supabase)",
+      ok: Boolean(rooms.ok),
+      detail: rooms.ok ? "O servidor está ligado ao banco das salas." : rooms.detail || status?.error || "O servidor não respondeu.",
+      fix: rooms.ok ? "" : !rooms.configured
+        ? "Na Vercel, crie a variável SUPABASE_SECRET_KEY com a secret key do Supabase e publique o site de novo (Redeploy)."
+        : "Confira se a chave na Vercel é a secret key (sb_secret_…) do projeto certo e se o projeto do Supabase não está pausado.",
+    });
+    for (const it of items) if (!it.ok) recordError(window.localStorage, { kind: "teste online", code: it.id, message: it.detail, where: it.label });
+    setOnlineCheck({ running: false, at: Date.now(), items });
+  };
 
   const createRoom = async () => {
     if (!active || active.roomId || roomBusy) return;
@@ -2814,6 +2883,7 @@ export default function RPG() {
           {!cloudOk ? (
             <div className="auth-alert auth-alert-warning" style={{ margin: "0 20px 12px" }}>
               A nuvem não aceitou o save. As aventuras continuam neste aparelho; dá para jogar.
+              {cloudError ? <><br /><small>Motivo: {cloudError}</small></> : null}
             </div>
           ) : null}
           <div className="camp-list">
@@ -3000,6 +3070,11 @@ export default function RPG() {
       onClearProblems={clearProblemReport}
       onUpdateParty={updateParty}
       onEndCombat={endCombat}
+      cloudError={cloudError}
+      onRetryCloud={retryCloudSave}
+      onTestOnline={testOnline}
+      onlineCheck={onlineCheck}
+      serverOnline={serverOnline}
       onSetPartyTurn={active?.roomId ? (index) => { const m = (active.roomMembers || [])[index]; if (m) setRoomTurn(m.uid); } : setPartyTurn}
       myUid={user?.uid || ""}
       roomBusy={roomBusy}

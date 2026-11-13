@@ -2,6 +2,9 @@ import { get, ref, remove, runTransaction, set } from "firebase/database";
 import { onAuthStateChanged } from "firebase/auth";
 import { ensureFirebaseReady } from "./firebase-browser";
 import { cloudWriteIsStale, interpretSaveTransaction, prepareCampaignForRtdb } from "./rtdb-util";
+import { explainCloudError } from "./cloud-errors.mjs";
+
+export { explainCloudError };
 
 async function waitForUser(auth, timeoutMs = 5000) {
   if (auth.currentUser) return auth.currentUser;
@@ -41,21 +44,28 @@ function campaignRef(db, userId, campaignId) {
   return ref(db, `users/${userId}/campaigns/${String(campaignId)}`);
 }
 
+function withTimeout(promise, ms, label = "timeout") {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error(label), { code: "TIMEOUT" })), ms); }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 export async function cloudSaveCampaign(campaign) {
   const { db, user, error } = await getClient();
-  if (error) return { ok: false, error };
+  if (error) return { ok: false, code: "AUTH", error };
   if (!campaign?.id) return { ok: false, error: "Campanha sem ID." };
 
   try {
     const now = new Date().toISOString();
     const pathRef = campaignRef(db, user.uid, campaign.id);
-    const existingSnap = await get(pathRef);
     const payload = prepareCampaignForRtdb({
       ...campaign,
       id: String(campaign.id),
       updatedAt: campaign.updatedAt || now,
-      createdAt: existingSnap.exists() ? existingSnap.val()?.createdAt || now : now,
     });
+    // Sem baixar a campanha inteira antes: a data de criação vem da própria transação.
     const commit = async () => {
       let staleWrite = false;
       const result = await runTransaction(pathRef, (current) => {
@@ -64,24 +74,33 @@ export async function cloudSaveCampaign(campaign) {
           return;
         }
         staleWrite = false;
-        return payload;
+        return { ...payload, createdAt: current?.createdAt || payload.createdAt || now };
       }, { applyLocally: false });
       return { committed: result.committed, staleWrite };
     };
-    let outcome = await commit();
-    if (!outcome.committed && !outcome.staleWrite) outcome = await commit();
+    let outcome = await withTimeout(commit(), 25000);
+    if (!outcome.committed && !outcome.staleWrite) outcome = await withTimeout(commit(), 25000);
     return interpretSaveTransaction(outcome);
   } catch (err) {
     console.error("cloudSaveCampaign:", err);
-    const code = err.code || "";
-    if (code === "PERMISSION_DENIED" || code === "permission-denied") {
-      return {
-        ok: false,
-        error:
-          "Sem permissão no Realtime Database. Publique firebase/database.rules.json e confirme que está logado.",
-      };
-    }
-    return { ok: false, error: err.message || "Erro ao salvar campanha." };
+    const info = explainCloudError(err);
+    return { ok: false, code: info.code, error: info.error, fix: info.fix };
+  }
+}
+
+/** Teste rápido: grava e lê um valor pequeno na área do jogador. */
+export async function cloudPing() {
+  const started = Date.now();
+  const { db, user, error } = await getClient();
+  if (error) return { ok: false, code: "AUTH", error, fix: "Entre na sua conta e tente de novo." };
+  try {
+    const pingRef = ref(db, `users/${user.uid}/sessao/ping`);
+    await withTimeout(set(pingRef, { at: started }), 12000);
+    const snap = await withTimeout(get(pingRef), 12000);
+    if (snap.val()?.at !== started) throw new Error("A leitura não bateu com a gravação.");
+    return { ok: true, ms: Date.now() - started };
+  } catch (err) {
+    return { ok: false, ...explainCloudError(err) };
   }
 }
 
@@ -90,13 +109,13 @@ export async function cloudLoadCampaign(id) {
   if (error) return { ok: false, error, data: null };
 
   try {
-    const snap = await get(campaignRef(db, user.uid, id));
+    const snap = await withTimeout(get(campaignRef(db, user.uid, id)), 20000);
     if (!snap.exists()) {
       return { ok: false, error: "Campanha não encontrada.", data: null };
     }
     return { ok: true, data: snap.val() };
   } catch (err) {
-    return { ok: false, error: err.message, data: null };
+    return { ok: false, error: explainCloudError(err).error, data: null };
   }
 }
 
@@ -105,7 +124,7 @@ export async function cloudListCampaigns() {
   if (error) return { ok: false, error, data: [] };
 
   try {
-    const snap = await get(campaignsRef(db, user.uid));
+    const snap = await withTimeout(get(campaignsRef(db, user.uid)), 20000);
     if (!snap.exists()) return { ok: true, data: [] };
 
     const data = Object.values(snap.val() || {})
@@ -120,7 +139,7 @@ export async function cloudListCampaigns() {
 
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: err.message, data: [] };
+    return { ok: false, error: explainCloudError(err).error, data: [] };
   }
 }
 

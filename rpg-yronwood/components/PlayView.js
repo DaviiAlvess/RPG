@@ -493,6 +493,11 @@ export default function PlayView(props) {
     onUpdateParty,
     onSetPartyTurn,
     onEndCombat,
+    cloudError,
+    onRetryCloud,
+    onTestOnline,
+    onlineCheck,
+    serverOnline,
     myUid,
     roomBusy,
     onCreateRoom,
@@ -685,7 +690,13 @@ export default function PlayView(props) {
                 <h2>{panel.label}</h2>
               </div>
               <p title={panelSubtitle}>{panelSubtitle}</p>
-              <span className="save-indicator" role="status">{props.saveStatus}</span>
+              {/pendente|Falha/.test(String(props.saveStatus || "")) && onRetryCloud ? (
+                <button type="button" className="save-indicator save-retry" onClick={onRetryCloud} title={cloudError ? `Motivo: ${cloudError}` : "Tentar salvar na nuvem de novo"}>
+                  <i className="ti ti-cloud-upload" aria-hidden="true" /> {props.saveStatus} · tentar de novo
+                </button>
+              ) : (
+                <span className="save-indicator" role="status">{props.saveStatus}</span>
+              )}
               {playPanel === "narrator" ? (
                 <div className="game-time-indicator" title={timeLongLabel}>
                   <i className={`ti ${todIcon}`} />
@@ -1605,8 +1616,38 @@ export default function PlayView(props) {
                 <span>Exportar aventura para livro</span>
               </button>
               <div className="settings-block">
+                <div className="section-label">Nuvem e conexão</div>
+                <p className="panel-sub">
+                  {cloudError
+                    ? <>A nuvem falhou: {cloudError} A história continua salva neste aparelho.</>
+                    : lastSaved ? <>Última gravação na nuvem: {fmtTime(lastSaved)}.</> : <>A história é salva neste aparelho e na nuvem a cada jogada.</>}
+                </p>
+                <button className="settings-action" onClick={onRetryCloud} type="button">
+                  <i className="ti ti-cloud-upload" />
+                  <span>Salvar na nuvem agora</span>
+                </button>
+                <button className="settings-action" onClick={onTestOnline} type="button" disabled={onlineCheck?.running}>
+                  <i className="ti ti-plug-connected" />
+                  <span>{onlineCheck?.running ? "Testando…" : "Testar conexão online"}</span>
+                </button>
+                {onlineCheck?.items?.length ? (
+                  <ul className="online-check">
+                    {onlineCheck.items.map((it) => (
+                      <li key={it.id} className={it.ok ? "ok" : "bad"}>
+                        <i className={`ti ${it.ok ? "ti-circle-check" : "ti-alert-triangle"}`} aria-hidden="true" />
+                        <span>
+                          <strong>{it.label}</strong>
+                          <small>{it.detail}</small>
+                          {it.fix ? <small className="online-fix">O que fazer: {it.fix}</small> : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <div className="settings-block">
                 <div className="section-label">Jogar online com amigos</div>
-                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} />
+                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} serverStatus={serverOnline} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} />
               </div>
               {!c.roomId ? (
                 <div className="settings-block">

@@ -28,13 +28,24 @@ export function RoomJoinModal({ initialCode = "", busy = false, onJoin, onClose 
 }
 
 /** Ajustes: criar a sala online desta campanha, convidar e ver quem está jogando. */
-export function RoomPanel({ campaign, myUid, busy = false, onCreate, onLeave, onSetTurn, onNotify }) {
+export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, onCreate, onLeave, onSetTurn, onNotify }) {
   const c = campaign || {};
+  // O servidor já disse que as salas não funcionam: explica em vez de deixar o botão falhar.
+  const rooms = serverStatus?.rooms;
+  const blocked = Boolean(rooms && !rooms.ok);
   if (!c.roomId) {
     return (
       <div className="room-panel">
         <p className="panel-sub">Jogue online com amigos, cada um no próprio celular. A campanha fica salva na sala e todos veem a mesma história.</p>
-        <button type="button" className="settings-action" onClick={onCreate} disabled={busy}>
+        {blocked ? (
+          <p className="room-warning" role="status">
+            <i className="ti ti-alert-triangle" aria-hidden="true" />{" "}
+            {rooms.configured
+              ? <>As salas ainda não funcionam neste site: {rooms.detail}</>
+              : <>As salas ainda não foram ligadas no servidor. Falta colocar a chave SUPABASE_SECRET_KEY na Vercel e publicar o site de novo.</>}
+          </p>
+        ) : null}
+        <button type="button" className="settings-action" onClick={onCreate} disabled={busy || blocked}>
           <i className="ti ti-world-share" /> <span>{busy ? "Criando sala…" : "Criar sala online desta campanha"}</span>
         </button>
       </div>

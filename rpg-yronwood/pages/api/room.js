@@ -1,0 +1,200 @@
+// pages/api/room.js — salas online no Supabase.
+// O navegador nunca fala com o Supabase direto: esta rota confere o login Firebase do jogador,
+// checa se ele é membro da sala (e se é a vez dele) e só então lê ou grava com a chave secreta.
+import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
+import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember } from "../../lib/rooms.mjs";
+
+export const config = { maxDuration: 30, api: { bodyParser: { sizeLimit: "4mb" } } };
+
+const DEFAULT_SUPABASE_URL = "https://yjcxmuybnehbnndvqfyk.supabase.co";
+const clip = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
+
+function httpError(status, message, code) {
+  const e = new Error(message);
+  e.status = status;
+  e.code = code;
+  return e;
+}
+
+/** Cliente mínimo do PostgREST (REST do Supabase) com a chave secreta, só no servidor. */
+export function supabaseRest(env = process.env, fetchImpl = fetch) {
+  const url = String(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, "");
+  const key = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "";
+  if (!key) throw httpError(503, "O modo online ainda não foi ligado no servidor (falta SUPABASE_SECRET_KEY na Vercel).", "ONLINE_NOT_CONFIGURED");
+  const headers = { apikey: key, "Content-Type": "application/json" };
+  // Chave antiga (JWT "eyJ...") também precisa ir no Authorization.
+  if (key.startsWith("eyJ")) headers.Authorization = `Bearer ${key}`;
+  const call = async (path, { method = "GET", body, prefer } = {}) => {
+    const res = await fetchImpl(`${url}/rest/v1/${path}`, {
+      method,
+      headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
+    if (!res.ok) {
+      const msg = data?.message || data?.error || `Supabase respondeu ${res.status}`;
+      throw httpError(res.status === 409 ? 409 : 502, msg, res.status === 409 ? "CONFLICT" : "ONLINE_ERROR");
+    }
+    return data;
+  };
+  return {
+    select: (table, query) => call(`${table}?${query}`),
+    insert: (table, row) => call(table, { method: "POST", body: row, prefer: "return=representation" }),
+    update: (table, query, patch) => call(`${table}?${query}`, { method: "PATCH", body: patch, prefer: "return=representation" }),
+    remove: (table, query) => call(`${table}?${query}`, { method: "DELETE", prefer: "return=representation" }),
+  };
+}
+
+const eq = (v) => `eq.${encodeURIComponent(String(v))}`;
+const ROOM_FIELDS = "id,code,owner_uid,title,version,turn_uid,status,updated_at";
+
+async function loadMembers(db, roomId) {
+  return (await db.select("rpg_room_members", `room_id=${eq(roomId)}&select=uid,char_name,char_concept,seat&order=seat.asc`)) || [];
+}
+
+async function loadRoom(db, roomId, { withCampaign = true } = {}) {
+  const rows = await db.select("rpg_rooms", `id=${eq(roomId)}&select=${withCampaign ? `${ROOM_FIELDS},campaign` : ROOM_FIELDS}`);
+  const room = rows?.[0];
+  if (!room) throw httpError(404, "Sala não encontrada.", "ROOM_NOT_FOUND");
+  return room;
+}
+
+function requireMember(members, uid) {
+  const me = members.find((m) => m.uid === uid);
+  if (!me) throw httpError(403, "Você não está nesta sala.", "NOT_MEMBER");
+  return me;
+}
+
+const view = (room, members) => ({ room: { ...room, campaign: room.campaign ?? undefined }, members: members.map(cleanMember) });
+
+export async function handleRoomAction(db, uid, body = {}) {
+  const action = String(body.action || "");
+  const now = new Date().toISOString();
+
+  if (action === "create") {
+    const campaign = roomCampaignPayload(body.campaign || {});
+    if (!campaign) throw httpError(413, "Esta campanha está grande demais para virar sala online.", "TOO_LARGE");
+    const charName = clip(body.charName || campaign.charName, 60) || "Jogador 1";
+    let room = null;
+    for (let i = 0; i < 5 && !room; i += 1) {
+      try {
+        [room] = await db.insert("rpg_rooms", { code: newRoomCode(), owner_uid: uid, title: clip(body.title || campaign.world, 160), campaign, turn_uid: uid });
+      } catch (e) {
+        if (e.code !== "CONFLICT") throw e; // código repetido: tenta outro
+      }
+    }
+    if (!room) throw httpError(503, "Não foi possível criar a sala agora.", "ONLINE_ERROR");
+    await db.insert("rpg_room_members", { room_id: room.id, uid, char_name: charName, char_concept: clip(body.charConcept || campaign.charTitle, 200), seat: 0 });
+    return view(room, await loadMembers(db, room.id));
+  }
+
+  if (action === "join") {
+    const code = normalizeRoomCode(body.code);
+    if (!isRoomCode(code)) throw httpError(400, "Código de sala inválido.", "BAD_CODE");
+    const [found] = (await db.select("rpg_rooms", `code=${eq(code)}&select=${ROOM_FIELDS},campaign`)) || [];
+    if (!found || found.status !== "open") throw httpError(404, "Sala não encontrada ou fechada.", "ROOM_NOT_FOUND");
+    let members = await loadMembers(db, found.id);
+    if (!members.some((m) => m.uid === uid)) {
+      if (members.length >= ROOM_MAX_PLAYERS) throw httpError(409, `A sala já tem ${ROOM_MAX_PLAYERS} jogadores.`, "ROOM_FULL");
+      const charName = clip(body.charName, 60);
+      if (!charName) throw httpError(400, "Escolha o nome do seu personagem.", "NAME_REQUIRED");
+      const seat = Math.max(-1, ...members.map((m) => m.seat)) + 1;
+      await db.insert("rpg_room_members", { room_id: found.id, uid, char_name: charName, char_concept: clip(body.charConcept, 200), seat });
+      // Avisa a mesa que alguém chegou (sobe a versão; ninguém perde jogada).
+      await db.update("rpg_rooms", `id=${eq(found.id)}`, { version: found.version + 1, updated_at: now });
+      found.version += 1;
+      members = await loadMembers(db, found.id);
+    }
+    return view(found, members);
+  }
+
+  const roomId = String(body.roomId || "");
+  if (!/^[0-9a-f-]{36}$/i.test(roomId)) throw httpError(400, "Sala inválida.", "BAD_ROOM");
+
+  if (action === "poll") {
+    const room = await loadRoom(db, roomId, { withCampaign: false });
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    const since = Number(body.since) || 0;
+    if (room.version <= since) return { room: { id: room.id, version: room.version, turn_uid: room.turn_uid, status: room.status }, members: members.map(cleanMember), unchanged: true };
+    return view(await loadRoom(db, roomId), members);
+  }
+
+  if (action === "get") {
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    return view(await loadRoom(db, roomId), members);
+  }
+
+  if (action === "push") {
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    const room = await loadRoom(db, roomId, { withCampaign: false });
+    if (room.status !== "open") throw httpError(409, "A sala foi fechada.", "ROOM_CLOSED");
+    if (room.turn_uid && room.turn_uid !== uid) throw httpError(409, "Não é a sua vez.", "NOT_YOUR_TURN");
+    const base = Number(body.baseVersion) || 0;
+    if (base !== room.version) throw httpError(409, "A mesa mudou enquanto você jogava.", "VERSION_CONFLICT");
+    const campaign = roomCampaignPayload(body.campaign || {});
+    if (!campaign) throw httpError(413, "A campanha ficou grande demais para sincronizar.", "TOO_LARGE");
+    const turn = body.keepTurn ? uid : nextTurnUid(members, uid);
+    // Só grava se a versão ainda for a mesma (dois aparelhos ao mesmo tempo: o segundo recebe conflito).
+    const rows = await db.update("rpg_rooms", `id=${eq(roomId)}&version=${eq(base)}`, { campaign, version: base + 1, turn_uid: turn, updated_at: now });
+    if (!rows?.length) throw httpError(409, "A mesa mudou enquanto você jogava.", "VERSION_CONFLICT");
+    return { room: { id: roomId, version: base + 1, turn_uid: turn, status: "open" }, members: members.map(cleanMember) };
+  }
+
+  if (action === "setTurn") {
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    const room = await loadRoom(db, roomId, { withCampaign: false });
+    if (room.owner_uid !== uid) throw httpError(403, "Só quem criou a sala escolhe a vez.", "OWNER_ONLY");
+    const target = String(body.turnUid || "");
+    if (!members.some((m) => m.uid === target)) throw httpError(400, "Jogador não está na sala.", "NOT_MEMBER");
+    await db.update("rpg_rooms", `id=${eq(roomId)}`, { turn_uid: target, version: room.version + 1, updated_at: now });
+    return { room: { id: roomId, version: room.version + 1, turn_uid: target, status: room.status }, members: members.map(cleanMember) };
+  }
+
+  if (action === "leave") {
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    const room = await loadRoom(db, roomId, { withCampaign: false });
+    if (room.owner_uid === uid) {
+      await db.update("rpg_rooms", `id=${eq(roomId)}`, { status: "closed", version: room.version + 1, updated_at: now });
+      return { closed: true };
+    }
+    await db.remove("rpg_room_members", `room_id=${eq(roomId)}&uid=${eq(uid)}`);
+    const rest = members.filter((m) => m.uid !== uid);
+    const turn = room.turn_uid === uid ? nextTurnUid(members, uid) : room.turn_uid;
+    await db.update("rpg_rooms", `id=${eq(roomId)}`, { turn_uid: turn && rest.some((m) => m.uid === turn) ? turn : room.owner_uid, version: room.version + 1, updated_at: now });
+    return { left: true };
+  }
+
+  throw httpError(400, "Ação desconhecida.", "BAD_ACTION");
+}
+
+export default async function handler(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido" });
+  let uid;
+  try {
+    const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "siterpg32";
+    ({ uid } = await verifyIdToken(bearerToken(req), { projectId }));
+  } catch (error) {
+    return res.status(error.status || 401).json({ error: "Entre na sua conta para jogar online.", code: error.code || "AUTH_REQUIRED" });
+  }
+  const rate = takeRateLimit(`room:${uid}`, { limit: Number(process.env.ROOM_RATE_LIMIT_PER_MIN) || 90 });
+  if (!rate.ok) {
+    res.setHeader("Retry-After", String(rate.retryAfter));
+    return res.status(429).json({ error: "Muitos pedidos seguidos. Espere alguns segundos.", code: "RATE_LIMIT", retryAfter: rate.retryAfter });
+  }
+  const body = typeof req.body === "string" ? (() => { try { return JSON.parse(req.body); } catch { return {}; } })() : (req.body || {});
+  try {
+    const data = await handleRoomAction(supabaseRest(), uid, body);
+    return res.status(200).json(data);
+  } catch (error) {
+    if (!error.status || error.status >= 500) console.error("Erro na sala online:", error.message);
+    return res.status(error.status || 500).json({ error: error.message || "Erro no modo online.", code: error.code || "ONLINE_ERROR" });
+  }
+}

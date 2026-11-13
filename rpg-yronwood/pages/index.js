@@ -39,6 +39,8 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
+import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode } from "../lib/rooms.mjs";
+import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, applyCombatTags, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
@@ -1142,6 +1144,163 @@ export default function RPG() {
   };
   const clearProblemReport = () => { clearErrorLog(window.localStorage); showNotification("Registro de problemas limpo.", "info"); };
 
+  // ─── Salas online (Supabase, pela rota /api/room) ───────────────
+  const [roomBusy, setRoomBusy] = useState(false);
+  const [joinRoomCode, setJoinRoomCode] = useState(null);
+  const roomCall = async (body) => {
+    const res = await apiFetch("/api/room", { method: "POST", body: JSON.stringify(body), timeoutMs: 25000, retryOnce: false });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = new Error(data.error || "Erro no modo online.");
+      error.code = data.code; error.status = res.status;
+      throw error;
+    }
+    return data;
+  };
+
+  // Aplica o estado da sala neste aparelho (jogada de outro jogador, alguém entrou, vez mudou).
+  const syncFromRoom = async (room, members) => {
+    const cur = activeRef.current;
+    if (!cur || !room || cur.roomId !== room.id) return;
+    const fields = roomPartyFields({ ...room, code: room.code || cur.roomCode, owner_uid: room.owner_uid || cur.roomOwnerUid }, members || []);
+    if (!room.campaign) {
+      const changed = fields.roomVersion !== cur.roomVersion || fields.roomTurnUid !== cur.roomTurnUid || JSON.stringify(fields.roomMembers) !== JSON.stringify(cur.roomMembers);
+      if (changed) { const next = { ...cur, ...fields }; setActive(next); saveCamp(cur.id, next); }
+      return;
+    }
+    const c = { ...cur, ...room.campaign, id: cur.id, saves: cur.saves || [], ...fields };
+    turnSnapshotRef.current = null;
+    setActive(c);
+    setMsgs(c.msgs || []);
+    setDisp(sanitizeStartDisplay(c.disp || []));
+    setSceneImg(c.img || null); setImgOk(!!c.img);
+    setCampLore(c.lore || "");
+    setHp(c.hp ?? 100);
+    setMissions(asMissionList(c.missions));
+    setExperience(c.experience ?? 0); setLevel(c.level ?? 1);
+    setAttributes(c.attributes ?? { ...DEFAULT_ATTRIBUTES }); setSkills(c.skills ?? { ...DEFAULT_SKILLS });
+    setGameTime(normalizeGameTime(c.gameTime));
+    setTemporalEffects(Array.isArray(c.temporalEffects) ? c.temporalEffects : []);
+    setTimelineEvents(Array.isArray(c.timelineEvents) ? c.timelineEvents : []);
+    const restoredTest = pendingTestFromMessages(c.msgs);
+    setPendingTest(restoredTest); setShowRollButton(Boolean(restoredTest));
+    saveCamp(cur.id, c);
+  };
+  const syncFromRoomRef = useRef(syncFromRoom);
+  syncFromRoomRef.current = syncFromRoom;
+
+  const createRoom = async () => {
+    if (!active || active.roomId || roomBusy) return;
+    setRoomBusy(true);
+    try {
+      const data = await roomCall({ action: "create", campaign: buildCampaignSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world });
+      const next = { ...active, ...roomPartyFields(data.room, data.members) };
+      setActive(next);
+      await saveCamp(active.id, next);
+      showNotification(`Sala criada! Código ${data.room.code}. Toque em "Convidar amigos".`, "success", { duration: 8000 });
+    } catch (error) {
+      recordError(window.localStorage, { kind: "online", code: error.code, message: error.message, where: "criar sala" });
+      showNotification(error.message, "error");
+    } finally { setRoomBusy(false); }
+  };
+
+  const joinRoom = async ({ code, charName, charConcept }) => {
+    if (roomBusy) return;
+    setRoomBusy(true);
+    try {
+      const data = await roomCall({ action: "join", code, charName, charConcept });
+      // Já tenho esta sala neste aparelho (sou o dono ou já entrei antes): só abre.
+      let id = null;
+      for (const s of idx) {
+        const rec = await readCamp(s.id).catch(() => null);
+        if (rec?.roomId === data.room.id) { id = s.id; break; }
+      }
+      if (!id) {
+        id = `room-${data.room.id}`;
+        const camp = { ...data.room.campaign, id, saves: [], ...roomPartyFields(data.room, data.members) };
+        const summary = { id, world: camp.world || data.room.title, charName: `${camp.charName || ""} · sala ${data.room.code}`, createdAt: Date.now(), updatedAt: Date.now() };
+        const next = [summary, ...idx.filter((s) => s.id !== id)];
+        setIdx(next); saveIdx(next);
+        await saveCamp(id, camp);
+      }
+      setJoinRoomCode(null);
+      if (typeof window !== "undefined" && window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname);
+      await openCamp({ id });
+      showNotification("Você entrou na sala!", "success");
+    } catch (error) {
+      recordError(window.localStorage, { kind: "online", code: error.code, message: error.message, where: "entrar na sala" });
+      showNotification(error.message, "error");
+    } finally { setRoomBusy(false); }
+  };
+
+  const pushRoom = async (camp, { keepTurn = false } = {}) => {
+    try {
+      const data = await roomCall({ action: "push", roomId: camp.roomId, baseVersion: camp.roomVersion, campaign: buildCampaignSnapshot(camp), keepTurn });
+      const fields = roomPartyFields({ id: camp.roomId, code: camp.roomCode, owner_uid: camp.roomOwnerUid, ...data.room }, data.members);
+      setActive((prev) => {
+        if (!prev || prev.id !== camp.id) return prev;
+        const next = { ...prev, ...fields };
+        saveCamp(prev.id, next);
+        return next;
+      });
+    } catch (error) {
+      recordError(window.localStorage, { kind: "online", code: error.code, message: error.message, where: "enviar jogada" });
+      if (["VERSION_CONFLICT", "NOT_YOUR_TURN"].includes(error.code)) {
+        showNotification("A mesa mudou enquanto você jogava; sua jogada não entrou. Atualizando a história…", "warning", { duration: 7000 });
+        try { const data = await roomCall({ action: "get", roomId: camp.roomId }); await syncFromRoomRef.current(data.room, data.members); } catch {}
+      } else showNotification(`Sua jogada ficou só neste aparelho: ${error.message}`, "error");
+    }
+  };
+
+  const setRoomTurn = async (turnUid) => {
+    if (!active?.roomId) return;
+    try { const data = await roomCall({ action: "setTurn", roomId: active.roomId, turnUid }); await syncFromRoomRef.current({ ...data.room, code: active.roomCode, owner_uid: active.roomOwnerUid }, data.members); }
+    catch (error) { showNotification(error.message, "error"); }
+  };
+
+  const leaveRoom = async () => {
+    if (!active?.roomId) return;
+    const owner = active.roomOwnerUid === user?.uid;
+    if (!confirm(owner ? "Fechar a sala? Os amigos não vão mais conseguir jogar nela (a história fica salva com você)." : "Sair da sala? A história fica salva neste aparelho, mas você não recebe mais as jogadas.")) return;
+    try { await roomCall({ action: "leave", roomId: active.roomId }); } catch (error) { showNotification(error.message, "warning"); }
+    const { roomId, roomCode, roomVersion, roomMembers, roomTurnUid, roomOwnerUid, ...rest } = active;
+    const next = { ...rest, party: [], partyTurn: 0 };
+    setActive(next);
+    await saveCamp(active.id, next);
+    showNotification(owner ? "Sala fechada." : "Você saiu da sala.", "info");
+  };
+
+  // Acompanha a mesa: a cada 5 s (e ao voltar para a aba) pergunta se houve jogada nova.
+  const roomClosedNotified = useRef(false);
+  useEffect(() => {
+    if (!active?.roomId) return undefined;
+    roomClosedNotified.current = false;
+    let stop = false;
+    const tick = async () => {
+      const cur = activeRef.current;
+      if (stop || !cur?.roomId || document.hidden || sending.current) return;
+      try {
+        const data = await roomCall({ action: "poll", roomId: cur.roomId, since: cur.roomVersion || 0 });
+        if (data.room?.status === "closed" && !roomClosedNotified.current) { roomClosedNotified.current = true; showNotification("O dono fechou a sala. A história continua salva aqui.", "info"); }
+        if (!sending.current) await syncFromRoomRef.current(data.room, data.members);
+      } catch (error) {
+        if (["NOT_MEMBER", "ROOM_NOT_FOUND"].includes(error.code) && !roomClosedNotified.current) { roomClosedNotified.current = true; showNotification(error.message, "warning"); }
+      }
+    };
+    tick();
+    const timer = setInterval(tick, 5000);
+    const onVisible = () => { if (!document.hidden) tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { stop = true; clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [active?.id, active?.roomId]);
+
+  // Link de convite (?sala=CODIGO): abre a janela de entrar depois do login.
+  useEffect(() => {
+    if (typeof window === "undefined" || !user) return;
+    const code = normalizeRoomCode(new URLSearchParams(window.location.search).get("sala"));
+    if (isRoomCode(code)) setJoinRoomCode(code);
+  }, [user]);
+
   // ─── Grupo no mesmo aparelho ─────────────────────────────────────
   const updateParty = (party) => {
     if (!active) return;
@@ -1292,6 +1451,7 @@ export default function RPG() {
   }, [autoDelay, apiFetch]);
 
   const toggleAuto = () => {
+    if (active?.roomId) { showNotification("O modo automático fica desligado nas salas online: cada jogador joga na sua vez.", "info"); return; }
     const next = !autoMode;
     setAutoMode(next);
     autoRef.current = next;
@@ -1880,6 +2040,8 @@ export default function RPG() {
       const rankUp = systemResult.events.find((ev) => ev.type === "rank");
       if (rankUp) void expandShopForRank(updated, rankUp.rank);
       saveCamp(camp.id, updated);
+      // Sala online: manda a jogada para a mesa (a vez passa para o próximo; avisos do Mestre não passam a vez).
+      if (updated.roomId) void pushRoom(updated, { keepTurn: isMasterBeat || isStartBeat || isTimeSkipContext });
       // Nomes da obra que a narração trouxe: pesquisa em segundo plano para as próximas cenas.
       if (updated.isKnownIP) {
         const fresh = pendingLoreTopics(updated, raw);
@@ -1944,6 +2106,10 @@ export default function RPG() {
 
   const handleSend = () => {
     if (!input.trim() || sending.current || !active) return;
+    if (active.roomId && !isMyTurn(active, user?.uid)) {
+      showNotification(`Agora é a vez de ${roomTurnName(active) || "outro jogador"}. Sua ação fica escrita aqui até chegar a sua vez.`, "info");
+      return;
+    }
     clearAuto();
     setPlayPanel("narrator");
 
@@ -2664,7 +2830,9 @@ export default function RPG() {
           <div className="shell-foot">
             <button className="btn-primary" type="button" onClick={() => setView("presets")}>Abrir RPGs prontos</button>
             <button className="btn-secondary" type="button" onClick={startCreate}>Criar o meu</button>
+            <button className="btn-secondary" type="button" onClick={() => setJoinRoomCode("")}><i className="ti ti-users-group" aria-hidden="true" /> Entrar numa sala</button>
           </div>
+          {joinRoomCode !== null ? <RoomJoinModal initialCode={joinRoomCode} busy={roomBusy} onJoin={joinRoom} onClose={() => { setJoinRoomCode(null); if (window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname); }} /> : null}
         </>
       )}
 
@@ -2815,7 +2983,12 @@ export default function RPG() {
       onCopyProblems={copyProblemReport}
       onClearProblems={clearProblemReport}
       onUpdateParty={updateParty}
-      onSetPartyTurn={setPartyTurn}
+      onSetPartyTurn={active?.roomId ? (index) => { const m = (active.roomMembers || [])[index]; if (m) setRoomTurn(m.uid); } : setPartyTurn}
+      myUid={user?.uid || ""}
+      roomBusy={roomBusy}
+      onCreateRoom={createRoom}
+      onLeaveRoom={leaveRoom}
+      onSetRoomTurn={setRoomTurn}
       saveSlot={saveSlot}
       loadSlot={loadSlot}
       deleteSlot={deleteSlot}

@@ -21,6 +21,8 @@ const SystemPanel = dynamic(() => import("./SystemPanel"), { loading: () => <p c
 import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { asCombat, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
+import { RoomPanel } from "./RoomJoin";
+import { isMyTurn, roomTurnName } from "../lib/rooms.mjs";
 
 /** Botão de refazer na última resposta do Mestre, com o jeito da nova versão. */
 function RedoMenu({ styles = [], onRedo }) {
@@ -71,16 +73,18 @@ function CombatBar({ campaign, onPick }) {
 }
 
 /** Quem joga agora (grupo no mesmo aparelho). */
-function PartyTurn({ campaign, onSetTurn }) {
+function PartyTurn({ campaign, onSetTurn, myUid }) {
   const roster = partyRoster(campaign);
   if (roster.length < 2) return null;
+  // Sala online: só quem criou a sala troca a vez; os outros só veem de quem é.
+  const locked = Boolean(campaign?.roomId) && campaign.roomOwnerUid !== myUid;
   const actor = partyActor(campaign);
   const index = roster.findIndex((p) => p.id === actor.id);
   return (
     <div className="party-turn" role="group" aria-label="Vez de jogar">
       <i className="ti ti-users" aria-hidden="true" />
       <span>Vez de</span>
-      <select value={index} onChange={(e) => onSetTurn?.(Number(e.target.value))} aria-label="Escolher quem joga agora">
+      <select value={index} disabled={locked} onChange={(e) => onSetTurn?.(Number(e.target.value))} aria-label="Escolher quem joga agora">
         {roster.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
       </select>
     </div>
@@ -419,6 +423,11 @@ export default function PlayView(props) {
     onClearProblems,
     onUpdateParty,
     onSetPartyTurn,
+    myUid,
+    roomBusy,
+    onCreateRoom,
+    onLeaveRoom,
+    onSetRoomTurn,
     saveSlot,
     loadSlot,
     deleteSlot,
@@ -841,7 +850,10 @@ export default function PlayView(props) {
               </div>
 
               <CombatBar campaign={c} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
-              <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} />
+              <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
+              {c.roomId && !isMyTurn(c, myUid) ? (
+                <div className="room-wait" role="status"><i className="ti ti-hourglass" aria-hidden="true" /> Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>. A história atualiza sozinha quando ele jogar.</div>
+              ) : null}
               <div className="chat-input-row">
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
@@ -1505,9 +1517,15 @@ export default function PlayView(props) {
                 <span>Exportar aventura para livro</span>
               </button>
               <div className="settings-block">
-                <div className="section-label">Jogar em grupo</div>
-                <PartyEditor campaign={c} onUpdate={onUpdateParty} />
+                <div className="section-label">Jogar online com amigos</div>
+                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} />
               </div>
+              {!c.roomId ? (
+                <div className="settings-block">
+                  <div className="section-label">Jogar em grupo no mesmo aparelho</div>
+                  <PartyEditor campaign={c} onUpdate={onUpdateParty} />
+                </div>
+              ) : null}
               <div className="settings-block">
                 <div className="section-label">Problemas registrados ({problemCount || 0})</div>
                 <p className="panel-sub">Quando algo falha, o jogo anota aqui. Copie o relatório e cole na conversa para o defeito ser achado e corrigido.</p>

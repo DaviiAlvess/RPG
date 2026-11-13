@@ -3,6 +3,7 @@ import { appearanceForGm } from './appearance.mjs';
 import { gmBriefLines } from './gm-brief.mjs';
 import { storyProgressLines, isOffscreenDue } from './story-progress.mjs';
 import { dramaPromptLines } from './drama.mjs';
+import { loreNotesLines } from './lore-context.mjs';
 import { systemPromptLines } from './game-system.mjs';
 import { pacingDirection } from './pacing.mjs';
 import { masterGuidance, masterInterventionContext } from './master-chat.mjs';
@@ -42,6 +43,7 @@ export function economyPrompt(c, lore, calendar) {
     plotPromptLines(c.plots),
     ...storyProgressLines(c, { short: true }),
     ...dramaPromptLines(c, { short: true, busy: isOffscreenDue(c) }),
+    ...loreNotesLines(c, c.loreFocus, { max: 5, chars: 900 }),
     ...systemPromptLines(c, { short: true }),
     plotDirection(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO: ${c.pendingLevelNote}` : "",

@@ -40,7 +40,7 @@ test('Limite de saída menor só quando economia é explicitamente ativada', asy
   try {
     let limit;
     globalThis.fetch = async (_url, options) => { limit = JSON.parse(options.body).generationConfig.maxOutputTokens; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena' }] } }] }) }; };
-    for (const [mode, expected] of [[true, 2048], [false, 4096], ['true', 4096]]) {
+    for (const [mode, expected] of [[true, 4096], [false, 8192], ['true', 8192]]) {
       const res = { setHeader() {}, status() { return this; }, json(data) { return data; } };
       await handler({ method: 'POST', body: { economyMode: mode, messages: [{ role: 'user', content: 'Olho ao redor' }], systemPrompt: 'Narre' } }, res);
       assert.equal(limit, expected);

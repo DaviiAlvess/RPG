@@ -1313,7 +1313,7 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "got-rebeliao-norte",
     world: "Westeros — Crônicas de Gelo e Fogo",
-    worldBg: "Ano 283 depois da Conquista, início da Rebelião de Robert. O Norte convoca vassalos para marchar ao sul. Aventura original: o jogador é um homem do século XXI preso no corpo de um nortenho comum. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui. A história pode divergir do canon conforme as escolhas dele.",
+    worldBg: "Ano 282 depois da Conquista, início da Rebelião de Robert (que só termina em 283, no Tridente). O Norte convoca vassalos para marchar ao sul. Aventura original: o jogador é um homem do século XXI preso no corpo de um nortenho comum. Personagens canônicos existem e seguem seus caminhos; o jogador não os substitui. A história pode divergir do canon conforme as escolhas dele.",
     charName: "Lucas Moreira (no corpo de Edrick Pedrafria)",
     charTitle: "Lanceiro convocado de um vilarejo vassalo dos Karstark",
     charAge: "26",
@@ -1325,18 +1325,18 @@ export const ADVENTURE_PRESETS = [
       "Racional, irônico, acostumado a resolver problemas com planilha e não com lança. Mente mal porque fala português na cabeça. Quando está com medo, calcula distâncias em voz baixa. Medo: morrer de uma infecção boba num mundo sem antibiótico — ou mudar a história e piorar tudo.",
     charSkills: "Conhecimento de engenharia básica, matemática, primeiros socorros modernos (higiene, ferver água), memória dos livros. O corpo de Edrick sabe usar lança, cavar e carregar peso. Sem magia.",
     supportingCast:
-      "Sargento Harwin Machado — veterano dos Karstark; barba grisalha em tranças, cobra dívidas no meio da marcha; tique: bate o cabo do machado na palma antes de ameaçar. Osric Pé-de-Lama — amigo de infância de Edrick; ruivo, falador, percebe que o amigo 'voltou estranho' depois da febre; jura que vai cuidar dele. Velha Nan do Vau — curandeira que segue o exército; cega de um olho, fala com os deuses antigos e olha para você como se visse duas pessoas. Ralf Pele-Fina — ferrador da coluna e agente dos Bolton; sorriso fácil, mãos sempre limpas demais; tique: assobia uma cantiga do Forte do Pavor. Torrhen Snow — escudeiro bastardo de 17 anos, sem cavaleiro; quer glória na guerra e idolatra os Stark; tique: treina golpes no ar quando acha que ninguém olha.",
+      "Sargento Harwin Machado — veterano dos Karstark; barba grisalha em tranças, cobra dívidas no meio da marcha; tique: bate o cabo do machado na palma antes de ameaçar. Osric Pé-de-Lama — amigo de infância de Edrick; ruivo, falador, percebe que o amigo 'voltou estranho' depois da febre; jura que vai cuidar dele. Velha Hild do Vau — curandeira que segue o exército; cega de um olho, fala com os deuses antigos e olha para você como se visse duas pessoas. Ralf Pele-Fina — ferrador da coluna e agente dos Bolton; sorriso fácil, mãos sempre limpas demais; tique: assobia uma cantiga do Forte do Pavor. Torrhen Snow — escudeiro bastardo de 17 anos, sem cavaleiro; quer glória na guerra e idolatra os Stark; tique: treina golpes no ar quando acha que ninguém olha.",
     storyStartPoint:
-      "Você acorda sem ar. Uma mão pesada tapa a sua boca no escuro da tenda e uma coisa fria encosta na sua garganta. Cheiro de cerveja amarga e lã molhada; lá fora, cavalos inquietos e o estalo de uma fogueira baixa. A voz rouca, colada no seu ouvido: \"Você devia ter morrido da febre, Edrick. Ia poupar todo mundo.\" Sargento Harwin — você sabe o nome sem saber como sabe. As mãos que tentam afastar o braço dele não são as suas: maiores, calejadas, com um anel de ferro no dedo. Então alguém chuta as cordas da tenda do lado de fora: \"Edrick? Ô Edrick, acordou da febre? A Velha Nan mandou caldo!\" É Osric. Harwin congela. A lâmina não sai da sua pele.",
+      "Você acorda sem ar. Uma mão pesada tapa a sua boca no escuro da tenda e uma coisa fria encosta na sua garganta. Cheiro de cerveja amarga e lã molhada; lá fora, cavalos inquietos e o estalo de uma fogueira baixa. A voz rouca, colada no seu ouvido: \"Você devia ter morrido da febre, Edrick. Ia poupar todo mundo.\" Sargento Harwin — você sabe o nome sem saber como sabe. As mãos que tentam afastar o braço dele não são as suas: maiores, calejadas, com um anel de ferro no dedo. Então alguém chuta as cordas da tenda do lado de fora: \"Edrick? Ô Edrick, acordou da febre? A Velha Hild mandou caldo!\" É Osric. Harwin congela. A lâmina não sai da sua pele.",
     narration: { style: "cinematic", length: "balanced", pace: "balanced" },
     charAppearanceNote: "Alto e magro de fome, barba castanha rala, cicatriz de pedreira na mão esquerda, anel de casamento de ferro.",
-    relationships: { "Sargento Harwin": "Suspeito", Osric: "Amigável", "Velha Nan do Vau": "Neutral", "Ralf Pele-Fina": "Neutral", "Torrhen Snow": "Amigável" },
+    relationships: { "Sargento Harwin": "Suspeito", Osric: "Amigável", "Velha Hild do Vau": "Neutral", "Ralf Pele-Fina": "Neutral", "Torrhen Snow": "Amigável" },
     worldState: {
       location: "Coluna de marcha dos Karstark, estrada do rei ao sul de Winterfell",
       npcs: {
         "Sargento Harwin": "sargento dos Karstark; tranças grisalhas, bate o machado na palma; coluna de marcha; cobra dívida de Edrick",
         Osric: "amigo de infância; ruivo e falador; coluna de marcha; acha que Edrick voltou estranho",
-        "Velha Nan do Vau": "curandeira do exército; cega de um olho, fala com os deuses antigos; carroças de suprimento",
+        "Velha Hild do Vau": "curandeira do exército; cega de um olho, fala com os deuses antigos; carroças de suprimento",
         "Ralf Pele-Fina": "ferrador da coluna, agente dos Bolton; mãos limpas demais, assobia; carroças de ferraria; compra os cavalos de Harwin",
         "Torrhen Snow": "escudeiro bastardo; quer glória, treina golpes no ar; coluna de marcha; idolatra os Stark",
       },
@@ -1349,23 +1349,23 @@ export const ADVENTURE_PRESETS = [
     threat: { name: "Sargento Harwin e o agente dos Bolton", goal: "calar a testemunha e continuar vendendo os cavalos da marcha a Roose Bolton" },
     gmBrief: {
       truth:
-        "Edrick não pegou febre: foi envenenado pelo Sargento Harwin, porque viu Harwin vender cavalos do exército a um agente dos Bolton que espiona a marcha para Roose. Lucas acordou no corpo no instante em que Edrick morreu. A consciência de Edrick não sumiu de todo: aparece em sonhos e em reflexos do corpo. A Velha Nan percebe as duas almas e acha que são os deuses antigos cobrando algo. A guerra segue o canon até o jogador intervir; cada mudança grande abre consequências imprevistas.",
+        "Edrick não pegou febre: foi envenenado pelo Sargento Harwin, porque viu Harwin vender cavalos do exército a um agente dos Bolton que espiona a marcha para Roose. Lucas acordou no corpo no instante em que Edrick morreu. A consciência de Edrick não sumiu de todo: aparece em sonhos e em reflexos do corpo. A Velha Hild percebe as duas almas e acha que são os deuses antigos cobrando algo. A guerra segue o canon até o jogador intervir; cada mudança grande abre consequências imprevistas.",
       clues: [
         "Na bolsa de Edrick há um pedaço de couro com a marca de um homem esfolado, rasgado de uma sela.",
         "Os cavalos de reserva da coluna diminuem toda noite, e Harwin sempre está de guarda nessas noites.",
         "Em sonhos, Lucas vê Harwin servindo uma caneca de cerveja amarga a Edrick.",
-        "Velha Nan diz que 'o morto ainda anda dentro de você' e sabe o nome da esposa sem nunca ter visto Maera.",
+        "Velha Hild diz que 'o morto ainda anda dentro de você' e sabe o nome da esposa sem nunca ter visto Maera.",
       ],
       escalation: [
         "Harwin percebe que Edrick sobreviveu e tenta 'cobrar a dívida' num lugar sem testemunhas.",
         "Disenteria se espalha na coluna; homens morrem, e quem não ferve a água adoece.",
         "A coluna chega à batalha (Sinos ou Tridente) e Lucas precisa decidir se tenta mudar o que sabe que vai acontecer.",
       ],
-      twist: "Velha Nan não é só curandeira: é uma vidente das florestas que sentiu a 'troca' e acredita que Lucas foi trazido para impedir algo do futuro — os Outros. Ela vai empurrá-lo para o norte, para longe da guerra que ele conhece.",
+      twist: "Velha Hild não é só curandeira: é uma vidente das florestas que sentiu a 'troca' e acredita que Lucas foi trazido para impedir algo do futuro — os Outros. Ela vai empurrá-lo para o norte, para longe da guerra que ele conhece.",
       agendas: {
         "Sargento Harwin": "eliminar a testemunha e continuar vendendo cavalos aos Bolton",
         Osric: "proteger o amigo; vai se magoar quando perceber que Edrick 'não está mais lá'",
-        "Velha Nan do Vau": "descobrir por que os deuses trouxeram um estrangeiro e usá-lo contra o inverno que vem",
+        "Velha Hild do Vau": "descobrir por que os deuses trouxeram um estrangeiro e usá-lo contra o inverno que vem",
         "Ralf Pele-Fina": "espionar a marcha para Roose Bolton; eliminar quem desconfiar",
         "Torrhen Snow": "ganhar a espora de cavaleiro na guerra; vai morrer na primeira batalha se ninguém o segurar",
       },
@@ -1379,7 +1379,7 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "got-antes-da-conquista",
     world: "Westeros — Crônicas de Gelo e Fogo",
-    worldBg: "Ano 1 da Conquista. Harren, o Negro, governa as Terras Fluviais a partir de Harrenhal, recém-terminada com sangue de escravos. Os Sete Reinos ainda são reinos de verdade; Aegon Targaryen e suas irmãs desembarcaram com três dragões e marcham sobre as Terras Fluviais. Aventura original: o jogador é um homem do século XXI no corpo de um ribeirinho comum. Personagens canônicos existem e seguem seus caminhos; a história pode divergir conforme as escolhas dele.",
+    worldBg: "Ano 2 antes da Conquista. Harren, o Negro, governa as Terras Fluviais a partir de Harrenhal, terminada com sangue de escravos no mesmo dia em que Aegon desembarcou. Os Sete Reinos ainda são reinos de verdade; Aegon Targaryen e suas irmãs desembarcaram com três dragões e marcham sobre as Terras Fluviais. Aventura original: o jogador é um homem do século XXI no corpo de um ribeirinho comum. Personagens canônicos existem e seguem seus caminhos; a história pode divergir conforme as escolhas dele.",
     charName: "Rafael Andrade (no corpo de Garin Junco)",
     charTitle: "Barqueiro do Olho de Deus, à sombra de Harrenhal",
     charAge: "29",
@@ -1454,7 +1454,7 @@ export const ADVENTURE_PRESETS = [
     charBg: "Filho bastardo de um senhor menor das montanhas do Norte. Aos dezessete, matou numa briga o filho de um vassalo do pai, que tinha espancado a mãe dele; a escolha foi a forca ou o negro. Escolheu o negro e fez o juramento diante de uma árvore-coração. Na Muralha, descobriu que tem olho bom para rastro e pouca paciência para ordem burra. Escreve para a mãe todo mês, sabendo que as cartas quase nunca chegam.",
     charPersonality: "Teimoso, protetor, de raiva lenta e longa. Fala pouco com superiores e muito com cavalos. Tem um senso de justiça que já lhe custou chicotadas. Quando mente, olha para os pés. Medo: que o juramento não signifique nada — que ele tenha largado a vida por uma Muralha que vai cair.",
     charSkills: "Rastreamento na neve, arco longo, sobrevivência no frio, cuidar de cavalos e cães, faca e machado curto. Sem magia.",
-    supportingCast: "Sor Aldous Brune — primeiro patrulheiro da expedição; cavaleiro do sul, orgulhoso e corajoso, cego para tudo o que não está nos livros; tique: limpa a geada da barba como quem limpa uma ofensa. Velho Garth Três-Dedos — o patrulheiro mais velho da companhia; desdentado e supersticioso, já viu coisas que se recusa a contar; tique: bate três vezes no cabo do machado antes de dormir. Thera — prisioneira do Povo Livre; olhos cinzentos, língua afiada, não pede nada e sabe muito; tique: canta baixinho numa língua antiga quando o vento muda. Pell — recruta de 15 anos, ex-ladrão de Porto Real; fala sem parar e esconde o medo com piada; tique: conta as flechas da aljava em voz alta. Brann — patrulheiro calado que nunca tira o capuz; obediente demais, some nas paradas; tique: afia a mesma faca a cada descanso.",
+    supportingCast: "Sor Aldous Brune — comandante desta patrulha; cavaleiro do sul, orgulhoso e corajoso, cego para tudo o que não está nos livros; tique: limpa a geada da barba como quem limpa uma ofensa. Velho Garth Três-Dedos — o patrulheiro mais velho da companhia; desdentado e supersticioso, já viu coisas que se recusa a contar; tique: bate três vezes no cabo do machado antes de dormir. Thera — prisioneira do Povo Livre; olhos cinzentos, língua afiada, não pede nada e sabe muito; tique: canta baixinho numa língua antiga quando o vento muda. Pell — recruta de 15 anos, ex-ladrão de Porto Real; fala sem parar e esconde o medo com piada; tique: conta as flechas da aljava em voz alta. Brann — patrulheiro calado que nunca tira o capuz; obediente demais, some nas paradas; tique: afia a mesma faca a cada descanso.",
     storyStartPoint: "Três dias além da Muralha, no fundo de uma floresta de represeiros. A neve parou de cair há uma hora, e o silêncio que ficou é pior do que o vento. Os cães se deitam na trilha e se recusam a seguir; dois começam a cavar a neve, ganindo. Você está ajoelhado sobre um rastro que não faz sentido — pés descalços, muitos, andando em fila, sem desviar de árvore nenhuma. Atrás de você, a prisioneira ri baixo, com as mãos amarradas no arção da sela. Thera: \"Corvo, você está lendo o rastro dos meus mortos. Eles não param pra dormir. Vocês param.\" Sor Aldous Brune, já montado, impaciente: \"Snow. Ou você acha a trilha dos selvagens em uma hora, ou eu deixo essa mulher para os lobos e voltamos.\" O velho Garth não diz nada: só bate três vezes no cabo do machado, olhando para o norte, onde o céu ficou de um azul que não é de noite nem de dia.",
     narration: {
       style: "cinematic",
@@ -1472,7 +1472,7 @@ export const ADVENTURE_PRESETS = [
     worldState: {
       location: "Floresta de represeiros, três dias além da Muralha",
       npcs: {
-        "Sor Aldous Brune": "primeiro patrulheiro; orgulhoso, limpa a geada da barba; à frente da coluna; não acredita em mortos que andam",
+        "Sor Aldous Brune": "comandante da patrulha; orgulhoso, limpa a geada da barba; à frente da coluna; não acredita em mortos que andam",
         "Velho Garth": "patrulheiro veterano; supersticioso, bate três vezes no machado; retaguarda; já viu coisas",
         Thera: "prisioneira do Povo Livre; olhos cinzentos, canta quando o vento muda; amarrada na sela; diz que os mortos vêm",
         Pell: "recruta de Porto Real; fala sem parar, conta flechas; perto de Wyl; morre de medo",
@@ -1539,7 +1539,7 @@ export const ADVENTURE_PRESETS = [
     charBg: "Filho de um pescador da Baía da Água Negra e de uma mãe que dizia, baixinho, que a avó viera de Pedra do Dragão. Entrou no Fosso dos Dragões aos doze anos para limpar ossos e carregar carne. Aos dezessete, a dragoa jovem Cinzaluz — que já queimou dois guardiões — deixou que ele tocasse o focinho dela, e desde então não deixa mais ninguém chegar perto. Os guardiões mais velhos o olham com inveja e medo. Sustenta a mãe e a irmã pequena num cortiço da Baixada das Pulgas, onde metade dos vizinhos agora reza para os dragões morrerem.",
     charPersonality: "Calmo de um jeito que acalma animais e irrita pessoas. Fiel a quem cuida, desconfiado de quem manda. Fala pouco e escuta tudo. Quando mente, esfrega a cicatriz de queimadura no antebraço. Medo: que a multidão tenha razão — que os dragões sejam a ruína da cidade e ele esteja do lado errado.",
     charSkills: "Lidar com dragões (alimentar, acalmar, ler o humor pelo som e pelas escamas), correntes e ganchos, nadar, becos da Baixada das Pulgas, tratar queimaduras. Não é cavaleiro de dragão — ainda. Sem magia.",
-    supportingCast: "Mestre-guardião Harrold Escama-Velha — chefe dos guardiões do Fosso; velho, com metade do rosto queimada, ama os dragões mais do que qualquer rei; tique: assobia uma nota grave para acalmar dragões e gente. Wat Martelo — braço direito do pregador nas ruas; ferreiro gigante que perdeu a família no fogo de um dragão; tique: bate o martelo no peito antes de falar. Sor Emmon Hale — cavaleiro da rainha encarregado do Fosso; jovem e leal, acha que toda solução é mais aço; tique: ajusta a correia do elmo quando tem medo. Mella — irmã de Cael, 10 anos; sabe todos os segredos da Baixada das Pulgas e foi ouvir o pregador 'só para ver'; tique: chama Cinzaluz de 'nossa'. Gyles — guardião rival; inveja Cael desde o dia em que Cinzaluz o escolheu; tique: conta moedas com o polegar.",
+    supportingCast: "Mestre-guardião Harrold Escama-Velha — chefe dos guardiões do Fosso; velho, com metade do rosto queimada, ama os dragões mais do que qualquer rei; tique: assobia uma nota grave para acalmar dragões e gente. Garrick Martelo — braço direito do pregador nas ruas; ferreiro gigante que perdeu a família no fogo de um dragão; tique: bate o martelo no peito antes de falar. Sor Emmon Hale — cavaleiro da rainha encarregado do Fosso; jovem e leal, acha que toda solução é mais aço; tique: ajusta a correia do elmo quando tem medo. Mella — irmã de Cael, 10 anos; sabe todos os segredos da Baixada das Pulgas e foi ouvir o pregador 'só para ver'; tique: chama Cinzaluz de 'nossa'. Gyles — guardião rival; inveja Cael desde o dia em que Cinzaluz o escolheu; tique: conta moedas com o polegar.",
     storyStartPoint: "Anoitecer em Porto Real, e a cidade inteira está com fome. Do alto da Colina de Rhaenys, os gritos sobem da Baixada das Pulgas como fumaça. Você está dentro do Fosso dos Dragões, com a corrente de Cinzaluz enrolada no antebraço e o calor dela batendo no seu rosto como a porta de um forno aberto. Ela não come há dois dias: desde que a multidão começou a cantar lá fora, recusa carne de qualquer mão — menos da sua. Mestre Harrold aparece no alto da escada, com a metade queimada do rosto vermelha à luz das tochas: \"Cael. Eles estão subindo a colina. Com tochas, machados e o pregador na frente.\" Sor Emmon Hale desce os degraus de dois em dois, já com a espada fora da bainha: \"Ordem da rainha: nenhum dragão sai. Nenhum portão abre.\" E, entre as grades do portão lateral, você vê um rosto pequeno que não devia estar ali — Mella, sua irmã, segurando uma tocha apagada e olhando para você como quem pede desculpa.",
     narration: {
       style: "cinematic",
@@ -1549,7 +1549,7 @@ export const ADVENTURE_PRESETS = [
     charAppearanceNote: "Magro e forte, cabelo preto encaracolado, olhos de um violeta quase cinza que ele esconde baixando a cabeça, cicatriz de queimadura no antebraço esquerdo, couro de guardião com placas de escama velha.",
     relationships: {
       "Mestre Harrold": "Amigável",
-      "Wat Martelo": "Hostil",
+      "Garrick Martelo": "Hostil",
       "Sor Emmon Hale": "Neutral",
       Mella: "Amigável",
       Gyles: "Suspeito",
@@ -1558,7 +1558,7 @@ export const ADVENTURE_PRESETS = [
       location: "Fosso dos Dragões, Colina de Rhaenys, Porto Real",
       npcs: {
         "Mestre Harrold": "chefe dos guardiões; meio rosto queimado, assobia para acalmar; Fosso dos Dragões; ama os dragões acima de reis",
-        "Wat Martelo": "ferreiro e líder da multidão; bate o martelo no peito; ruas da Baixada das Pulgas; perdeu a família para um dragão",
+        "Garrick Martelo": "ferreiro e líder da multidão; bate o martelo no peito; ruas da Baixada das Pulgas; perdeu a família para um dragão",
         "Sor Emmon Hale": "cavaleiro da rainha; jovem e leal, ajusta a correia do elmo; portões do Fosso; acha que tudo se resolve com aço",
         Mella: "irmã de Cael, 10 anos; chama Cinzaluz de 'nossa'; portão lateral; foi ouvir o pregador",
         Gyles: "guardião rival; conta moedas com o polegar; túneis do Fosso; inveja Cael",
@@ -1579,11 +1579,11 @@ export const ADVENTURE_PRESETS = [
       },
     ],
     threat: {
-      name: "Wat Martelo e a multidão do pregador",
+      name: "Garrick Martelo e a multidão do pregador",
       goal: "invadir o Fosso dos Dragões esta noite e matar todos os dragões nas correntes",
     },
     gmBrief: {
-      truth: "Cael tem sangue de dragão: a avó da mãe dele era filha bastarda de um Targaryen com uma mulher de Pedra do Dragão — uma 'semente de dragão'. Cinzaluz sente isso e o escolheu como cavaleiro. Gyles fez um acordo com Wat Martelo para abrir o portão lateral à meia-noite em troca de ouro e perdão. A multidão vai invadir o Fosso nesta noite, como na história; os dragões vão lutar e muitos vão morrer. A rainha precisa de novos cavaleiros e mandaria buscar qualquer semente de dragão — mas também desconfia de traidores entre elas.",
+      truth: "Cael tem sangue de dragão: a avó da mãe dele era filha bastarda de um Targaryen com uma mulher de Pedra do Dragão — uma 'semente de dragão'. Cinzaluz sente isso e o escolheu como cavaleiro. No Fosso também estão Shrykos, Morghul, Tyraxes e Dreamfyre, e menos de cinquenta guardiões defendem as portas. Gyles fez um acordo com Garrick Martelo para abrir o portão lateral à meia-noite em troca de ouro e perdão. A multidão vai invadir o Fosso nesta noite, como na história; os dragões vão lutar e muitos vão morrer. A rainha precisa de novos cavaleiros e mandaria buscar qualquer semente de dragão — mas também desconfia de traidores entre elas.",
       clues: [
         "Os olhos de Cael ficam mais violeta à luz do fogo de dragão — e a mãe sempre o mandou baixar a cabeça diante de nobres.",
         "Gyles tem moedas novas e há uma marca de giz no portão lateral, igual às que a multidão faz nas portas.",
@@ -1598,7 +1598,7 @@ export const ADVENTURE_PRESETS = [
       twist: "O broche quebrado prova que Mestre Harrold sabia do sangue de Cael desde o começo: foi ele quem o trouxe ao Fosso aos doze anos, a pedido de alguém da corte que queria uma semente de dragão escondida e leal — para usar numa guerra que ainda nem tinha começado.",
       agendas: {
         "Mestre Harrold": "salvar os dragões a qualquer preço; vê Cael como a última esperança deles",
-        "Wat Martelo": "matar os dragões que queimaram a família dele; não quer ferir crianças, mas a multidão não escuta",
+        "Garrick Martelo": "matar os dragões que queimaram a família dele; não quer ferir crianças, mas a multidão não escuta",
         "Sor Emmon Hale": "cumprir a ordem da rainha; vai morrer no portão se ninguém lhe der outra saída",
         Mella: "voltar para o irmão sem que a multidão a veja como traidora",
         Gyles: "sair vivo e rico; abre o portão à meia-noite",
@@ -1759,7 +1759,7 @@ export const ADVENTURE_PRESETS = [
   base({
     id: "isekai-sengoku",
     world: "Japão, Era Sengoku (1560)",
-    worldBg: ORIGINAL_NOTE("Japão feudal em maio de 1560, Era dos Estados Combatentes. O exército gigante de Imagawa Yoshimoto marcha por Owari; o pequeno clã Oda parece condenado. Samurais, ashigaru, monges guerreiros e camponeses. História real como pano de fundo: figuras históricas existem e seguem seus caminhos, mas a história pode divergir pelas escolhas do jogador."),
+    worldBg: ORIGINAL_NOTE("Japão feudal em junho de 1560 (quinto mês do calendário japonês), Era dos Estados Combatentes. O exército gigante de Imagawa Yoshimoto marcha por Owari; o pequeno clã Oda parece condenado. Samurais, ashigaru, monges guerreiros e camponeses. História real como pano de fundo: figuras históricas existem e seguem seus caminhos, mas a história pode divergir pelas escolhas do jogador."),
     isKnownIP: false,
     charName: "Kenji Matsuda (no corpo de Gonbei, ashigaru)",
     charTitle: "Soldado lanceiro (ashigaru) do exército Imagawa",
@@ -1770,7 +1770,7 @@ export const ADVENTURE_PRESETS = [
     charPersonality: "Analítico, sarcástico, pensa em 'probabilidades' e 'builds'. Leal aos companheiros de tenda. Quando mente, ajeita o chapéu de bambu. Medo: morrer como figurante numa batalha famosa.",
     charSkills: "Estratégia (jogos e livros), noções de japonês moderno (o arcaico confunde), lógica. O corpo de Gonbei aguenta marcha e sabe usar a yari. Sem treino de samurai.",
     supportingCast: "Sargento Tsuchida — chefe dos ashigaru; grita sempre, bebe saquê escondido, protege os seus; tique: cospe antes de dar ordens. Hanzō — companheiro de tenda; magro, risonho, quer voltar para a esposa grávida; segue Gonbei para todo lado. Sayo — vendedora de chá que segue o exército; doce demais, faz perguntas demais sobre os horários dos guardas. Ikeda Tadakatsu — oficial samurai de cavalaria dos Imagawa; orgulhoso, despreza ashigaru e procura um espião para agradar o senhor; tique: limpa a lâmina com papel de arroz. Monge Ryōsen — monge itinerante que reza pelos mortos do exército; calmo, sabe ler e escrever, joga go com quem perde; tique: corre as contas do rosário ao contrário quando prevê desgraça.",
-    storyStartPoint: "Maio de 1560, fim de tarde abafado. Você acorda de pé, numa fileira de soldados com armadura de bambu laqueado e uma lança longa no ombro, o chão do acampamento mole de chuva sob as sandálias de palha. Estandartes dos Imagawa batem no vento quente. Uma tela azul se abre no canto da visão: 【Sistema】 Usuário vinculado. Local: Owari, 1560. Missão inicial: sobreviver à batalha que vem. O nome do vale no mapa do sargento você conhece dos livros: Okehazama. Hanzō cutuca você, rindo: \"Gonbei, dormiu de pé de novo? O sargento vai te matar antes dos Oda.\" O sargento Tsuchida cospe no chão: \"Gonbei! Você e Hanzō, vigília na colina de Dengakuhazama esta noite. Se dormirem, eu mesmo corto as cabeças.\" Perto das tendas dos oficiais, uma vendedora de chá sorri demais e pergunta a um guarda onde fica a tenda do senhor.",
+    storyStartPoint: "Junho de 1560, fim de tarde abafado. Você acorda de pé, numa fileira de soldados com armadura de bambu laqueado e uma lança longa no ombro, o chão do acampamento mole de chuva sob as sandálias de palha. Estandartes dos Imagawa batem no vento quente. Uma tela azul se abre no canto da visão: 【Sistema】 Usuário vinculado. Local: Owari, 1560. Missão inicial: sobreviver à batalha que vem. O nome do vale no mapa do sargento você conhece dos livros: Okehazama. Hanzō cutuca você, rindo: \"Gonbei, dormiu de pé de novo? O sargento vai te matar antes dos Oda.\" O sargento Tsuchida cospe no chão: \"Gonbei! Você e Hanzō, vigília na colina de Dengakuhazama esta noite. Se dormirem, eu mesmo corto as cabeças.\" Perto das tendas dos oficiais, uma vendedora de chá sorri demais e pergunta a um guarda onde fica a tenda do senhor.",
     narration: { style: "cinematic", length: "balanced", pace: "fast" },
     charAppearanceNote: "Baixo e forte, rosto queimado de sol, armadura de bambu laqueado rachada, chapéu jingasa amassado.",
     relationships: { "Sargento Tsuchida": "Neutral", "Hanzō": "Amigável", "Sayo": "Neutral", "Ikeda Tadakatsu": "Hostil", "Monge Ryōsen": "Amigável" },

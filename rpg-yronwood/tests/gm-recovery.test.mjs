@@ -43,7 +43,8 @@ test('Falhas de API são distinguíveis e cota/indisponibilidade tentam outra ch
     resetGeminiKeyState();
     count = 0;
     globalThis.fetch = async () => { count++; return { ok: false, status: 429, headers: { get: () => '45' }, json: async () => ({}) }; };
-    res = await call(); assert.equal(count, 2); assert.equal(res.code, 429); assert.equal(res.headers['Retry-After'], '45'); assert.equal(res.data.code, 'RATE_LIMIT');
+    // Cada chave tenta o Flash e, sem cota nele, o Flash-Lite: 2 chaves × 2 modelos.
+    res = await call(); assert.ok(count >= 3 && count <= 4, `chamadas: ${count}`); assert.equal(res.code, 429); assert.equal(res.headers['Retry-After'], '45'); assert.equal(res.data.code, 'RATE_LIMIT');
     assert.match(res.data.error, /Todas as chaves Gemini estão no limite agora\. Tente em \d+ segundos\./);
     assert.equal(res.data.retryAfter, 45);
 
@@ -150,7 +151,7 @@ test('Várias chaves: tenta todas as únicas (até 7); uma chave boa recupera a 
       return { ok: false, status: 429, headers: { get: () => '8' }, json: async () => ({}) };
     };
     const exhausted = await call();
-    assert.equal(count, 7);
+    assert.equal(count, 14);
     assert.equal(used.size, 7);
     assert.equal(exhausted.code, 429);
     assert.equal(exhausted.data.retryAfter, 8);
@@ -168,7 +169,7 @@ test('Várias chaves: tenta todas as únicas (até 7); uma chave boa recupera a 
     };
     const recovered = await call();
     assert.equal(recovered.code, 200);
-    assert.ok(count >= 1 && count <= 2);
+    assert.ok(count >= 1 && count <= 3);
   } finally {
     globalThis.fetch = previousFetch;
     resetGeminiKeyState();

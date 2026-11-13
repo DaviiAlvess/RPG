@@ -10,7 +10,15 @@ import {
 import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
 
 const DEFAULT_MODEL = "gemini-3.5-flash-lite";
-const FALLBACK_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"];
+// Narração e pesquisa de lore usam o Flash mais recente (texto bem melhor que o Flash-Lite).
+// Quando a cota dele acaba numa chave, a mesma chave segue no Flash-Lite — sem travar o jogo.
+export const DEFAULT_NARRATOR_MODEL = "gemini-flash-latest";
+// Reserva, lida a cada pedido: GEMINI_MODEL (ou o Flash-Lite atual), o alias do Flash-Lite e o 2.5 Flash.
+const fallbackModels = () => [
+  String(process.env.GEMINI_MODEL || DEFAULT_MODEL).trim().replace(/^models\//, "") || DEFAULT_MODEL,
+  "gemini-flash-lite-latest",
+  "gemini-2.5-flash",
+];
 export const GM_DEADLINE_MS = 50000;
 export const MAX_DEADLINE_MS = 52000;
 const MIN_ATTEMPTS = 1;
@@ -32,28 +40,94 @@ const geminiText = data => data?.candidates?.[0]?.content?.parts
   .map((part) => part.text).join("");
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
+// Ficção com guerra e vilões não pode ser cortada no meio por filtro sensível demais.
+// Conteúdo sexual explícito continua no padrão do Gemini.
+export const FICTION_SAFETY = [
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_ONLY_HIGH" },
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_ONLY_HIGH" },
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_ONLY_HIGH" },
+];
+
+const isGemini3 = model => /^gemini-(3|flash-latest|flash-lite-latest|pro-latest)/.test(String(model || ""));
+
 /**
- * No Gemini 2.5 Flash o "pensamento" interno gasta o mesmo limite de tokens da resposta:
- * a narração acabava cortada no meio. Para narrar, ele não precisa pensar.
+ * Ajusta o pedido ao modelo:
+ * - Gemini 3.x: raciocínio "low" (o padrão gasta tempo e tokens da resposta) e sem
+ *   temperatura/topP/topK, que o 3.x ignora ou trata mal.
+ * - Gemini 2.5 Flash: sem raciocínio — ele gastava o limite e a narração saía cortada.
+ * Com { thinking: false } manda sem configuração de raciocínio (para repetir após erro 400).
  */
-export function withModelConfig(body, model) {
-  if (!body?.generationConfig || !/^gemini-2\.5-flash/.test(String(model || ""))) return body;
-  if (body.generationConfig.thinkingConfig) return body;
-  return { ...body, generationConfig: { ...body.generationConfig, thinkingConfig: { thinkingBudget: 0 } } };
+export function withModelConfig(body, model, { thinking = true } = {}) {
+  if (!body || typeof body !== "object") return body;
+  const next = { ...body };
+  if (!next.safetySettings) next.safetySettings = FICTION_SAFETY;
+  if (!next.generationConfig) return next;
+  const gen = { ...next.generationConfig };
+  if (isGemini3(model)) {
+    delete gen.temperature;
+    delete gen.topP;
+    delete gen.topK;
+    if (thinking && !gen.thinkingConfig) gen.thinkingConfig = { thinkingLevel: "low" };
+  } else if (/^gemini-2\.5-flash/.test(String(model || "")) && thinking && !gen.thinkingConfig) {
+    gen.thinkingConfig = { thinkingBudget: 0 };
+  }
+  if (!thinking) delete gen.thinkingConfig;
+  next.generationConfig = gen;
+  return next;
 }
+
+/** O pedido ganhou configuração de raciocínio? (se o modelo recusar com 400, repete sem ela) */
+export const addsThinking = (body, model) => Boolean(withModelConfig(body, model)?.generationConfig?.thinkingConfig) && !body?.generationConfig?.thinkingConfig;
 
 export const finishReasonOf = data => data?.candidates?.[0]?.finishReason || "";
 
-/** Pedido para continuar uma narração que bateu no limite de tamanho. */
-export function continuationBody(body, partial) {
+/** Motivos em que o Gemini para no meio do texto. */
+export const CUT_REASONS = ["MAX_TOKENS", "RECITATION", "SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "SPII", "OTHER"];
+export const isCut = reason => CUT_REASONS.includes(String(reason || ""));
+
+/** Pedido para continuar uma narração que parou no meio (limite, recitação ou filtro). */
+export function continuationBody(body, partial, reason = "MAX_TOKENS") {
+  const why = reason === "RECITATION"
+    ? "sua resposta foi interrompida porque ficou parecida demais com um texto publicado da obra. Continue EXATAMENTE de onde parou, com palavras SUAS — sem citar falas, versos ou trechos da obra."
+    : reason === "MAX_TOKENS"
+      ? "sua resposta foi cortada pelo limite de tamanho. Continue EXATAMENTE de onde parou — no meio da frase, se for o caso —, sem repetir nada e sem recomeçar."
+      : "sua resposta foi interrompida pelo filtro de conteúdo. Continue EXATAMENTE de onde parou, com menos detalhe gráfico (sugira a violência em vez de descrever ferimentos), mantendo a cena e o tom.";
   const contents = [
     ...(Array.isArray(body?.contents) ? body.contents : []),
     { role: "model", parts: [{ text: partial }] },
-    { role: "user", parts: [{ text: "[Sistema: sua resposta foi cortada pelo limite de tamanho. Continue EXATAMENTE de onde parou — no meio da frase, se for o caso —, sem repetir nada e sem recomeçar. Feche a cena e inclua as tags ocultas que faltaram.]" }] },
+    { role: "user", parts: [{ text: `[Sistema: ${why} Feche a cena e inclua as tags ocultas que faltaram.]` }] },
   ];
   const { tools, ...rest } = body || {};
-  return { ...rest, contents, generationConfig: { ...(body?.generationConfig || {}), maxOutputTokens: 1536 } };
+  return { ...rest, contents, generationConfig: { ...(body?.generationConfig || {}), maxOutputTokens: 2048 } };
 }
+
+/** Se não deu para continuar, termina na última frase completa (nunca no meio de uma palavra). */
+export function trimToSentence(text) {
+  const raw = String(text || "").replace(/\[[^\]]*$/, "").trimEnd();
+  if (!raw || /[.!?…"»)\]]$/.test(raw)) return raw;
+  const cut = Math.max(raw.lastIndexOf(". "), raw.lastIndexOf("! "), raw.lastIndexOf("? "), raw.lastIndexOf("… "), raw.lastIndexOf('." '), raw.lastIndexOf(".\n"), raw.lastIndexOf('"\n'));
+  return cut > raw.length * 0.4 ? raw.slice(0, cut + 1).trimEnd() : `${raw}…`;
+}
+
+/** Narrações terminam numa fala do jogador: o Gemini 3 recusa pedido cuja última mensagem é do modelo. */
+export function endsWithUser(contents) {
+  const list = Array.isArray(contents) ? contents : [];
+  if (!list.length || list[list.length - 1].role === "user") return list;
+  return [...list, { role: "user", parts: [{ text: "[Continue a cena a partir daqui.]" }] }];
+}
+
+// Cota por modelo: um 429 no modelo principal (o Flash) não aposenta a chave inteira —
+// ela segue no Flash-Lite. Nos modelos de reserva, 429 continua valendo para a chave.
+const modelRest = new Map();
+export function restModel(key, model, ms = 60000) { modelRest.set(`${key}|${model}`, Date.now() + Math.max(5000, ms)); }
+export function modelResting(key, model) { return (modelRest.get(`${key}|${model}`) || 0) > Date.now(); }
+export function firstAwakeModel(key, models, from = 0) {
+  return from === 0 && models.length > 1 && modelResting(key, models[0]) ? 1 : from;
+}
+const retryAfterMs = value => {
+  const sec = Number(value);
+  return Number.isFinite(sec) && sec > 0 ? sec * 1000 : 60000;
+};
 
 /** Junta a continuação sem duplicar o trecho em que a primeira parte parou. */
 export function joinContinuation(partial, more) {
@@ -97,7 +171,7 @@ const sseWrite = (res, payload) => {
  * aí o cliente usa o caminho normal, com todas as tentativas e o rodízio de chaves.
  */
 async function streamNarration(res, body, modelo, keys) {
-  const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
+  const models = [...new Set([modelName(modelo), ...fallbackModels()])];
   let modelIdx = 0;
   const startedAt = Date.now();
   const deadline = startedAt + GM_DEADLINE_MS;
@@ -113,14 +187,18 @@ async function streamNarration(res, body, modelo, keys) {
     if (!pool.length) break;
     const { key } = nextGeminiKey(pool);
     if (!key) break;
+    modelIdx = firstAwakeModel(key, models, modelIdx);
     const controller = new AbortController();
     let timer = setTimeout(() => controller.abort(), Math.min(remaining, STREAM_FIRST_BYTE_MS));
     let upstream;
+    const open = (thinking) => fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:streamGenerateContent?alt=sse&key=${key}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(body, models[modelIdx], { thinking })), signal: controller.signal }
+    );
     try {
-      upstream = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:streamGenerateContent?alt=sse&key=${key}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(body, models[modelIdx])), signal: controller.signal }
-      );
+      upstream = await open(true);
+      // Modelo que não aceita a configuração de raciocínio: repete sem ela.
+      if (upstream.status === 400 && addsThinking(body, models[modelIdx])) upstream = await open(false);
     } catch {
       clearTimeout(timer);
       tried.add(key);
@@ -128,7 +206,14 @@ async function streamNarration(res, body, modelo, keys) {
     }
     if (upstream.status === 429) {
       clearTimeout(timer);
-      markGeminiKeyExhausted(key, upstream.headers?.get?.("retry-after"));
+      const retry = upstream.headers?.get?.("retry-after");
+      if (modelIdx === 0 && models.length > 1) {
+        // A cota acabou só no modelo principal: a mesma chave tenta a reserva.
+        restModel(key, models[modelIdx], retryAfterMs(retry));
+        modelIdx += 1;
+        continue;
+      }
+      markGeminiKeyExhausted(key, retry);
       tried.add(key);
       continue;
     }
@@ -180,19 +265,28 @@ async function streamNarration(res, body, modelo, keys) {
         const piece = geminiText(event);
         if (piece) { total += piece; sseWrite(res, { t: piece }); }
       }
-      // Bateu no limite de tamanho: pede a continuação e manda junto, sem o jogador perceber o corte.
-      if (total && finishReasonOf(lastData) === "MAX_TOKENS" && deadline - Date.now() > 4000) {
-        try {
-          const ctrl = new AbortController();
-          const t2 = setTimeout(() => ctrl.abort(), Math.max(1000, deadline - Date.now() - 500));
-          const more = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:generateContent?key=${key}`,
-            { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(continuationBody(body, total), models[modelIdx])), signal: ctrl.signal }
-          ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-          clearTimeout(t2);
-          const extra = joinContinuation(total, geminiText(more));
-          if (extra) { total += extra; sseWrite(res, { t: extra }); }
-        } catch {}
+      // Parou no meio (limite, recitação da obra ou filtro): pede a continuação e manda junto,
+      // sem o jogador perceber o corte. Se não der, fecha na última frase completa.
+      const reason = finishReasonOf(lastData);
+      if (total && isCut(reason)) {
+        let extra = "";
+        if (deadline - Date.now() > 4000) {
+          try {
+            const ctrl = new AbortController();
+            const t2 = setTimeout(() => ctrl.abort(), Math.max(1000, deadline - Date.now() - 500));
+            const more = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${models[modelIdx]}:generateContent?key=${key}`,
+              { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(withModelConfig(continuationBody(body, total, reason), models[modelIdx])), signal: ctrl.signal }
+            ).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+            clearTimeout(t2);
+            extra = joinContinuation(total, geminiText(more));
+          } catch {}
+        }
+        if (extra) { total += extra; sseWrite(res, { t: extra }); }
+        else {
+          const closed = trimToSentence(total);
+          if (closed !== total) { total = closed; sseWrite(res, { final: closed }); }
+        }
       }
       if (!total) {
         const finish = lastData?.candidates?.[0]?.finishReason;
@@ -230,8 +324,9 @@ export function readGmRequestBody(raw) {
 }
 
 export default async function handler(req, res) {
-  const MODELO_GM = modelName(process.env.GEMINI_MODEL);
-  const MODELO_LORE = modelName(process.env.GEMINI_LORE_MODEL || process.env.GEMINI_MODEL);
+  // GEMINI_NARRATOR_MODEL troca o narrador; GEMINI_MODEL vira a reserva logo atrás dele.
+  const MODELO_GM = modelName(process.env.GEMINI_NARRATOR_MODEL || DEFAULT_NARRATOR_MODEL);
+  const MODELO_LORE = modelName(process.env.GEMINI_LORE_MODEL || process.env.GEMINI_NARRATOR_MODEL || DEFAULT_NARRATOR_MODEL);
   res.setHeader("Cache-Control", "no-store");
   const respondError = error => {
     if (error.retryAfter) res.setHeader("Retry-After", String(error.retryAfter));
@@ -265,7 +360,12 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Pedido inválido: corpo ausente.", code: "INVALID_BODY" });
   }
 
-  const { messages, systemPrompt, useLoreSearch, useCharacterSearch, useGrounding, world, charName } = requestBody;
+  const { messages, systemPrompt, useLoreSearch, useLoreTopics, useCharacterSearch, useGrounding, world, charName } = requestBody;
+  // Recorte da história (época, lugar, papel do jogador) e nomes a pesquisar — sempre texto curto.
+  const loreContext = typeof requestBody.context === "string" ? requestBody.context.slice(0, 1500).trim() : "";
+  const loreTopics = Array.isArray(requestBody.topics)
+    ? [...new Set(requestBody.topics.map(t => String(t || "").replace(/[\n\r"{}]/g, " ").trim().slice(0, 48)).filter(Boolean))].slice(0, 6)
+    : [];
 
   const parseJsonFromText = (text) => {
     const cleaned = String(text || "").replace(/```json\s*/gi, "").replace(/```/g, "").trim();
@@ -311,13 +411,14 @@ export default async function handler(req, res) {
     // intervenção do Mestre) often needs 15–30s on lite. Starving the first call
     // to ~5–12s is what surfaces "O Mestre demorou para responder".
     const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, deadlineMs - 4000));
-    const models = [...new Set([modelName(modelo), ...FALLBACK_MODELS])];
+    const models = [...new Set([modelName(modelo), ...fallbackModels()])];
     let modelIdx = 0;
     let apiVersion = "v1beta";
     let lastError = null;
     let lastNonRateLimitError = null;
     const deadline = Date.now() + deadlineMs;
     const triedThisCall = new Set();
+    let modelSkips = 0;
     const authRefusedKeys = new Set();
     const rateLimitedKeys = new Set();
     const tryAgainError = () => {
@@ -331,18 +432,19 @@ export default async function handler(req, res) {
       if (err && err.code !== "RATE_LIMIT") lastNonRateLimitError = err;
     };
 
-    const postGemini = (apiKey, modeloAtual, requestBody, signal, version = "v1beta") => fetch(
+    const postGemini = (apiKey, modeloAtual, requestBody, signal, version = "v1beta", thinking = true) => fetch(
       `https://generativelanguage.googleapis.com/${version}/models/${modeloAtual}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(withModelConfig(requestBody, modeloAtual)),
+        body: JSON.stringify(withModelConfig(requestBody, modeloAtual, { thinking })),
       }
     );
 
     const callGemini = async (apiKey, modeloAtual, requestBody, signal, version) => {
-      const res = await postGemini(apiKey, modeloAtual, requestBody, signal, version);
+      let res = await postGemini(apiKey, modeloAtual, requestBody, signal, version);
+      if (res.status === 400 && addsThinking(requestBody, modeloAtual)) res = await postGemini(apiKey, modeloAtual, requestBody, signal, version, false);
       let payload = null;
       let parsed = true;
       try { payload = await res.json(); }
@@ -366,7 +468,8 @@ export default async function handler(req, res) {
       const pick = nextGeminiKey(pool);
       const apiKey = pick.key;
       if (!apiKey) break;
-      const modeloAtual = models[modelIdx];
+      const modelPos = firstAwakeModel(apiKey, models, modelIdx);
+      const modeloAtual = models[modelPos];
       const callWithBudget = async (requestBody, budgetMs) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), budgetMs);
@@ -403,6 +506,13 @@ export default async function handler(req, res) {
 
         if (geminiRes.status === 429) {
           const headerRetry = geminiRes.headers?.get?.("retry-after");
+          if (modelPos === 0 && models.length > 1 && modelSkips < Math.max(1, chavesUnicas.length)) {
+            // Só este modelo esgotou nesta chave: a próxima tentativa usa o modelo seguinte.
+            restModel(apiKey, modeloAtual, retryAfterMs(headerRetry));
+            modelSkips += 1;
+            attempt -= 1;
+            continue;
+          }
           markGeminiKeyExhausted(apiKey, headerRetry);
           triedThisCall.add(apiKey);
           rateLimitedKeys.add(apiKey);
@@ -428,8 +538,9 @@ export default async function handler(req, res) {
             attempt -= 1;
             continue;
           }
-          if (unavailable && modelIdx < models.length - 1) {
-            modelIdx += 1;
+          if (unavailable && modelPos < models.length - 1) {
+            // Pula para o modelo seguinte ao que falhou (o principal pode ter sido pulado por cota).
+            modelIdx = modelPos + 1;
             apiVersion = "v1beta";
             attempt -= 1;
             continue;
@@ -467,12 +578,16 @@ export default async function handler(req, res) {
         }
 
         recordKeyUsage(apiKey, parseUsageTokens(data));
-        if (finishReasonOf(data) === "MAX_TOKENS" && deadline - Date.now() > 4000) {
-          try {
-            const more = await callWithBudget(continuationBody(body, text), Math.min(deadline - Date.now() - 500, perRequestMs));
-            const extra = more.parsed && more.res.ok ? joinContinuation(text, geminiText(more.payload)) : "";
-            if (extra) return text + extra;
-          } catch {}
+        const reason = finishReasonOf(data);
+        if (isCut(reason)) {
+          if (deadline - Date.now() > 4000) {
+            try {
+              const more = await callWithBudget(continuationBody(body, text, reason), Math.min(deadline - Date.now() - 500, perRequestMs));
+              const extra = more.parsed && more.res.ok ? joinContinuation(text, geminiText(more.payload)) : "";
+              if (extra) return text + extra;
+            } catch {}
+          }
+          return trimToSentence(text);
         }
         return text;
       } catch (err) {
@@ -573,6 +688,45 @@ export default async function handler(req, res) {
     }
   }
 
+  // ── Modo: lore de nomes que apareceram na mesa ─────────────────────
+  if (useLoreTopics) {
+    if (!world || !loreTopics.length) {
+      return res.status(400).json({ error: 'Campos "world" e "topics" são obrigatórios.', code: "INVALID_BODY" });
+    }
+    try {
+      const topicsBody = {
+        system_instruction: {
+          parts: [{
+            text: [
+              "Você é um pesquisador especialista em lore de obras de ficção.",
+              "Para cada nome pedido, pesquise o que a OBRA estabelece: quem ou o que é, aparência ou marca, lealdade, o que está fazendo no recorte indicado e uma ligação relevante.",
+              "Até 2 frases por nome, em português brasileiro. Só fatos canônicos; não invente.",
+              "Se o nome não existe na obra (personagem original da mesa) ou você não tiver certeza, deixe-o de fora.",
+              'Responda APENAS com JSON válido no formato {"Nome": "fato canônico curto"}.',
+            ].join(" "),
+          }],
+        },
+        contents: [{
+          role: "user",
+          parts: [{ text: `Obra: "${world}".${loreContext ? `\nRecorte: ${loreContext}` : ""}\nNomes: ${loreTopics.join("; ")}` }],
+        }],
+        generationConfig: { maxOutputTokens: 2048, temperature: 0.2 },
+      };
+      const raw = await chamarGeminiComBusca(topicsBody, MODELO_LORE);
+      const parsed = parseJsonFromText(raw);
+      const notes = {};
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        for (const [name, fact] of Object.entries(parsed)) {
+          if (typeof fact === "string" && fact.trim()) notes[String(name).slice(0, 48)] = fact.trim().slice(0, 400);
+        }
+      }
+      return res.status(200).json({ notes, tried: loreTopics });
+    } catch (e) {
+      console.error("Erro no lore de nomes:", e.message);
+      return respondError(e);
+    }
+  }
+
   // ── Modo: busca de lore ────────────────────────────────────────────
   if (useLoreSearch) {
     if (!world) {
@@ -587,13 +741,15 @@ export default async function handler(req, res) {
               "Você é um pesquisador especialista em lore de obras de ficção.",
               "Use busca para ancorar o briefing em fatos canônicos estabelecidos.",
               "Produza um BRIEFING CANÔNICO PARA RPG em português brasileiro, com estas seções:",
-              "1) ERA / RECORTE TEMPORAL típico;",
-              "2) LUGARES NOMEADOS essenciais;",
-              "3) FACÇÕES e poderes políticos ou sociais;",
-              "4) REGRAS DE MAGIA / PODER / FÍSICA (o que existe, o que é raro, o que NÃO existe);",
-              "5) TOM e vida cotidiana de pessoas comuns;",
-              "6) O QUE NÃO INVENTAR (destinos de protagonistas, eventos-chave, poderes fora do sistema);",
-              "7) TRAMAS CANÔNICAS: 3 a 5 conflitos ou arcos estabelecidos (guerra, sucessão, facção, mistério em curso) que um habitante comum poderia cruzar. Cada uma vira uma tag [TRAMA:título|gancho local em 1 linha].",
+              "1) ERA / RECORTE TEMPORAL: o ano ou período exato do recorte pedido, quem governa, guerras e crises em curso NESTE momento;",
+              "2) QUEM ESTÁ ONDE: personagens canônicos importantes vivos neste momento, idade aproximada, onde estão e o que fazem agora;",
+              "3) LINHA DO TEMPO À FRENTE: eventos canônicos dos próximos meses e anos a partir do recorte, em ordem, para o Mestre respeitar ou deixar o jogador mudar com consequência;",
+              "4) LUGARES NOMEADOS do recorte: quem controla, como é, o que tem de importante;",
+              "5) FACÇÕES e poderes políticos ou sociais, com o que cada uma quer agora;",
+              "6) REGRAS DE MAGIA / PODER / FÍSICA E TECNOLOGIA (o que existe, o que é raro, o que NÃO existe);",
+              "7) COTIDIANO E COSTUMES: comida, moedas, títulos e formas de tratamento, juramentos e xingamentos típicos, nomes comuns, como gente comum fala e vive;",
+              "8) O QUE NÃO INVENTAR (destinos de protagonistas, eventos-chave, poderes fora do sistema);",
+              "9) TRAMAS CANÔNICAS: 3 a 5 conflitos ou arcos estabelecidos NESTE recorte que um habitante comum poderia cruzar. Cada uma vira uma tag [TRAMA:título|gancho local em 1 linha].",
               "Não invente eventos, personagens ou regras. Se um fato for incerto, omita-o ou marque como incerto.",
               "Não escreva a aventura do jogador nem o coloque como protagonista da obra — só o contexto fiel e as tramas do universo para um Mestre.",
             ].join(" "),
@@ -601,9 +757,9 @@ export default async function handler(req, res) {
         },
         contents: [{
           role: "user",
-          parts: [{ text: `Pesquise o universo "${world}" na rede e entregue o briefing canônico acima, inclusive tramas e arcos atuais confirmados pela busca. Não invente canon.` }],
+          parts: [{ text: `Pesquise o universo "${world}" na rede e entregue o briefing canônico acima, inclusive tramas e arcos confirmados pela busca. Não invente canon.${loreContext ? `\n\nRECORTE DESTA HISTÓRIA (foque a pesquisa NESTA época e NESTE lugar, não no período mais famoso da obra):\n${loreContext}` : ""}` }],
         }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.3 },
+        generationConfig: { maxOutputTokens: 6144, temperature: 0.3 },
       };
 
       const lore = await chamarGeminiComBusca(loreBody, MODELO_LORE);
@@ -683,14 +839,15 @@ export default async function handler(req, res) {
   }
 
   try {
-    const contents = messages.map((m) => ({
+    const contents = endsWithUser(messages.map((m) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
-    }));
+    })));
 
     const body = {
       contents,
-      generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 2048 : 4096, temperature: 0.9 },
+      // Folga para o raciocínio "low" do Gemini 3 não comer a narração; o tamanho real vem do prompt.
+      generationConfig: { maxOutputTokens: requestBody.economyMode === true ? 4096 : 8192, temperature: 0.9 },
       system_instruction: { parts: [{ text: systemPrompt }] },
     };
 

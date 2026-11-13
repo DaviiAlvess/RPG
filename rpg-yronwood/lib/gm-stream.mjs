@@ -36,6 +36,11 @@ export async function readNarrationStream(response, onText = () => {}) {
         text += event.t;
         onText(text);
       }
+      // O servidor fechou a narração na última frase completa (corte que não deu para continuar).
+      if (typeof event?.final === "string" && event.final) {
+        text = event.final;
+        onText(text);
+      }
       if (event?.done) done = true;
     }
   };

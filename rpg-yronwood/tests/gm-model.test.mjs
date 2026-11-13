@@ -7,7 +7,7 @@ const { default: handler } = await loadGmHandler();
 const KEY_VARS = ['GEMINI_API_KEY', 'GEMINI_KEY', ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap(n => [`GEMINI_API_KEY_${n}`, `GEMINI_KEY_${n}`])];
 test('Modelo atual, configuração e aviso de modelo indisponível', async () => {
   const originalFetch = globalThis.fetch;
-  const names = [...KEY_VARS, 'GEMINI_MODEL', 'GEMINI_LORE_MODEL'];
+  const names = [...KEY_VARS, 'GEMINI_MODEL', 'GEMINI_LORE_MODEL', 'GEMINI_NARRATOR_MODEL'];
   const previous = Object.fromEntries(names.map(name => [name, process.env[name]]));
   const call = async body => {
     const response = { setHeader() {}, status(code) { this.code = code; return this; }, json(data) { this.data = data; return this; } };
@@ -17,12 +17,13 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
   try {
     resetGeminiKeyState();
     for (const name of KEY_VARS) delete process.env[name];
-    process.env.GEMINI_API_KEY = 'test'; delete process.env.GEMINI_MODEL; delete process.env.GEMINI_LORE_MODEL;
+    process.env.GEMINI_API_KEY = 'test'; delete process.env.GEMINI_MODEL; delete process.env.GEMINI_LORE_MODEL; delete process.env.GEMINI_NARRATOR_MODEL;
     let calledUrl;
     globalThis.fetch = async url => { calledUrl = url; return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) }; };
     assert.equal((await call(body)).code, 200);
-    assert.ok(calledUrl.includes('/models/gemini-3.5-flash-lite:generateContent'));
-    process.env.GEMINI_MODEL = 'models/configured-test';
+    // Narrador padrão: o Flash mais recente.
+    assert.ok(calledUrl.includes('/models/gemini-flash-latest:generateContent'));
+    process.env.GEMINI_NARRATOR_MODEL = 'models/configured-test';
     await call(body); assert.ok(calledUrl.includes('/models/configured-test:generateContent'));
     process.env.GEMINI_LORE_MODEL = 'lore-test';
     let loreBody;
@@ -50,11 +51,12 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     assert.deepEqual(gmBody.tools, [{ google_search: {} }]);
     await call(body);
     assert.equal(gmBody.tools, undefined);
-    delete process.env.GEMINI_MODEL;
+    delete process.env.GEMINI_MODEL; delete process.env.GEMINI_NARRATOR_MODEL;
     const urls = [];
+    const gone = ['gemini-flash-latest', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
     globalThis.fetch = async url => {
       urls.push(String(url));
-      if (String(url).includes('/models/gemini-3.5-flash-lite:generateContent')) {
+      if (gone.some((m) => String(url).includes(`/models/${m}:generateContent`))) {
         return { ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) };
       }
       return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Cena.' }] } }] }) };
@@ -65,7 +67,7 @@ test('Modelo atual, configuração e aviso de modelo indisponível', async () =>
     const loreUrls = [];
     globalThis.fetch = async url => {
       loreUrls.push(String(url));
-      if (String(url).includes('/models/gemini-3.5-flash-lite:generateContent') || String(url).includes('/models/lore-test:generateContent')) {
+      if (gone.some((m) => String(url).includes(`/models/${m}:generateContent`)) || String(url).includes('/models/lore-test:generateContent')) {
         return { ok: false, status: 404, json: async () => ({ error: { message: 'This model is no longer available to new users.' } }) };
       }
       return { ok: true, status: 200, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Briefing.' }] } }] }) };

@@ -38,6 +38,7 @@ import {
 import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoTestReply, buildLocalAutoAction, formatRollDisplay, sanitizeAutoAction } from "../lib/autoMode";
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
+import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
@@ -187,6 +188,7 @@ const buildPromptBody = (c, loreExtra, gameTime) => {
     plotPromptLines(c.plots),
     ...storyProgressLines(c),
     ...dramaPromptLines(c, { busy: isOffscreenDue(c) }),
+    ...loreNotesLines(c, c.loreFocus),
     ...systemPromptLines(c),
     c.pendingLevelNote ? `CONTEXTO INTERNO (não é fala do jogador): ${c.pendingLevelNote}` : "",
     masterInterventionContext(c.pendingMasterNote),
@@ -1105,16 +1107,45 @@ export default function RPG() {
   };
 
   // ─── Lore fetch ───────────────────────────────────────────────────
-  const fetchLore = async (world) => {
+  const fetchLore = async (world, context = "") => {
     try {
       const res = await apiFetch("/api/gm", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ useLoreSearch: true, world }),
+        // O recorte (época, lugar, papel) faz a pesquisa trazer a lore DESTA história, não a da obra em geral.
+        body: JSON.stringify({ useLoreSearch: true, world, context }),
       });
       const data = await res.json();
       if (!res.ok || data.error) throw gmRequestError(data, res.status, "Não foi possível preparar o contexto do mundo.");
       return data.lore || "";
     } catch (error) { throw error; }
+  };
+
+  // Nomes da obra que apareceram na mesa: pesquisa curta e guarda na campanha.
+  const loreTopicsBusy = useRef(new Set());
+  const researchLoreTopics = async (camp, topics, timeoutMs = 20000) => {
+    const list = (topics || []).filter((t) => !loreTopicsBusy.current.has(`${camp.id}:${t}`));
+    if (!camp?.id || !list.length) return null;
+    list.forEach((t) => loreTopicsBusy.current.add(`${camp.id}:${t}`));
+    try {
+      const res = await apiFetch("/api/gm", {
+        method: "POST", headers: { "Content-Type": "application/json" }, timeoutMs, retryOnce: false,
+        body: JSON.stringify({ useLoreTopics: true, world: camp.world, context: loreContextFor(camp), topics: list }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const patch = mergeLoreNotes(activeRef.current?.id === camp.id ? activeRef.current : camp, data.notes || {}, data.tried || list);
+      setActive((prev) => {
+        if (!prev || prev.id !== camp.id) return prev;
+        const next = { ...prev, ...patch };
+        saveCamp(prev.id, next);
+        return next;
+      });
+      return patch;
+    } catch {
+      return null;
+    } finally {
+      list.forEach((t) => loreTopicsBusy.current.delete(`${camp.id}:${t}`));
+    }
   };
 
   const fetchCharacterLore = async (world, name) => {
@@ -1364,7 +1395,7 @@ export default function RPG() {
 
     let lore = "";
     try {
-      if (form.isKnownIP) { setStatus("Preparando o contexto de " + form.world + "..."); lore = await fetchLore(form.world); }
+      if (form.isKnownIP) { setStatus("Pesquisando a lore de " + form.world + " nesta época..."); lore = await fetchLore(form.world, loreContextFor(form)); }
       else { setStatus("Preparando mundo..."); }
     } catch (error) {
       lore = "";
@@ -1387,6 +1418,7 @@ export default function RPG() {
       ...(gameSystem ? { gameSystem } : {}),
       id,
       lore,
+      loreContextAt: lore ? Date.now() : 0,
       memory: "", memoryUntil: 0,
       worldState: form.worldState && typeof form.worldState === "object" ? form.worldState : {},
       msgs: [],
@@ -1523,6 +1555,18 @@ export default function RPG() {
       pendingLevelNoteRef.current = "";
       pendingMasterNote = pendingMasterNoteRef.current || camp.pendingMasterNote || "";
       pendingMasterNoteRef.current = "";
+      // Obra conhecida: nomes que o jogador citou e a mesa ainda não pesquisou são buscados
+      // antes de narrar (no máximo 8 s; se demorar, a narração segue e a lore chega depois).
+      if (camp.isKnownIP && !isMasterBeat && !isStartBeat && !isTimeSkipContext) {
+        const asked = pendingLoreTopics(camp, text);
+        if (asked.length) {
+          setStatus("Consultando a lore da obra");
+          const found = await researchLoreTopics(camp, asked, 8000);
+          if (found) { camp = { ...camp, ...found }; retryCamp = { ...retryCamp, ...found }; }
+          setStatus(isAuto ? "Modo automático — narrando" : "Narrando");
+        }
+      }
+      const loreFocus = recentLoreText(text, baseDisp);
       // Texto parcial na tela enquanto chega (no máximo ~16 atualizações por segundo).
       let lastPaint = 0;
       const paintPartial = (partial) => {
@@ -1538,14 +1582,14 @@ export default function RPG() {
         useGrounding: !isMasterBeat && shouldGroundGmTurn(camp, baseMsgs.length),
         messages: newMsgs.slice(memoryUntil),
         // disp/msgs com a mensagem ATUAL: antes o prompt citava a ação do turno anterior como "última jogada".
-        systemPrompt: buildPrompt({ ...camp, disp: newDisp, msgs: newMsgs, paceInput: isStartBeat || isMasterBeat || isTimeSkipContext ? "" : text, memory, pendingLevelNote, pendingMasterNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
+        systemPrompt: buildPrompt({ ...camp, loreFocus, disp: newDisp, msgs: newMsgs, paceInput: isStartBeat || isMasterBeat || isTimeSkipContext ? "" : text, memory, pendingLevelNote, pendingMasterNote, experience: camp.experience ?? experience, level: camp.level ?? level, skills: camp.skills ?? skills, attributes: camp.attributes ?? attributes }, lore, camp.gameTime || gameTimeRef.current),
       }, paintPartial);
 
       let raw = narrationText;
       // Enquanto o Mestre narrava, o jogador pode ter comprado, aberto o baú ou falado com o Mestre.
       // Parte do estado MAIS RECENTE para nada disso sumir quando a resposta chega.
       const latest = activeRef.current && String(activeRef.current.id) === String(camp.id) ? activeRef.current : camp;
-      const LIVE_FIELDS = ["gameSystem", "items", "systemSkills", "bodyChanges", "appearance", "attributes", "skills", "masterChat", "masterAgreements", "era", "eraChecked", "level", "experience"];
+      const LIVE_FIELDS = ["gameSystem", "items", "systemSkills", "bodyChanges", "appearance", "attributes", "skills", "masterChat", "masterAgreements", "era", "eraChecked", "level", "experience", "loreNotes", "loreTried", "lore", "loreContextAt"];
       for (const key of LIVE_FIELDS) if (latest[key] !== undefined && latest[key] !== camp[key]) camp = { ...camp, [key]: latest[key] };
       const lists = storyListsFor(camp.id, camp, { activeId: camp.id, items: camp.items, missions, plots: latest.plots || camp.plots });
       const updatedMissions = parseMissions(raw, lists.missions);
@@ -1757,6 +1801,11 @@ export default function RPG() {
       const rankUp = systemResult.events.find((ev) => ev.type === "rank");
       if (rankUp) void expandShopForRank(updated, rankUp.rank);
       saveCamp(camp.id, updated);
+      // Nomes da obra que a narração trouxe: pesquisa em segundo plano para as próximas cenas.
+      if (updated.isKnownIP) {
+        const fresh = pendingLoreTopics(updated, raw);
+        if (fresh.length) void researchLoreTopics(updated, fresh);
+      }
       setIdx((prev) => { const next = prev.map((s) => s.id === camp.id ? { ...s, updatedAt: Date.now() } : s); saveIdx(next); return next; });
 
       setPending(options);
@@ -2137,6 +2186,24 @@ export default function RPG() {
     if (sys.lastRestockDay === day) throw new Error("A loja já renovou hoje. Volte amanhã na história.");
     await expandShopForRank(active, sys.rank, { restockDay: day });
   };
+
+  // Campanhas de obra conhecida já em andamento: refaz a lore uma vez, agora com o recorte da história.
+  const loreRefreshRef = useRef(new Set());
+  useEffect(() => {
+    if (!active?.id || !active.isKnownIP || active.loreContextAt || loreRefreshRef.current.has(active.id)) return;
+    loreRefreshRef.current.add(active.id);
+    const camp = active;
+    void fetchLore(camp.world, loreContextFor(camp)).then((lore) => {
+      if (!lore) return;
+      setActive((prev) => {
+        if (!prev || prev.id !== camp.id) return prev;
+        const next = { ...prev, lore, loreContextAt: Date.now() };
+        saveCamp(prev.id, next);
+        return next;
+      });
+      if (activeRef.current?.id === camp.id) setCampLore(lore);
+    }).catch(() => { loreRefreshRef.current.delete(camp.id); });
+  }, [active?.id, active?.isKnownIP, active?.loreContextAt]);
 
   // Toda campanha (nova ou já em andamento) ganha a época travada uma vez e salva.
   useEffect(() => {

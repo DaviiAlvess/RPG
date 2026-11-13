@@ -41,7 +41,7 @@ import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
 import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode } from "../lib/rooms.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
-import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, applyCombatTags, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
+import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
 import { applyManifestation, applyStatBoost, describeBoost, buildSystemBeatMessage, isSystemBeatMessage, systemBeatDisplay } from "../lib/manifest.mjs";
 import { DEFAULT_APP, appearanceForGm, sceneImageUrl } from "../lib/appearance.mjs";
@@ -1092,6 +1092,7 @@ export default function RPG() {
       systemSkills: save.systemSkills || [],
       achievements: active.achievements || save.achievements || [],
       combat: save.combat ?? null,
+      combatEnded: null,
       npcSeen: save.npcSeen || active.npcSeen || {},
       partyTurn: save.partyTurn ?? active.partyTurn ?? 0,
     };
@@ -1310,8 +1311,8 @@ export default function RPG() {
   };
   // O jogador encerra a luta à mão quando o Mestre esquece de fechar o combate.
   const endCombat = () => {
-    if (!active?.combat) return;
-    const next = { ...active, combat: null };
+    if (!active?.combat && !active?.combatEnded) return;
+    const next = { ...active, combat: null, combatEnded: null };
     setActive(next);
     saveCamp(active.id, next);
     if (next.roomId && isMyTurn(next, user?.uid)) void pushRoom(next, { keepTurn: true });
@@ -1983,6 +1984,12 @@ export default function RPG() {
         system: systemResult.events.length,
         ending: Boolean(newEnding),
       });
+      // Combate: estado novo e, se a luta acabou nesta resposta, o aviso "Fora de combate".
+      const combatResult = resolveCombat(camp.combat, raw, nextTurn, {
+        playerText: isMasterBeat || isStartBeat || isTimeSkipContext ? "" : text,
+        sceneChange: isTimeSkipContext,
+        moved: Boolean(nextWorldState?.location && camp.worldState?.location && nextWorldState.location !== camp.worldState.location),
+      });
       const updated = {
         ...camp,
         memory, memoryUntil,
@@ -2016,7 +2023,8 @@ export default function RPG() {
         ...(systemResult.system ? { gameSystem: systemResult.system } : {}),
         lastOffscreenTurn: offscreenUsed ? nextTurn : (camp.lastOffscreenTurn || 0),
         ...dramaPatch(camp, raw, nextTurn),
-        combat: applyCombatTags(camp.combat, raw, nextTurn),
+        combat: combatResult.combat,
+        combatEnded: combatResult.ended,
         npcSeen: updateNpcSeen({ ...camp, worldState: nextWorldState ?? camp.worldState }, raw, nextTurn),
         partyTurn: actorTag ? nextPartyTurn(camp) : (camp.partyTurn || 0),
         ...(newEnding ? { ending: newEnding } : {}),
@@ -2151,7 +2159,7 @@ export default function RPG() {
       hp: 100,
       gameTime: defaultTime,
       clues: [], tension: 0, ending: null, choices: [], chapters: [], turn: 0, lastOffscreenTurn: 0, threat: null, midpointTurn: 0, lastProgressTurn: 0, places: [], achievements: [],
-      combat: null, npcSeen: {}, partyTurn: 0,
+      combat: null, combatEnded: null, npcSeen: {}, partyTurn: 0,
       systemSkills: [],
       gameSystem: active.gameSystem?.enabled ? { ...active.gameSystem, points: 0, earned: 0, rank: "E", level: 1, kills: 0, purchased: [], quests: [], log: [] } : active.gameSystem,
       temporalEffects: [],

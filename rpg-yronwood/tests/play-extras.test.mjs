@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { redoNote, REDO_STYLES, recordError, readErrorLog, errorReport, clearErrorLog, applyCombatTags, stripCombatTags, combatPromptLines, combatActions, partyRoster, partyActor, nextPartyTurn, actorPrefix, partyPromptLines, updateNpcSeen } from '../lib/play-extras.mjs';
+import { redoNote, REDO_STYLES, recordError, readErrorLog, errorReport, clearErrorLog, applyCombatTags, resolveCombat, asCombatEnded, stripCombatTags, combatPromptLines, combatActions, partyRoster, partyActor, nextPartyTurn, actorPrefix, partyPromptLines, updateNpcSeen } from '../lib/play-extras.mjs';
 import { speakerVoice } from '../lib/voice-narration.mjs';
 
 const memory = () => { const m = new Map(); return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }; };
@@ -43,6 +43,50 @@ test('combate: inimigos entram por tag, mudam de estado e a luta termina', () =>
   let q = applyCombatTags(null, '[INIMIGO:Rato|caído]', 1);
   q = applyCombatTags(q, 'nada', 2);
   assert.equal(applyCombatTags(q, 'nada', 3), null);
+});
+
+test('combate: a tela sabe quando o personagem saiu da luta e por quê', () => {
+  const start = resolveCombat(null, 'Eles cercam você. [INIMIGO:Jimbo|pronto] [INIMIGO:Dolph|pronto]', 1);
+  assert.equal(start.ended, null);
+  assert.equal(start.combat.enemies.length, 2);
+  // sem luta e sem tags: nada muda
+  assert.deepEqual(resolveCombat(null, 'Você caminha pela rua.', 1), { combat: null, ended: null });
+  // todos caídos ou rendidos: acabou mesmo sem [COMBATE_FIM]
+  let r = resolveCombat(start.combat, 'Jimbo cai. [INIMIGO:Jimbo|caído] [INIMIGO:Dolph|se rendeu]', 2);
+  assert.equal(r.combat, null);
+  assert.equal(r.ended.reason, 'vitoria');
+  assert.equal(r.ended.label, 'Inimigos vencidos');
+  assert.equal(r.ended.at, 2);
+  // todos fugiram
+  assert.equal(resolveCombat(start.combat, '[INIMIGO:Jimbo|fugiu] [INIMIGO:Dolph|fugindo]', 2).ended.reason, 'fugiram');
+  // um só caiu: a luta continua
+  r = resolveCombat(start.combat, '[INIMIGO:Jimbo|caído]', 2);
+  assert.ok(r.combat);
+  assert.equal(r.ended, null);
+  // o personagem fugiu e o Mestre narra a fuga
+  r = resolveCombat(start.combat, 'Você dobra a esquina e os valentões ficam para trás.', 2, { playerText: 'Recuo e procuro uma saída' });
+  assert.equal(r.ended.reason, 'fuga');
+  // tag de fim com inimigos de pé e pedido de fuga
+  assert.equal(resolveCombat(start.combat, 'Você some no beco. [COMBATE_FIM]', 2, { playerText: 'Fujo correndo' }).ended.reason, 'fuga');
+  assert.equal(resolveCombat(start.combat, 'Trégua. [COMBATE_FIM]', 2).ended.reason, 'fim');
+  // o Mestre diz que acabou, sem tag
+  assert.equal(resolveCombat(start.combat, 'A briga acabou; Dolph limpa o nariz.', 2).ended.reason, 'fim');
+  // pulo de tempo encerra
+  assert.equal(resolveCombat(start.combat, 'Três dias depois…', 2, { sceneChange: true }).ended.reason, 'cena');
+  // três respostas sem notícia: a luta ficou para trás
+  let c = start.combat;
+  c = resolveCombat(c, 'Conversa.', 2).combat;
+  c = resolveCombat(c, 'Conversa.', 3).combat;
+  assert.ok(c);
+  r = resolveCombat(c, 'Conversa.', 4);
+  assert.equal(r.ended.reason, 'sumiu');
+  // o aviso vale só no turno em que a luta acabou
+  const note = resolveCombat(start.combat, '[COMBATE_FIM]', 5).ended;
+  assert.equal(asCombatEnded(note, 5).label, 'A luta acabou');
+  assert.equal(asCombatEnded(note, 6), null);
+  assert.equal(asCombatEnded({ reason: 'xyz', at: 5 }, 5), null);
+  // instrução curta (modo economia) também pede para fechar a luta
+  assert.match(combatPromptLines({ combat: start.combat }, { short: true }).join(' '), /COMBATE_FIM/);
 });
 
 test('grupo no mesmo aparelho: vez de cada um, ação marcada e instrução ao Mestre', () => {

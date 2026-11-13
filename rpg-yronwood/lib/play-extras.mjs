@@ -113,7 +113,7 @@ export function applyCombatTags(current, text = "", turn = 0) {
     // Sem notícia dos inimigos por duas respostas e ninguém de pé: a luta acabou.
     const quiet = state.quiet + 1;
     const standing = state.enemies.some((e) => !OUT.has(e.status));
-    return quiet >= 2 && !standing ? null : quiet >= 4 ? null : { ...state, quiet };
+    return quiet >= 2 && !standing ? null : quiet >= 3 ? null : { ...state, quiet };
   }
   state = state || { enemies: [], since: turn, quiet: 0 };
   const enemies = [...state.enemies];
@@ -129,6 +129,68 @@ export function applyCombatTags(current, text = "", turn = 0) {
 
 export const stripCombatTags = (text) => String(text || "").replace(/\[(INIMIGO:[^\]]*|COMBATE_FIM)\]/gi, "");
 
+// Por que a luta acabou (aparece na barra como "Fora de combate").
+export const COMBAT_END_LABELS = {
+  vitoria: "Inimigos vencidos",
+  fugiram: "Os inimigos fugiram",
+  fora: "Ninguém mais de pé para lutar",
+  fuga: "Você escapou da luta",
+  cena: "A cena mudou",
+  sumiu: "A luta ficou para trás",
+  fim: "A luta acabou",
+};
+const FLEE_INTENT = /\b(recu[oa]r?|fujo|fugir|fuga|corro|escapo|escapar|me afasto|bato em retirada|saio correndo)\b/;
+const ESCAPED_CUE = /\b(escapa|escapou|escapam|escaparam|despista|despistou|ficam? para tras|ficaram para tras|perdem? (voce|voces|o rastro)|consegue fugir|conseguiu fugir|longe do alcance|em seguranca)\b/;
+const OVER_CUE = /\b((a|essa|esta) (luta|briga|batalha)|(o|esse|este) (combate|confronto|duelo)) (acabou|acaba|termina|terminou|chega ao fim|chegou ao fim|esta encerrad[oa]|se encerra|foi vencid[oa])\b|\bfim da (luta|briga|batalha)\b/;
+
+function endReason(enemies) {
+  if (!enemies.length) return "fim";
+  if (enemies.every((e) => e.status === "fugindo")) return "fugiram";
+  if (enemies.every((e) => ["caido", "morto", "rendido"].includes(e.status))) return "vitoria";
+  return "fora";
+}
+
+/**
+ * Combate depois de uma resposta do Mestre. Além do novo estado, diz se a luta
+ * acabou agora e por quê, para a tela mostrar que o personagem saiu do combate.
+ */
+export function resolveCombat(current, gmText = "", turn = 0, { playerText = "", sceneChange = false, moved = false } = {}) {
+  const before = asCombat(current);
+  const raw = String(gmText || "");
+  const hasTags = /\[INIMIGO:/i.test(raw);
+  if (!before && !hasTags) return { combat: null, ended: null };
+  const tagged = hasTags ? applyCombatTags(current, raw.replace(/\[COMBATE_FIM\]/gi, ""), turn) : before;
+  const enemies = (tagged || before)?.enemies || [];
+  const allOut = enemies.length > 0 && enemies.every((e) => OUT.has(e.status));
+  const fled = FLEE_INTENT.test(norm(playerText));
+  const said = norm(stripCombatTags(raw));
+  const ended = (reason) => ({
+    combat: null,
+    ended: { reason, label: COMBAT_END_LABELS[reason], enemies: enemies.map((e) => ({ name: e.name, status: e.status })), at: Math.max(0, Math.floor(Number(turn) || 0)) },
+  });
+  if (sceneChange) return ended("cena");
+  if (/\[COMBATE_FIM\]/i.test(raw)) return ended(allOut ? endReason(enemies) : fled ? "fuga" : "fim");
+  // Todos caídos, rendidos ou em fuga: a luta acabou mesmo sem a tag de fim.
+  if (allOut) return ended(endReason(enemies));
+  if (!hasTags) {
+    if (fled && (ESCAPED_CUE.test(said) || moved)) return ended("fuga");
+    if (OVER_CUE.test(said)) return ended("fim");
+  }
+  const next = applyCombatTags(current, raw, turn);
+  return next ? { combat: next, ended: null } : ended("sumiu");
+}
+
+/** Aviso de fim de luta ainda válido para este turno (ou null). */
+export function asCombatEnded(value, turn) {
+  if (!value || typeof value !== "object" || !COMBAT_END_LABELS[value.reason]) return null;
+  if (turn != null && Math.floor(Number(value.at) || 0) !== Math.floor(Number(turn) || 0)) return null;
+  const enemies = (Array.isArray(value.enemies) ? value.enemies : [])
+    .map((e) => ({ name: clip(e?.name, 40), status: statusOf(e?.status) }))
+    .filter((e) => e.name)
+    .slice(0, 8);
+  return { reason: value.reason, label: COMBAT_END_LABELS[value.reason], enemies, at: Math.floor(Number(value.at) || 0) };
+}
+
 export function combatPromptLines(camp = {}, { short = false } = {}) {
   const state = asCombat(camp.combat);
   if (!state) {
@@ -136,7 +198,9 @@ export function combatPromptLines(camp = {}, { short = false } = {}) {
   }
   const list = state.enemies.map((e) => `${e.name} (${ENEMY_STATUSES[e.status].label})`).join(", ");
   return [
-    `COMBATE EM CURSO — inimigos: ${list}.${short ? "" : " A cada resposta, atualize com [INIMIGO:nome|estado] quem mudou (estados: pronto, ferido, muito ferido, caído, fugindo, rendido, morto). Quando a luta acabar, emita [COMBATE_FIM]."}`,
+    short
+      ? `COMBATE EM CURSO — inimigos: ${list}. Atualize quem mudou com [INIMIGO:nome|estado]; se a luta acabou, emita [COMBATE_FIM].`
+      : `COMBATE EM CURSO — inimigos: ${list}. A cada resposta, atualize com [INIMIGO:nome|estado] quem mudou (estados: pronto, ferido, muito ferido, caído, fugindo, rendido, morto). Assim que a luta acabar — inimigos vencidos, rendidos ou em fuga, o personagem escapou, houve trégua ou a cena mudou —, emita [COMBATE_FIM] na mesma resposta. Não deixe a luta aberta depois que ela terminou.`,
     short ? "" : "No combate: o inimigo age também (ataca, cerca, foge, pede ajuda); cada golpe tem peso e posição; nada de coreografia longa — uma troca por resposta.",
   ].filter(Boolean);
 }

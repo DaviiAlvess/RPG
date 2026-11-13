@@ -20,7 +20,7 @@ const CodexPanel = dynamic(() => import("./CodexPanel"), { loading: () => <p cla
 const SystemPanel = dynamic(() => import("./SystemPanel"), { loading: () => <p className="panel-sub">Abrindo o Sistema…</p> });
 import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
-import { asCombat, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
+import { asCombat, asCombatEnded, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
 import { RoomPanel } from "./RoomJoin";
 import { isMyTurn, roomTurnName } from "../lib/rooms.mjs";
 
@@ -63,8 +63,27 @@ function readCombatBarMode() {
 /** Inimigos em cena e ações rápidas (preenchem a caixa de texto). */
 function CombatBar({ campaign, mode = "full", onMode, onEnd, onPick }) {
   const state = asCombat(campaign?.combat);
+  const ended = state ? null : asCombatEnded(campaign?.combatEnded, Number(campaign?.turn) || 0);
   const [target, setTarget] = useState("");
-  if (!state || mode === "off") return null;
+  if (mode === "off" || (!state && !ended)) return null;
+  if (ended) {
+    // A luta acabou nesta resposta: avisa que o personagem saiu do combate. Some na próxima jogada.
+    const recap = ended.enemies.map((e) => `${e.name} ${ENEMY_STATUSES[e.status].label}`).join(", ");
+    return (
+      <div className="combat-bar compact ended" role="status" aria-label="Fora de combate">
+        <div className="combat-summary" title={recap ? `${ended.label}: ${recap}` : ended.label}>
+          <i className="ti ti-shield-check" aria-hidden="true" />
+          <strong>Fora de combate</strong>
+          <span className="combat-names">{ended.label}{recap ? ` · ${recap}` : ""}</span>
+        </div>
+        {onEnd ? (
+          <button type="button" className="combat-icon-btn" onClick={onEnd} title="Fechar aviso" aria-label="Fechar aviso de fim de luta">
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        ) : null}
+      </div>
+    );
+  }
   const standing = state.enemies.filter((e) => !["down", "flee"].includes(ENEMY_STATUSES[e.status].tone));
   const endButton = onEnd ? (
     <button type="button" className="combat-icon-btn" onClick={onEnd} title="Encerrar luta" aria-label="Encerrar luta e tirar a barra">
@@ -76,7 +95,7 @@ function CombatBar({ campaign, mode = "full", onMode, onEnd, onPick }) {
       <div className="combat-bar compact" role="region" aria-label="Combate em curso">
         <button type="button" className="combat-summary" onClick={() => onMode?.("full")} aria-expanded="false" title="Mostrar inimigos e ações">
           <i className="ti ti-swords" aria-hidden="true" />
-          <strong>Combate</strong>
+          <strong>Em combate</strong>
           <span className="combat-names">{standing.length ? standing.map((e) => e.name).join(", ") : "ninguém de pé"}</span>
           <i className="ti ti-chevron-up" aria-hidden="true" />
         </button>
@@ -90,6 +109,7 @@ function CombatBar({ campaign, mode = "full", onMode, onEnd, onPick }) {
       <div className="combat-head">
         <div className="combat-enemies">
           <i className="ti ti-swords" aria-hidden="true" />
+          <span className="combat-state">Em combate</span>
           {state.enemies.map((e) => (
             <button key={e.name} type="button" className={`enemy-chip ${ENEMY_STATUSES[e.status].tone} ${target === e.name ? "on" : ""}`} onClick={() => setTarget(target === e.name ? "" : e.name)} title="Escolher como alvo">
               {e.name}<small>{ENEMY_STATUSES[e.status].label}</small>

@@ -734,6 +734,11 @@ button:disabled { cursor: not-allowed; }
 .combat-summary strong { font-weight: 600; }
 .combat-names { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary, inherit); }
 .combat-bar.compact .combat-icon-btn { width: 28px; height: 28px; border-color: transparent; }
+.combat-state { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #d98a72; margin-right: 2px; }
+/* A luta acabou: aviso verde de uma linha */
+.combat-bar.ended { border-color: rgba(96, 168, 116, .5); background: rgba(96, 168, 116, .08); }
+.combat-bar.ended .combat-summary { cursor: default; }
+.combat-bar.ended .ti-shield-check { color: #7fc493; }
 
 /* Grupo no mesmo aparelho */
 .party-turn { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 13px; color: var(--text-secondary); }

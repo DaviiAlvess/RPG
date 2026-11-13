@@ -16,34 +16,77 @@ function httpError(status, message, code) {
   return e;
 }
 
-/** Cliente mínimo do PostgREST (REST do Supabase) com a chave secreta, só no servidor. */
+// Endereço que respondeu por último (vale enquanto o servidor estiver quente).
+let workingBase = "";
+
+const hostOf = (base) => { try { return new URL(base).host; } catch { return String(base || "").slice(0, 80); } };
+const netReason = (error) => error?.cause?.code || (error?.name === "TimeoutError" ? "sem resposta" : error?.message || "falha de rede");
+
+/**
+ * Cliente mínimo do PostgREST (REST do Supabase) com a chave secreta, só no servidor.
+ * Ordem dos endereços: SUPABASE_URL, o projeto onde as salas foram criadas e, por último,
+ * o NEXT_PUBLIC_SUPABASE_URL antigo. Se um endereço nem responde, tenta o próximo.
+ */
 export function supabaseRest(env = process.env, fetchImpl = fetch) {
-  const url = String(env.SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || DEFAULT_SUPABASE_URL).replace(/\/$/, "");
-  const key = env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "";
+  // Aceita também o link do painel ("supabase.com/dashboard/project/<ref>") e o converte no endereço da API.
+  const clean = (v) => {
+    const raw = String(v || "").trim().replace(/\/+$/, "");
+    const ref = raw.match(/supabase\.com\/dashboard\/project\/([a-z0-9]{20})/i)?.[1];
+    if (ref) return `https://${ref.toLowerCase()}.supabase.co`;
+    if (/^[a-z0-9]{20}$/i.test(raw)) return `https://${raw.toLowerCase()}.supabase.co`;
+    return raw.replace(/\/rest\/v1$/, "");
+  };
+  const bases = [...new Set([clean(env.SUPABASE_URL), DEFAULT_SUPABASE_URL, clean(env.NEXT_PUBLIC_SUPABASE_URL)].filter((b) => /^https:\/\//.test(b)))];
+  const key = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!key) throw httpError(503, "O modo online ainda não foi ligado no servidor (falta SUPABASE_SECRET_KEY na Vercel).", "ONLINE_NOT_CONFIGURED");
   const headers = { apikey: key, "Content-Type": "application/json" };
   // Chave antiga (JWT "eyJ...") também precisa ir no Authorization.
   if (key.startsWith("eyJ")) headers.Authorization = `Bearer ${key}`;
+  const tried = [];
+  let usedHost = "";
   const call = async (path, { method = "GET", body, prefer } = {}) => {
-    const res = await fetchImpl(`${url}/rest/v1/${path}`, {
-      method,
-      headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
-    if (!res.ok) {
-      const msg = data?.message || data?.error || `Supabase respondeu ${res.status}`;
-      throw httpError(res.status === 409 ? 409 : 502, msg, res.status === 409 ? "CONFLICT" : "ONLINE_ERROR");
+    const order = bases.includes(workingBase) ? [workingBase, ...bases.filter((b) => b !== workingBase)] : bases;
+    let lastError = null;
+    for (const base of order) {
+      let res;
+      try {
+        res = await fetchImpl(`${base}/rest/v1/${path}`, {
+          method,
+          headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+      } catch (error) {
+        lastError = error;
+        tried.push({ host: hostOf(base), error: netReason(error) });
+        continue;
+      }
+      const text = await res.text();
+      let data = null;
+      let isJson = true;
+      try { data = text ? JSON.parse(text) : null; } catch { data = null; isJson = false; }
+      // Página HTML no lugar da API: endereço errado, tenta o próximo.
+      if (!res.ok && !isJson) {
+        lastError = new Error(`respondeu ${res.status} sem ser a API`);
+        tried.push({ host: hostOf(base), error: `respondeu ${res.status} sem ser a API` });
+        continue;
+      }
+      workingBase = base;
+      usedHost = hostOf(base);
+      if (!res.ok) {
+        const msg = data?.message || data?.error || `Supabase respondeu ${res.status}`;
+        throw httpError(res.status === 409 ? 409 : 502, msg, res.status === 409 ? "CONFLICT" : "ONLINE_ERROR");
+      }
+      return data;
     }
-    return data;
+    const where = tried.map((t) => `${t.host}: ${t.error}`).join("; ");
+    throw httpError(502, `O servidor não conseguiu alcançar o Supabase (${where || netReason(lastError)}).`, "ONLINE_UNREACHABLE");
   };
   return {
     select: (table, query) => call(`${table}?${query}`),
     insert: (table, row) => call(table, { method: "POST", body: row, prefer: "return=representation" }),
     update: (table, query, patch) => call(`${table}?${query}`, { method: "PATCH", body: patch, prefer: "return=representation" }),
     remove: (table, query) => call(`${table}?${query}`, { method: "DELETE", prefer: "return=representation" }),
+    info: () => ({ host: usedHost, tried: [...tried], candidates: bases.map(hostOf) }),
   };
 }
 
@@ -181,16 +224,23 @@ const DEFAULT_RTDB_URL = "https://siterpg32-default-rtdb.firebaseio.com";
  * para o jogo explicar o que falta. Não devolve nenhuma chave nem dado de jogador.
  */
 export async function onlineStatus(env = process.env, fetchImpl = fetch) {
-  const timed = (url, opts = {}) => fetchImpl(url, { ...opts, signal: AbortSignal.timeout(8000) });
-  const out = { rooms: { configured: false, ok: false, detail: "" }, cloud: { ok: false, open: false, status: 0, detail: "" } };
+  const timed = (url, opts = {}) => fetchImpl(url, { ...opts, signal: AbortSignal.timeout(4000) });
+  const out = { rooms: { configured: false, ok: false, detail: "", host: "", tried: [] }, cloud: { ok: false, open: false, status: 0, detail: "" } };
+  let db = null;
   try {
-    const db = supabaseRest(env, timed);
+    db = supabaseRest(env, timed);
     out.rooms.configured = true;
     await db.select("rpg_rooms", "select=id&limit=1");
     out.rooms.ok = true;
     out.rooms.detail = "Servidor ligado ao banco das salas.";
   } catch (error) {
-    out.rooms.detail = error.name === "TimeoutError" ? "O Supabase não respondeu (o projeto pode estar pausado)." : String(error.message || "Erro no Supabase").slice(0, 200);
+    out.rooms.detail = String(error.message || "Erro no Supabase").slice(0, 300);
+  }
+  if (db) {
+    const info = db.info();
+    out.rooms.host = info.host;
+    out.rooms.tried = info.tried;
+    out.rooms.candidates = info.candidates;
   }
   try {
     const base = String(env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || DEFAULT_RTDB_URL).replace(/\/$/, "");
@@ -210,7 +260,7 @@ export async function onlineStatus(env = process.env, fetchImpl = fetch) {
       out.cloud.detail = String(message || `Firebase respondeu ${res.status}`).slice(0, 200);
     }
   } catch (error) {
-    out.cloud.detail = error.name === "TimeoutError" ? "O banco da nuvem não respondeu." : String(error.message || "Erro no Firebase").slice(0, 200);
+    out.cloud.detail = error.name === "TimeoutError" ? "O banco da nuvem não respondeu." : `${error.message || "Erro no Firebase"} (${netReason(error)})`.slice(0, 200);
   }
   return out;
 }

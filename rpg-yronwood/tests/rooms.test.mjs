@@ -111,3 +111,31 @@ test('situação do online: diz o que falta sem expor a chave', async () => {
   assert.equal(st.cloud.open, true);
   assert.ok(!JSON.stringify(st).includes('users'));
 });
+
+test('salas: endereço do Supabase errado ou antigo não derruba o modo online', async () => {
+  const reply = (status, body, raw) => ({ ok: status < 300, status, text: async () => raw ?? JSON.stringify(body) });
+  const calls = [];
+  const fake = async (url) => {
+    calls.push(url);
+    if (url.startsWith('https://projeto-velho.supabase.co')) { const e = new TypeError('fetch failed'); e.cause = { code: 'ENOTFOUND' }; throw e; }
+    if (url.startsWith('https://supabase.com/')) return reply(404, null, '<html>404</html>');
+    if (url.startsWith('https://yjcxmuybnehbnndvqfyk.supabase.co/rest/v1/')) return reply(200, []);
+    return reply(401, { error: 'Permission denied' });
+  };
+  // URL antiga e morta em SUPABASE_URL: cai para o projeto das salas
+  let st = await onlineStatus({ SUPABASE_SECRET_KEY: 'sb_secret_x', SUPABASE_URL: 'https://projeto-velho.supabase.co' }, fake);
+  assert.equal(st.rooms.ok, true);
+  assert.equal(st.rooms.host, 'yjcxmuybnehbnndvqfyk.supabase.co');
+  // (o endereço que já respondeu antes vai primeiro; se o velho for tentado, o motivo aparece)
+  assert.ok(st.rooms.tried.every((t) => t.host === 'projeto-velho.supabase.co' && t.error === 'ENOTFOUND'));
+  // NEXT_PUBLIC_SUPABASE_URL antigo nem é tentado quando o projeto das salas responde
+  calls.length = 0;
+  const db = supabaseRest({ SUPABASE_SECRET_KEY: 'sb_secret_x', NEXT_PUBLIC_SUPABASE_URL: 'https://projeto-velho.supabase.co' }, fake);
+  await db.select('rpg_rooms', 'select=id&limit=1');
+  assert.ok(calls.every((u) => !u.includes('projeto-velho')));
+  // link do painel vira o endereço da API
+  assert.deepEqual(supabaseRest({ SUPABASE_SECRET_KEY: 'k', SUPABASE_URL: 'https://supabase.com/dashboard/project/yjcxmuybnehbnndvqfyk/settings/api' }, fake).info().candidates, ['yjcxmuybnehbnndvqfyk.supabase.co']);
+  // nenhum endereço responde: erro claro com o motivo de cada um
+  const dead = async () => { const e = new TypeError('fetch failed'); e.cause = { code: 'ENOTFOUND' }; throw e; };
+  await assert.rejects(supabaseRest({ SUPABASE_SECRET_KEY: 'k' }, dead).select('rpg_rooms', 'select=id'), /não conseguiu alcançar o Supabase \(yjcxmuybnehbnndvqfyk\.supabase\.co: ENOTFOUND\)/);
+});

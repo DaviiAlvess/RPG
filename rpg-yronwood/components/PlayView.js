@@ -493,7 +493,7 @@ export default function PlayView(props) {
     onUpdateParty,
     onSetPartyTurn,
     onEndCombat,
-    cloudError,
+    cloudErrors = {},
     onRetryCloud,
     onTestOnline,
     onlineCheck,
@@ -691,7 +691,7 @@ export default function PlayView(props) {
               </div>
               <p title={panelSubtitle}>{panelSubtitle}</p>
               {/pendente|Falha/.test(String(props.saveStatus || "")) && onRetryCloud ? (
-                <button type="button" className="save-indicator save-retry" onClick={onRetryCloud} title={cloudError ? `Motivo: ${cloudError}` : "Tentar salvar na nuvem de novo"}>
+                <button type="button" className="save-indicator save-retry" onClick={onRetryCloud} title={[cloudErrors.firebase && `Firebase: ${cloudErrors.firebase}`, cloudErrors.supabase && `Supabase: ${cloudErrors.supabase}`].filter(Boolean).join(" · ") || "Tentar salvar na nuvem de novo"}>
                   <i className="ti ti-cloud-upload" aria-hidden="true" /> {props.saveStatus} · tentar de novo
                 </button>
               ) : (
@@ -1617,11 +1617,18 @@ export default function PlayView(props) {
               </button>
               <div className="settings-block">
                 <div className="section-label">Nuvem e conexão</div>
-                <p className="panel-sub">
-                  {cloudError
-                    ? <>A nuvem falhou: {cloudError} A história continua salva neste aparelho.</>
-                    : lastSaved ? <>Última gravação na nuvem: {fmtTime(lastSaved)}.</> : <>A história é salva neste aparelho e na nuvem a cada jogada.</>}
-                </p>
+                <p className="panel-sub">A história fica salva neste aparelho e em duas nuvens. Cada jogador só tem acesso às próprias histórias.{lastSaved ? <> Última gravação na nuvem: {fmtTime(lastSaved)}.</> : null}</p>
+                <ul className="online-check">
+                  {[["firebase", "Nuvem 1 (Firebase)"], ["supabase", "Nuvem 2 (Supabase)"]].map(([key, label]) => (
+                    <li key={key} className={cloudErrors[key] ? "bad" : "ok"}>
+                      <i className={`ti ${cloudErrors[key] ? "ti-alert-triangle" : "ti-cloud-check"}`} aria-hidden="true" />
+                      <span>
+                        <strong>{label}</strong>
+                        <small>{cloudErrors[key] ? `Falhou: ${cloudErrors[key]}` : "Sem erro na última gravação."}</small>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
                 <button className="settings-action" onClick={onRetryCloud} type="button">
                   <i className="ti ti-cloud-upload" />
                   <span>Salvar na nuvem agora</span>

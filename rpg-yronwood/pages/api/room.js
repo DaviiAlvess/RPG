@@ -2,93 +2,14 @@
 // O navegador nunca fala com o Supabase direto: esta rota confere o login Firebase do jogador,
 // checa se ele é membro da sala (e se é a vez dele) e só então lê ou grava com a chave secreta.
 import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
+import { supabaseRest, httpError, netReason } from "../../lib/supabase-rest.mjs";
 import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember } from "../../lib/rooms.mjs";
+
+export { supabaseRest };
 
 export const config = { maxDuration: 30, api: { bodyParser: { sizeLimit: "4mb" } } };
 
-const DEFAULT_SUPABASE_URL = "https://yjcxmuybnehbnndvqfyk.supabase.co";
 const clip = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
-
-function httpError(status, message, code) {
-  const e = new Error(message);
-  e.status = status;
-  e.code = code;
-  return e;
-}
-
-// Endereço que respondeu por último (vale enquanto o servidor estiver quente).
-let workingBase = "";
-
-const hostOf = (base) => { try { return new URL(base).host; } catch { return String(base || "").slice(0, 80); } };
-const netReason = (error) => error?.cause?.code || (error?.name === "TimeoutError" ? "sem resposta" : error?.message || "falha de rede");
-
-/**
- * Cliente mínimo do PostgREST (REST do Supabase) com a chave secreta, só no servidor.
- * Ordem dos endereços: SUPABASE_URL, o projeto onde as salas foram criadas e, por último,
- * o NEXT_PUBLIC_SUPABASE_URL antigo. Se um endereço nem responde, tenta o próximo.
- */
-export function supabaseRest(env = process.env, fetchImpl = fetch) {
-  // Aceita também o link do painel ("supabase.com/dashboard/project/<ref>") e o converte no endereço da API.
-  const clean = (v) => {
-    const raw = String(v || "").trim().replace(/\/+$/, "");
-    const ref = raw.match(/supabase\.com\/dashboard\/project\/([a-z0-9]{20})/i)?.[1];
-    if (ref) return `https://${ref.toLowerCase()}.supabase.co`;
-    if (/^[a-z0-9]{20}$/i.test(raw)) return `https://${raw.toLowerCase()}.supabase.co`;
-    return raw.replace(/\/rest\/v1$/, "");
-  };
-  const bases = [...new Set([clean(env.SUPABASE_URL), DEFAULT_SUPABASE_URL, clean(env.NEXT_PUBLIC_SUPABASE_URL)].filter((b) => /^https:\/\//.test(b)))];
-  const key = String(env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!key) throw httpError(503, "O modo online ainda não foi ligado no servidor (falta SUPABASE_SECRET_KEY na Vercel).", "ONLINE_NOT_CONFIGURED");
-  const headers = { apikey: key, "Content-Type": "application/json" };
-  // Chave antiga (JWT "eyJ...") também precisa ir no Authorization.
-  if (key.startsWith("eyJ")) headers.Authorization = `Bearer ${key}`;
-  const tried = [];
-  let usedHost = "";
-  const call = async (path, { method = "GET", body, prefer } = {}) => {
-    const order = bases.includes(workingBase) ? [workingBase, ...bases.filter((b) => b !== workingBase)] : bases;
-    let lastError = null;
-    for (const base of order) {
-      let res;
-      try {
-        res = await fetchImpl(`${base}/rest/v1/${path}`, {
-          method,
-          headers: { ...headers, ...(prefer ? { Prefer: prefer } : {}) },
-          body: body === undefined ? undefined : JSON.stringify(body),
-        });
-      } catch (error) {
-        lastError = error;
-        tried.push({ host: hostOf(base), error: netReason(error) });
-        continue;
-      }
-      const text = await res.text();
-      let data = null;
-      let isJson = true;
-      try { data = text ? JSON.parse(text) : null; } catch { data = null; isJson = false; }
-      // Página HTML no lugar da API: endereço errado, tenta o próximo.
-      if (!res.ok && !isJson) {
-        lastError = new Error(`respondeu ${res.status} sem ser a API`);
-        tried.push({ host: hostOf(base), error: `respondeu ${res.status} sem ser a API` });
-        continue;
-      }
-      workingBase = base;
-      usedHost = hostOf(base);
-      if (!res.ok) {
-        const msg = data?.message || data?.error || `Supabase respondeu ${res.status}`;
-        throw httpError(res.status === 409 ? 409 : 502, msg, res.status === 409 ? "CONFLICT" : "ONLINE_ERROR");
-      }
-      return data;
-    }
-    const where = tried.map((t) => `${t.host}: ${t.error}`).join("; ");
-    throw httpError(502, `O servidor não conseguiu alcançar o Supabase (${where || netReason(lastError)}).`, "ONLINE_UNREACHABLE");
-  };
-  return {
-    select: (table, query) => call(`${table}?${query}`),
-    insert: (table, row) => call(table, { method: "POST", body: row, prefer: "return=representation" }),
-    update: (table, query, patch) => call(`${table}?${query}`, { method: "PATCH", body: patch, prefer: "return=representation" }),
-    remove: (table, query) => call(`${table}?${query}`, { method: "DELETE", prefer: "return=representation" }),
-    info: () => ({ host: usedHost, tried: [...tried], candidates: bases.map(hostOf) }),
-  };
-}
 
 const eq = (v) => `eq.${encodeURIComponent(String(v))}`;
 const ROOM_FIELDS = "id,code,owner_uid,title,version,turn_uid,status,updated_at";
@@ -236,6 +157,17 @@ export async function onlineStatus(env = process.env, fetchImpl = fetch) {
   } catch (error) {
     out.rooms.detail = String(error.message || "Erro no Supabase").slice(0, 300);
   }
+  // Área de saves: só confere se a tabela responde (não devolve nenhum dado).
+  out.saves = { ok: false, detail: "" };
+  if (db && out.rooms.ok) {
+    try {
+      await db.select("rpg_user_saves", "select=uid&limit=1");
+      out.saves.ok = true;
+      out.saves.detail = "Área de saves pronta.";
+    } catch (error) {
+      out.saves.detail = String(error.message || "Erro no Supabase").slice(0, 200);
+    }
+  } else out.saves.detail = out.rooms.detail;
   if (db) {
     const info = db.info();
     out.rooms.host = info.host;

@@ -40,6 +40,7 @@ import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
 import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload } from "../lib/rooms.mjs";
+import { buildSaveBody, readLoadedCampaign, cloudStatusText, canGzip } from "../lib/supa-saves-client.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
@@ -502,10 +503,17 @@ export default function RPG() {
   const [authBusy, setAuthBusy] = useState(false);
   const [firebaseOk, setFirebaseOk] = useState(true);
   const [cloudOk, setCloudOk] = useState(true);
-  const [cloudError, setCloudError] = useState("");
+  const [cloudErrors, setCloudErrors] = useState({ firebase: "", supabase: "" });
   const [onlineCheck, setOnlineCheck] = useState(null);
   const [serverOnline, setServerOnline] = useState(null);
-  const lastCloudErrorRef = useRef("");
+  const lastCloudErrorRef = useRef({ firebase: "", supabase: "" });
+  // Estado de cada nuvem na última gravação: idle | sync | ok | fail | off.
+  const cloudStateRef = useRef({ firebase: "idle", supabase: "idle", local: false, conflict: false });
+  // Fila de gravações no Supabase (uma por campanha, a mais recente vence).
+  const supaQueueRef = useRef({ timer: null, pending: new Map(), running: null });
+  const supaRunRef = useRef(null);
+  const supaIndexRef = useRef(new Map());
+  const supaBackfillRef = useRef(false);
   const [authMessage, setAuthMessage] = useState(null);
 
   const gameTimeRef = useRef(gameTime);
@@ -598,6 +606,18 @@ export default function RPG() {
     });
   }, []);
 
+  // Saves no Supabase (segunda nuvem), sempre pelo servidor com o login conferido.
+  const savesCall = useCallback(async (body) => {
+    const res = await apiFetch("/api/saves", { method: "POST", body: JSON.stringify(body), timeoutMs: 30000, retryOnce: false });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error = new Error(data.error || `A nuvem do Supabase respondeu ${res.status}.`);
+      error.code = data.code; error.status = res.status;
+      throw error;
+    }
+    return data;
+  }, [apiFetch]);
+
   const readLocalIndex = (userId) => {
     try {
       const parsed = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
@@ -609,26 +629,43 @@ export default function RPG() {
 
   const reloadCampaigns = useCallback(async (userId) => {
     const local = readLocalIndex(userId);
-    try {
-      const { cloudListCampaigns } = await import("../lib/rpg-cloud");
-      const { ok, data, error } = await cloudListCampaigns();
-      if (ok && Array.isArray(data)) {
-        const merged = mergeCampaignIndex(data, local);
-        localStorage.setItem(idxKeyForUser(userId), JSON.stringify(merged));
-        setIdx(merged);
-        setCloudOk(true);
-        return;
+    const fromFirebase = (async () => {
+      try {
+        const { cloudListCampaigns } = await import("../lib/rpg-cloud");
+        const { ok, data, error } = await cloudListCampaigns();
+        if (ok && Array.isArray(data)) return data;
+        if (error) console.warn("Nuvem (Firebase):", error);
+      } catch (e) { console.warn("reloadCampaigns:", e); }
+      return null;
+    })();
+    const fromSupabase = savesCall({ action: "list" })
+      .then((r) => (Array.isArray(r.items) ? r.items : null))
+      .catch((e) => { console.warn("Nuvem (Supabase):", e.message); return null; });
+    const [fb, sb] = await Promise.all([fromFirebase, fromSupabase]);
+    if (sb) supaIndexRef.current = new Map(sb.map((i) => [String(i.id), i.updatedAt]));
+    const merged = mergeCampaignIndex(sb || [], mergeCampaignIndex(fb || [], local));
+    if (fb || sb) {
+      try { localStorage.setItem(idxKeyForUser(userId), JSON.stringify(merged)); } catch {}
+      setCloudOk(true);
+    } else setCloudOk(false);
+    setIdx(fb || sb ? merged : local);
+    // Primeira vez nesta sessão: manda para o Supabase as histórias deste aparelho que ainda não estão lá.
+    if (sb && !supaBackfillRef.current) {
+      supaBackfillRef.current = true;
+      let queued = 0;
+      for (const item of merged) {
+        if (queued >= 15) break;
+        let rec = null;
+        try { rec = JSON.parse(localStorage.getItem(campKey(item.id)) || "null"); } catch {}
+        if (!rec?.id) continue;
+        const there = supaIndexRef.current.get(String(item.id));
+        if (there && new Date(there).getTime() >= new Date(rec.updatedAt || 0).getTime()) continue;
+        supaQueueRef.current.pending.set(String(rec.id), rec);
+        queued++;
       }
-      if (error) {
-        setCloudOk(false);
-        console.warn("Nuvem:", error);
-      }
-    } catch (e) {
-      setCloudOk(false);
-      console.warn("reloadCampaigns:", e);
+      if (queued) setTimeout(() => supaRunRef.current?.(), 1500);
     }
-    setIdx(local);
-  }, []);
+  }, [savesCall]);
 
   const migrateLocalCampaigns = useCallback(async (userId) => {
     const keys = [idxKeyForUser(userId), IDX_KEY];
@@ -809,15 +846,75 @@ export default function RPG() {
   }, [active, msgs, disp, hp, missions, sceneImg, campLore, charInitialAge, gameTime, temporalEffects, timelineEvents, experience, level, attributes, skills]);
 
   // A nuvem falhou: guarda o motivo para mostrar na tela e no relatório de problemas (uma vez por motivo).
-  const noteCloudFailure = (result = {}) => {
-    setCloudOk(false);
+  const showCloudStatus = () => {
+    const st = cloudStateRef.current;
+    setSaveStatus(cloudStatusText(st));
+    if (st.firebase === "ok" || st.supabase === "ok") setCloudOk(true);
+    else if (st.firebase === "fail" && st.supabase !== "sync") setCloudOk(false);
+  };
+
+  // Uma nuvem falhou: guarda o motivo para a tela e para o relatório de problemas (uma vez por motivo).
+  const noteCloudFailure = (which, result = {}) => {
+    const name = which === "supabase" ? "Supabase" : "Firebase";
     const message = result.error || "A nuvem não aceitou o save.";
-    setCloudError(message);
-    if (lastCloudErrorRef.current !== message) {
-      lastCloudErrorRef.current = message;
-      recordError(window.localStorage, { kind: "nuvem", code: result.code, message, where: "salvar na nuvem" });
+    setCloudErrors((prev) => ({ ...prev, [which]: message }));
+    if (lastCloudErrorRef.current[which] !== message) {
+      lastCloudErrorRef.current[which] = message;
+      recordError(window.localStorage, { kind: "nuvem", code: result.code, message: `${name}: ${message}`, where: `salvar no ${name}` });
     }
   };
+  const noteCloudSuccess = (which) => {
+    lastCloudErrorRef.current[which] = "";
+    setCloudErrors((prev) => (prev[which] ? { ...prev, [which]: "" } : prev));
+  };
+
+  // Grava no Supabase o que estiver na fila (todas as campanhas pendentes, uma de cada vez).
+  supaRunRef.current = async () => {
+    const q = supaQueueRef.current;
+    if (q.timer) { clearTimeout(q.timer); q.timer = null; }
+    if (q.running) await q.running.catch(() => {});
+    if (!q.pending.size) return cloudStateRef.current.lastSupabase || null;
+    const batch = [...q.pending.values()];
+    q.pending.clear();
+    const job = (async () => {
+      let last = null;
+      for (const snap of batch) {
+        try {
+          const reply = await savesCall(await buildSaveBody(snap));
+          if (reply.ok) {
+            cloudStateRef.current.supabase = "ok";
+            supaIndexRef.current.set(String(snap.id), reply.updatedAt || snap.updatedAt);
+            noteCloudSuccess("supabase");
+            if (snap.id === activeRef.current?.id) setLastSaved(Date.now());
+          } else if (reply.conflict) {
+            cloudStateRef.current.supabase = "fail";
+            if (snap.id === activeRef.current?.id) cloudStateRef.current.conflict = true;
+          }
+          last = reply;
+        } catch (error) {
+          cloudStateRef.current.supabase = error.code === "ONLINE_NOT_CONFIGURED" ? "off" : "fail";
+          noteCloudFailure("supabase", { code: error.code, error: error.message });
+          last = { ok: false, code: error.code, error: error.message };
+        }
+      }
+      cloudStateRef.current.lastSupabase = last;
+      showCloudStatus();
+      return last;
+    })();
+    q.running = job;
+    const result = await job;
+    q.running = null;
+    if (q.pending.size && !q.timer) q.timer = setTimeout(() => supaRunRef.current?.(), 3000);
+    return result;
+  };
+  const scheduleSupaSave = (snapshot) => {
+    if (!snapshot?.id) return;
+    const q = supaQueueRef.current;
+    q.pending.set(String(snapshot.id), snapshot);
+    // Espera 3 s: várias mudanças seguidas viram um envio só.
+    if (!q.timer) q.timer = setTimeout(() => supaRunRef.current?.(), 3000);
+  };
+  const flushSupaSave = () => supaRunRef.current?.();
 
   const saveCamp = useCallback(async (id, d) => {
     if (!user) return { ok: false, local: false };
@@ -826,20 +923,32 @@ export default function RPG() {
     if (!snapshot) return { ok: false, local: false };
     let local = false;
     try { localStorage.setItem(campKey(snapshot.id), JSON.stringify(snapshot)); local = true; } catch {}
-    setSaveStatus(local ? "Salvo neste aparelho · sincronizando…" : "Sincronizando…");
+    const st = cloudStateRef.current;
+    st.local = local;
+    st.conflict = false;
+    st.firebase = "sync";
+    if (st.supabase !== "off") st.supabase = "sync";
+    showCloudStatus();
+    if (st.supabase !== "off") scheduleSupaSave(snapshot);
     const task = async () => {
       try {
         const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
         const result = await cloudSaveCampaign(snapshot);
-        if (result.ok) { setLastSaved(Date.now()); setSaveStatus("Salvo na nuvem"); setCloudOk(true); setCloudError(""); lastCloudErrorRef.current = ""; }
-        else {
-          if (!result.conflict) noteCloudFailure(result);
-          setSaveStatus(result.conflict ? "Nuvem mais recente — reabra a campanha" : local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
+        if (result.ok) {
+          cloudStateRef.current.firebase = "ok";
+          setLastSaved(Date.now());
+          noteCloudSuccess("firebase");
+        } else {
+          cloudStateRef.current.firebase = "fail";
+          if (result.conflict) cloudStateRef.current.conflict = true;
+          else noteCloudFailure("firebase", result);
         }
+        showCloudStatus();
         return { ...result, local };
       } catch (error) {
-        noteCloudFailure({ code: "CLOUD_ERROR", error: error.message });
-        setSaveStatus(local ? "Salvo neste aparelho · nuvem pendente" : "Falha ao salvar — tente novamente");
+        cloudStateRef.current.firebase = "fail";
+        noteCloudFailure("firebase", { code: "CLOUD_ERROR", error: error.message });
+        showCloudStatus();
         return { ok: false, local, error: error.message };
       }
     };
@@ -847,6 +956,13 @@ export default function RPG() {
     saveQueue.current = result;
     return result;
   }, [user, buildCampaignSnapshot]);
+
+  // Ao sair da aba, envia na hora o que estava esperando para o Supabase.
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") void flushSupaSave(); };
+    document.addEventListener("visibilitychange", onHide);
+    return () => document.removeEventListener("visibilitychange", onHide);
+  }, []);
 
   const dismissToast = useCallback(async (toast) => {
     if (!toast) return;
@@ -874,7 +990,15 @@ export default function RPG() {
     try {
       const { cloudLoadCampaign } = await import("../lib/rpg-cloud");
       const { ok, data } = await cloudLoadCampaign(id);
-      const chosen = mergeCampaignRecords(local, ok ? data : null);
+      let chosen = mergeCampaignRecords(local, ok ? data : null);
+      // Supabase: só baixa se ele tiver uma versão mais nova (ou se nada mais tiver a história).
+      const supaAt = supaIndexRef.current.get(String(id));
+      if (!chosen || (supaAt && new Date(supaAt).getTime() > new Date(chosen.updatedAt || 0).getTime())) {
+        try {
+          const supa = await readLoadedCampaign(await savesCall({ action: "load", id: String(id), acceptGz: canGzip() }));
+          if (supa) chosen = mergeCampaignRecords(chosen, { ...supa, id: supa.id ?? id });
+        } catch (e) { if (e.status !== 404) console.warn("Supabase:", e.message); }
+      }
       if (chosen) {
         const pinned = bindStoryLists(id, chosen);
         try { localStorage.setItem(campKey(id), JSON.stringify(pinned)); } catch {}
@@ -1224,10 +1348,16 @@ export default function RPG() {
 
   const retryCloudSave = async () => {
     if (!active) return;
-    const result = await saveCamp(active.id, active);
-    if (result?.ok) showNotification("História salva na nuvem.", "success");
-    else if (result?.conflict) showNotification(result.error, "warning", { duration: 8000 });
-    else showNotification(`Não salvou na nuvem: ${result?.error || "erro desconhecido"}${result?.fix ? ` ${result.fix}` : ""}`, "error", { duration: 10000 });
+    const fb = await saveCamp(active.id, active);
+    const sb = await flushSupaSave();
+    const okNames = [fb?.ok && "Firebase", sb?.ok && "Supabase"].filter(Boolean);
+    if (okNames.length === 2) showNotification("História salva nas duas nuvens.", "success");
+    else if (okNames.length === 1) showNotification(`História salva na nuvem (${okNames[0]}).`, "success");
+    else if (fb?.conflict || sb?.conflict) showNotification((fb?.conflict ? fb : sb).error, "warning", { duration: 8000 });
+    else {
+      const why = [fb?.error && `Firebase: ${fb.error}`, sb?.error && `Supabase: ${sb.error}`].filter(Boolean).join(" · ");
+      showNotification(`Não salvou na nuvem. ${why || "Erro desconhecido."}`, "error", { duration: 10000 });
+    }
   };
 
   // Testa cada peça do jogo online e explica o que falta.
@@ -1243,6 +1373,18 @@ export default function RPG() {
       items.push({ id: "nuvem", label: "Salvar na nuvem (Firebase)", ok: ping.ok, detail: ping.ok ? `Gravou e leu de volta em ${ping.ms} ms.` : ping.error, fix: ping.ok ? "" : ping.fix || "" });
     } catch (error) {
       items.push({ id: "nuvem", label: "Salvar na nuvem (Firebase)", ok: false, detail: error.message, fix: "" });
+    }
+    try {
+      const ping = await savesCall({ action: "ping" });
+      items.push({ id: "supabase-saves", label: "Salvar na nuvem (Supabase)", ok: true, detail: `Sua área protegida está guardando ${ping.count} ${ping.count === 1 ? "história" : "histórias"}.`, fix: "" });
+    } catch (error) {
+      items.push({
+        id: "supabase-saves",
+        label: "Salvar na nuvem (Supabase)",
+        ok: false,
+        detail: error.message,
+        fix: error.code === "ONLINE_NOT_CONFIGURED" ? "Na Vercel, crie a variável SUPABASE_SECRET_KEY e publique o site de novo." : "",
+      });
     }
     const status = await loadServerStatus();
     const rooms = status?.rooms || {};
@@ -1626,6 +1768,9 @@ export default function RPG() {
       const { cloudDeleteCampaign } = await import("../lib/rpg-cloud");
       await cloudDeleteCampaign(id);
     } catch {}
+    supaQueueRef.current.pending.delete(String(id));
+    supaIndexRef.current.delete(String(id));
+    try { await savesCall({ action: "remove", id: String(id) }); } catch {}
   };
 
   // ─── Create ───────────────────────────────────────────────────────
@@ -2890,7 +3035,8 @@ export default function RPG() {
           {!cloudOk ? (
             <div className="auth-alert auth-alert-warning" style={{ margin: "0 20px 12px" }}>
               A nuvem não aceitou o save. As aventuras continuam neste aparelho; dá para jogar.
-              {cloudError ? <><br /><small>Motivo: {cloudError}</small></> : null}
+              {cloudErrors.firebase ? <><br /><small>Firebase: {cloudErrors.firebase}</small></> : null}
+              {cloudErrors.supabase ? <><br /><small>Supabase: {cloudErrors.supabase}</small></> : null}
             </div>
           ) : null}
           <div className="camp-list">
@@ -3077,7 +3223,7 @@ export default function RPG() {
       onClearProblems={clearProblemReport}
       onUpdateParty={updateParty}
       onEndCombat={endCombat}
-      cloudError={cloudError}
+      cloudErrors={cloudErrors}
       onRetryCloud={retryCloudSave}
       onTestOnline={testOnline}
       onlineCheck={onlineCheck}

@@ -39,7 +39,7 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
-import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode } from "../lib/rooms.mjs";
+import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload } from "../lib/rooms.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
 import { eraPromptLines, eraReminder, findAnachronisms, anachronismNote, detectEraDeep, eraSnapshot } from "../lib/era.mjs";
@@ -1259,11 +1259,18 @@ export default function RPG() {
     setOnlineCheck({ running: false, at: Date.now(), items });
   };
 
+  // Campanha leve para a sala: sem saves pessoais nem imagens embutidas (a Vercel aceita até ~4 MB por envio).
+  const roomSnapshot = (camp) => {
+    const payload = roomCampaignPayload(buildCampaignSnapshot(camp) || {});
+    if (!payload) throw Object.assign(new Error("A história ficou grande demais para a sala online."), { code: "TOO_BIG" });
+    return payload;
+  };
+
   const createRoom = async () => {
     if (!active || active.roomId || roomBusy) return;
     setRoomBusy(true);
     try {
-      const data = await roomCall({ action: "create", campaign: buildCampaignSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world });
+      const data = await roomCall({ action: "create", campaign: roomSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world });
       const next = { ...active, ...roomPartyFields(data.room, data.members) };
       setActive(next);
       await saveCamp(active.id, next);
@@ -1305,7 +1312,7 @@ export default function RPG() {
 
   const pushRoom = async (camp, { keepTurn = false } = {}) => {
     try {
-      const data = await roomCall({ action: "push", roomId: camp.roomId, baseVersion: camp.roomVersion, campaign: buildCampaignSnapshot(camp), keepTurn });
+      const data = await roomCall({ action: "push", roomId: camp.roomId, baseVersion: camp.roomVersion, campaign: roomSnapshot(camp), keepTurn });
       const fields = roomPartyFields({ id: camp.roomId, code: camp.roomCode, owner_uid: camp.roomOwnerUid, ...data.room }, data.members);
       setActive((prev) => {
         if (!prev || prev.id !== camp.id) return prev;

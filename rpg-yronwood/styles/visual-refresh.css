@@ -859,3 +859,17 @@ button:disabled { cursor: not-allowed; }
 .scene-lightbox { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .86); cursor: zoom-out; }
 .scene-lightbox img { max-width: 100%; max-height: 100%; border-radius: 12px; object-fit: contain; }
 .scene-lightbox-close { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(255,255,255,.15); color: #fff; font-size: 20px; cursor: pointer; }
+
+/* Vez na mesa online: minimizada numa linha */
+.turn-pill { margin: 4px 0 6px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; }
+.turn-pill.mine { border-color: rgba(96, 168, 116, .55); background: rgba(96, 168, 116, .08); }
+.turn-pill-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; }
+.turn-pill-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 3px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.turn-pill-main > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.turn-pill .turn-face { width: 24px; height: 24px; }
+.turn-pill.mine .ti-player-play { color: #7fc493; }
+.turn-pill-pass { flex-shrink: 0; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; font-size: 12.5px; cursor: pointer; }
+.turn-pill-more { padding: 0 10px 8px; color: var(--text-secondary, inherit); }
+.turn-pill-more p { margin: 0 0 6px; }
+.turn-pill-pick { display: flex; align-items: center; gap: 8px; }
+.turn-pill-pick select { font: inherit; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text, inherit); }

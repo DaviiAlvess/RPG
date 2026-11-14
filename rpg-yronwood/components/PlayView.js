@@ -22,7 +22,7 @@ import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { asCombat, asCombatEnded, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
 import { RoomPanel } from "./RoomJoin";
-import { isMyTurn, roomTurnName, myRoomMember, roomPhotoFor, nameKey } from "../lib/rooms.mjs";
+import { isMyTurn, roomTurnName, myRoomMember, roomPhotoFor, nameKey, roomNextName } from "../lib/rooms.mjs";
 
 /** Botão de refazer na última resposta do Mestre, com o jeito da nova versão. */
 function RedoMenu({ styles = [], onRedo }) {
@@ -200,6 +200,47 @@ function PartyTurn({ campaign, onSetTurn, myUid }) {
       <select value={index} disabled={locked} onChange={(e) => onSetTurn?.(Number(e.target.value))} aria-label="Escolher quem joga agora">
         {roster.map((p, i) => <option key={p.id} value={i}>{p.name}</option>)}
       </select>
+    </div>
+  );
+}
+
+/**
+ * Vez na mesa online, minimizada: uma linha curta ("Sua vez · Passar" / "Vez de Bart").
+ * Tocar abre o resto (quem vem depois e, para o dono, escolher a vez). Só aparece com 2+ jogadores.
+ */
+function RoomTurnPill({ campaign, myUid, loading = false, open = false, onToggle, onPass, onSetTurn }) {
+  const c = campaign || {};
+  const members = c.roomMembers || [];
+  if (!c.roomId || members.length < 2) return null;
+  const mine = isMyTurn(c, myUid);
+  const turnName = roomTurnName(c) || "outro jogador";
+  const me = myRoomMember(c, myUid);
+  const next = roomNextName(c);
+  const photo = c.useImages === false ? "" : mine ? c.portraitUrl : roomPhotoFor(c, turnName);
+  const owner = c.roomOwnerUid === myUid;
+  return (
+    <div className={`turn-pill ${mine ? "mine" : "wait"} ${open ? "open" : ""}`} role="status">
+      <div className="turn-pill-row">
+        <button type="button" className="turn-pill-main" onClick={onToggle} aria-expanded={open} title={open ? "Minimizar" : "Ver mais sobre a vez"}>
+          {photo ? <img className="turn-face" src={photo} alt="" width={24} height={24} /> : <i className={`ti ${mine ? "ti-player-play" : "ti-hourglass"}`} aria-hidden="true" />}
+          <span>{mine ? <strong>Sua vez</strong> : <>Vez de <strong>{turnName}</strong></>}</span>
+          <i className={`ti ti-chevron-${open ? "down" : "up"}`} aria-hidden="true" />
+        </button>
+        {mine && onPass ? <button type="button" className="turn-pill-pass" onClick={onPass} disabled={loading}>Passar</button> : null}
+      </div>
+      {open ? (
+        <div className="turn-pill-more">
+          <p>{mine ? <>Você joga como <strong>{me?.name}</strong>. Diga o que faz.</> : <>Você é <strong>{me?.name}</strong>. A história atualiza sozinha quando {turnName} jogar.</>}{next ? <> Depois: <strong>{next}</strong>.</> : null}</p>
+          {owner && onSetTurn ? (
+            <label className="turn-pill-pick">
+              <span>Escolher a vez</span>
+              <select value={c.roomTurnUid} onChange={(e) => onSetTurn(e.target.value)} disabled={loading}>
+                {members.map((m) => <option key={m.uid} value={m.uid}>{m.name}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -450,6 +491,9 @@ export default function PlayView(props) {
   const [combatBarMode, setCombatBarModeState] = useState("full");
   const roomMe = props.active?.roomId ? myRoomMember(props.active, props.myUid) : null;
   const [sceneOpen, setSceneOpen] = useState(false);
+  const [turnOpen, setTurnOpen] = useState(false);
+  useEffect(() => { try { setTurnOpen(localStorage.getItem("rpg-turn-pill") === "open"); } catch {} }, []);
+  const toggleTurn = () => setTurnOpen((v) => { try { localStorage.setItem("rpg-turn-pill", v ? "min" : "open"); } catch {} return !v; });
   useEffect(() => { setCombatBarModeState(readCombatBarMode()); }, []);
   const setCombatBarMode = (mode) => {
     if (!COMBAT_BAR_MODES[mode]) return;
@@ -1010,15 +1054,11 @@ export default function PlayView(props) {
               </div>
 
               <CombatBar campaign={c} mode={combatBarMode} onMode={setCombatBarMode} onEnd={onEndCombat} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
-              <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
-              {c.roomId && !isMyTurn(c, myUid) ? (
-                <div className="room-wait" role="status">{roomPhotoFor(c, roomTurnName(c)) ? <img className="turn-face" src={roomPhotoFor(c, roomTurnName(c))} alt="" width={28} height={28} /> : <i className="ti ti-hourglass" aria-hidden="true" />} Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>{roomMe ? <> · você é <strong>{roomMe.name}</strong></> : null}. A história atualiza sozinha quando ele jogar.</div>
-              ) : c.roomId && roomMe && (c.roomMembers || []).length > 1 ? (
-                <div className="room-wait my-turn" role="status">
-                  {c.portraitUrl && c.useImages !== false ? <img className="turn-face" src={c.portraitUrl} alt="" width={28} height={28} /> : <i className="ti ti-player-play" aria-hidden="true" />} <span><strong>Sua vez</strong>, {roomMe.name}! Diga o que você faz.</span>
-                  {onPassRoomTurn ? <button type="button" className="btn-ghost" onClick={onPassRoomTurn} disabled={loading}>Passar a vez</button> : null}
-                </div>
-              ) : null}
+              {c.roomId ? (
+                <RoomTurnPill campaign={c} myUid={myUid} loading={loading} open={turnOpen} onToggle={toggleTurn} onPass={onPassRoomTurn} onSetTurn={onSetRoomTurn} />
+              ) : (
+                <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
+              )}
               <div className="chat-input-row">
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
                   <strong>Teste de {pendingTest.attribute} · dificuldade {pendingTest.difficulty}</strong>
@@ -1050,6 +1090,8 @@ export default function PlayView(props) {
                         : `Modo auto ativo — ou fale/aja como ${roomMe?.name || partyActor(c)?.name || c.charName || "o personagem"}.`
                       : selectedChatAbility
                         ? `Complete: Uso ${selectedChatAbility} para…`
+                      : c.roomId && !isMyTurn(c, myUid)
+                        ? `Vez de ${roomTurnName(c) || "outro jogador"} — a história atualiza sozinha.`
                       : `Fale ou aja como ${roomMe?.name || partyActor(c)?.name || c.charName || "o personagem"}… Ex.: "Abra o portão."`
                   }
                   rows={2}

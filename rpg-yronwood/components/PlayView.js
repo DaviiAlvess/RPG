@@ -60,20 +60,54 @@ function readCombatBarMode() {
   }
 }
 
-/** Imagem da cena dentro da conversa. Se não carregar em 40 s (ou der erro), some sem deixar espaço vazio. */
-function SceneShot({ src, alt, onLoaded }) {
+/**
+ * Imagem da cena dentro da conversa. O gerador pode demorar: a imagem espera o tempo que for
+ * (sem ocupar espaço até chegar), tenta de novo uma vez se der erro e abre em tela cheia ao tocar.
+ */
+function SceneShot({ src, alt, onLoaded, onOpen }) {
   const [state, setState] = useState("loading");
+  const [attempt, setAttempt] = useState(0);
+  const [slow, setSlow] = useState(false);
   useEffect(() => {
     setState("loading");
-    const timer = setTimeout(() => setState((st) => (st === "loading" ? "failed" : st)), 40000);
+    setAttempt(0);
+    setSlow(false);
+    const timer = setTimeout(() => setSlow(true), 25000);
     return () => clearTimeout(timer);
   }, [src]);
-  if (state === "failed") return null;
+  const url = attempt ? `${src}${src.includes("?") ? "&" : "?"}tentativa=${attempt}` : src;
+  const failed = () => {
+    if (attempt < 1) setTimeout(() => setAttempt((n) => n + 1), 3000);
+    else setState("failed");
+  };
+  if (state === "failed") {
+    return (
+      <div className="scene-shot-failed">
+        A imagem desta cena não carregou.{" "}
+        <button type="button" className="btn-ghost" onClick={() => { setState("loading"); setAttempt((n) => n + 1); }}>Tentar de novo</button>
+      </div>
+    );
+  }
   return (
     <figure className={`scene-shot ${state}`}>
-      <img src={src} alt={alt} onLoad={() => { setState("loaded"); onLoaded?.(); }} onError={() => setState("failed")} />
-      {state === "loading" ? <figcaption>Desenhando a cena…</figcaption> : null}
+      <img key={url} src={url} alt={alt} onClick={() => state === "loaded" && onOpen?.()} onLoad={() => { setState("loaded"); onLoaded?.(); }} onError={failed} />
+      {state === "loading" ? <figcaption>{slow ? "A imagem da cena ainda está sendo desenhada…" : "Desenhando a cena…"}</figcaption> : null}
     </figure>
+  );
+}
+
+/** Cena em tela cheia (toque fora ou Esc para fechar). */
+function SceneLightbox({ src, alt, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose?.(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="scene-lightbox" role="dialog" aria-modal="true" aria-label="Imagem da cena" onClick={onClose}>
+      <img src={src} alt={alt} />
+      <button type="button" className="scene-lightbox-close" onClick={onClose} aria-label="Fechar imagem"><i className="ti ti-x" aria-hidden="true" /></button>
+    </div>
   );
 }
 
@@ -415,6 +449,7 @@ export default function PlayView(props) {
   const [masterChatOpen, setMasterChatOpen] = useState(false);
   const [combatBarMode, setCombatBarModeState] = useState("full");
   const roomMe = props.active?.roomId ? myRoomMember(props.active, props.myUid) : null;
+  const [sceneOpen, setSceneOpen] = useState(false);
   useEffect(() => { setCombatBarModeState(readCombatBarMode()); }, []);
   const setCombatBarMode = (mode) => {
     if (!COMBAT_BAR_MODES[mode]) return;
@@ -794,10 +829,16 @@ export default function PlayView(props) {
               </button>
             ) : null}
             <span className="story-strip-spacer" />
+            {playPanel === "narrator" && c.useImages && sceneImg && imgOk ? (
+              <button type="button" className="scene-thumb" onClick={() => setSceneOpen(true)} aria-label="Ver a imagem da cena">
+                <img src={sceneImg} alt="" />
+              </button>
+            ) : null}
             <VoiceControl disp={disp} />
             <AmbienceControl campaign={c} tension={c.tension ?? 0} />
           </div>
 
+          {sceneOpen && sceneImg ? <SceneLightbox src={sceneImg} alt={`Cena em ${c.world || "aventura"}`} onClose={() => setSceneOpen(false)} /> : null}
           <div className={`panel panel-chat ${playPanel === "narrator" ? "active" : ""}`}>
             <div className="chat-area">
               {autoMode && !loading && autoWaiting ? (
@@ -947,7 +988,7 @@ export default function PlayView(props) {
                   if (at < 0) return list.map(renderMessage);
                   return [
                     ...list.slice(0, at).map(renderMessage),
-                    <SceneShot key={`shot-${sceneImg}`} src={sceneImg} alt={`Cena em ${c.world || "aventura"}`} onLoaded={() => setImgOk(true)} />,
+                    <SceneShot key={`shot-${sceneImg}`} src={sceneImg} alt={`Cena em ${c.world || "aventura"}`} onLoaded={() => setImgOk(true)} onOpen={() => setSceneOpen(true)} />,
                     ...list.slice(at).map((m, k) => renderMessage(m, k + at)),
                   ];
                 })()}

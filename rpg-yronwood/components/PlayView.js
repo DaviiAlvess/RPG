@@ -60,6 +60,23 @@ function readCombatBarMode() {
   }
 }
 
+/** Imagem da cena dentro da conversa. Se não carregar em 40 s (ou der erro), some sem deixar espaço vazio. */
+function SceneShot({ src, alt, onLoaded }) {
+  const [state, setState] = useState("loading");
+  useEffect(() => {
+    setState("loading");
+    const timer = setTimeout(() => setState((st) => (st === "loading" ? "failed" : st)), 40000);
+    return () => clearTimeout(timer);
+  }, [src]);
+  if (state === "failed") return null;
+  return (
+    <figure className={`scene-shot ${state}`}>
+      <img src={src} alt={alt} onLoad={() => { setState("loaded"); onLoaded?.(); }} onError={() => setState("failed")} />
+      {state === "loading" ? <figcaption>Desenhando a cena…</figcaption> : null}
+    </figure>
+  );
+}
+
 /** Inimigos em cena e ações rápidas (preenchem a caixa de texto). */
 function CombatBar({ campaign, mode = "full", onMode, onEnd, onPick }) {
   const state = asCombat(campaign?.combat);
@@ -599,6 +616,15 @@ export default function PlayView(props) {
 
   // Retrato de quem fala: o jogador ou um NPC conhecido desta história.
   const knownSpeakers = Object.keys({ ...(c.relationships || {}), ...(c.worldState?.npcs || {}) });
+  const lastNarrationIndex = (() => {
+    const list = disp || [];
+    for (let k = list.length - 1; k >= 0; k -= 1) {
+      const t = list[k]?.type;
+      if (!["user", "auto", "scene", "pace_ctx", "error"].includes(t)) return k;
+    }
+    return list.length ? list.length - 1 : -1;
+  })();
+
   // Retrato de quem falou numa mensagem de jogador: na mesa online, cada um tem o seu.
   const playerPhoto = (speaker) => {
     if (!c.roomId || !speaker || nameKey(speaker) === nameKey(c.charName)) return c.portraitUrl || null;
@@ -772,19 +798,6 @@ export default function PlayView(props) {
             <AmbienceControl campaign={c} tension={c.tension ?? 0} />
           </div>
 
-          {playPanel === "narrator" && c.useImages && sceneImg ? (
-            <div className="scene-banner">
-              <img
-                src={sceneImg}
-                alt={`Cena em ${c.world || "aventura"}`}
-                className={imgOk ? "loaded" : ""}
-                onLoad={() => setImgOk(true)}
-              />
-              <div className="scene-banner-overlay" />
-              {!imgOk ? <div className="scene-banner-loading">GERANDO CENA</div> : null}
-            </div>
-          ) : null}
-
           <div className={`panel panel-chat ${playPanel === "narrator" ? "active" : ""}`}>
             <div className="chat-area">
               {autoMode && !loading && autoWaiting ? (
@@ -826,7 +839,8 @@ export default function PlayView(props) {
                 {lastScene && !loading ? <details className="journey-recap"><summary>Sua jornada até aqui</summary><p>{c.worldState?.location ? `Local: ${c.worldState.location}` : c.world}</p><p>{activeMissionList[0]?.text ? `Objetivo: ${activeMissionList[0].text}` : "Explore a cena e escolha seu próximo passo."}</p><p>{lastScene.text.slice(0, 420)}{lastScene.text.length > 420 ? "…" : ""}</p>{c.worldState?.promises?.length ? <p>Promessas: {c.worldState.promises.join(" · ")}</p> : null}</details> : null}
                 {!disp?.length && loading ? <div className="splash-load">{statusText || "INICIANDO A AVENTURA"}</div> : null}
 
-                {(disp || []).map((message, index) => {
+                {(() => {
+                  const renderMessage = (message, index) => {
                   if (message?.type === "scene") {
                     return (
                       <div key={message?.id || `scene-${index}`} className="chat-scene-card" role="separator" aria-label={`Cena: ${message?.text}`}>
@@ -926,7 +940,17 @@ export default function PlayView(props) {
                       </div>
                     </div>
                   );
-                })}
+                };
+                  const list = disp || [];
+                  // A imagem da cena entra na conversa, logo antes da narração atual: rola junto e nunca tapa o texto.
+                  const at = c.useImages && sceneImg ? lastNarrationIndex : -1;
+                  if (at < 0) return list.map(renderMessage);
+                  return [
+                    ...list.slice(0, at).map(renderMessage),
+                    <SceneShot key={`shot-${sceneImg}`} src={sceneImg} alt={`Cena em ${c.world || "aventura"}`} onLoaded={() => setImgOk(true)} />,
+                    ...list.slice(at).map((m, k) => renderMessage(m, k + at)),
+                  ];
+                })()}
 
                 {loading && disp?.length && !disp[disp.length - 1]?.streaming ? (
                   <div className="typing-row">

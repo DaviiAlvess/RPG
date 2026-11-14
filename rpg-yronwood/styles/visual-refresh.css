@@ -842,3 +842,11 @@ button:disabled { cursor: not-allowed; }
 .room-peek li > span { display: inline; }
 
 .char-pick-group { margin: 6px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary, inherit); }
+
+/* Imagem da cena dentro da conversa (não fica mais fixa em cima do texto) */
+.scene-shot { position: relative; margin: 6px 0 12px; border-radius: 14px; overflow: hidden; border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.scene-shot img { display: block; width: 100%; height: auto; max-height: 260px; aspect-ratio: 5 / 2; object-fit: cover; opacity: 0; transition: opacity .6s; }
+.scene-shot.loaded img { opacity: 1; }
+.scene-shot.loading img { height: 0; min-height: 0; }
+.scene-shot figcaption { padding: 8px 12px; font-size: 12px; letter-spacing: .04em; color: var(--text-secondary, inherit); }
+@media (max-width: 640px) { .scene-shot img { max-height: 170px; } }

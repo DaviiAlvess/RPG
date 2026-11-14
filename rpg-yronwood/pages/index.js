@@ -1043,6 +1043,32 @@ export default function RPG() {
     return result;
   }, [user, buildCampaignSnapshot]);
 
+  // Versão nova publicada: uma aba aberta antes continua com o código antigo até recarregar.
+  const [newVersion, setNewVersion] = useState(false);
+  useEffect(() => {
+    const current = window.__NEXT_DATA__?.buildId;
+    if (!current) return undefined;
+    let lastCheck = 0;
+    const check = async () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastCheck < 60000) return;
+      lastCheck = Date.now();
+      try {
+        const html = await (await fetch("/", { cache: "no-store" })).text();
+        const found = html.match(/"buildId":"([^"]+)"/)?.[1];
+        if (found && found !== current) setNewVersion(true);
+      } catch {}
+    };
+    const timer = setInterval(check, 5 * 60 * 1000);
+    document.addEventListener("visibilitychange", check);
+    window.addEventListener("focus", check);
+    const first = setTimeout(check, 15000);
+    return () => { clearInterval(timer); clearTimeout(first); document.removeEventListener("visibilitychange", check); window.removeEventListener("focus", check); };
+  }, []);
+  const applyUpdate = async () => {
+    try { await flushSupaSave(); } catch {}
+    window.location.reload();
+  };
+
   const lastRefreshRef = useRef(0);
   useEffect(() => {
     const onShow = () => {
@@ -1457,6 +1483,14 @@ export default function RPG() {
       const why = [fb?.error && `Firebase: ${fb.error}`, sb?.error && `Supabase: ${sb.error}`].filter(Boolean).join(" · ");
       showNotification(`Não salvou na nuvem. ${why || "Erro desconhecido."}`, "error", { duration: 10000 });
     }
+  };
+
+  const syncFromGame = async () => {
+    if (active && saveModeRef.current !== "local") { await saveCamp(active.id, active); await flushSupaSave(); }
+    const info = await syncStories();
+    if (!info) return;
+    if (info.supabase == null) showNotification(`Não deu para falar com a nuvem: ${info.supabaseError || "erro desconhecido"}`, "error", { duration: 10000 });
+    else showNotification(`Sincronizado: ${info.supabase} ${info.supabase === 1 ? "história" : "histórias"} na nuvem${info.uploaded ? `, ${info.uploaded} enviada(s) agora` : ""}.${info.failed ? ` ${info.failed} não subiu/subiram.` : ""}`, info.failed ? "warning" : "success", { duration: 8000 });
   };
 
   const changeSaveMode = async (mode) => {
@@ -3225,7 +3259,13 @@ export default function RPG() {
         </>
       )}
 
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {newVersion ? (
+      <div className="update-banner" role="status">
+        <span><i className="ti ti-sparkles" aria-hidden="true" /> Saiu uma versão nova do jogo.</span>
+        <button type="button" onClick={applyUpdate}>Atualizar agora</button>
+      </div>
+    ) : null}
+    <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 
@@ -3244,6 +3284,12 @@ export default function RPG() {
       onDeleteTemplate={deleteTemplate}
       onShareTemplate={shareTemplate}
     />
+    {newVersion ? (
+      <div className="update-banner" role="status">
+        <span><i className="ti ti-sparkles" aria-hidden="true" /> Saiu uma versão nova do jogo.</span>
+        <button type="button" onClick={applyUpdate}>Atualizar agora</button>
+      </div>
+    ) : null}
     <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -3262,6 +3308,12 @@ export default function RPG() {
       gameStyles={GAME_STYLES}
       steps={CREATE_STEPS}
     />
+    {newVersion ? (
+      <div className="update-banner" role="status">
+        <span><i className="ti ti-sparkles" aria-hidden="true" /> Saiu uma versão nova do jogo.</span>
+        <button type="button" onClick={applyUpdate}>Atualizar agora</button>
+      </div>
+    ) : null}
     <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -3377,6 +3429,8 @@ export default function RPG() {
       saveMode={saveMode}
       onChangeSaveMode={changeSaveMode}
       onRetryCloud={retryCloudSave}
+      onSyncStories={syncFromGame}
+      syncInfo={syncInfo}
       onTestOnline={testOnline}
       onlineCheck={onlineCheck}
       serverOnline={serverOnline}
@@ -3413,6 +3467,12 @@ export default function RPG() {
       onCloseEnding={() => setShowEnding(false)}
       onExitToHome={() => { setShowEnding(false); clearAuto(); setView("home"); }}
     />
+    {newVersion ? (
+      <div className="update-banner" role="status">
+        <span><i className="ti ti-sparkles" aria-hidden="true" /> Saiu uma versão nova do jogo.</span>
+        <button type="button" onClick={applyUpdate}>Atualizar agora</button>
+      </div>
+    ) : null}
     <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </>
   );

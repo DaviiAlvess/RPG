@@ -497,6 +497,8 @@ export default function PlayView(props) {
     saveMode = "cloud",
     onChangeSaveMode,
     onRetryCloud,
+    onSyncStories,
+    syncInfo,
     onTestOnline,
     onlineCheck,
     serverOnline,
@@ -1647,6 +1649,10 @@ export default function PlayView(props) {
                     </ul>
                   </>
                 )}
+                <button className="settings-action" onClick={onSyncStories} type="button" disabled={syncInfo?.running}>
+                  <i className={`ti ti-refresh${syncInfo?.running ? " spin" : ""}`} />
+                  <span>{syncInfo?.running ? "Sincronizando…" : "Sincronizar histórias com a nuvem"}</span>
+                </button>
                 <button className="settings-action" onClick={onRetryCloud} type="button">
                   <i className="ti ti-cloud-upload" />
                   <span>{saveMode === "local" ? "Mandar uma cópia desta história para a nuvem" : "Salvar na nuvem agora"}</span>

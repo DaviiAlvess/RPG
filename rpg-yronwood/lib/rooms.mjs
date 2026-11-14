@@ -17,7 +17,7 @@ export const normalizeRoomCode = (v) => String(v || "").toUpperCase().replace(/[
 export const isRoomCode = (v) => /^[A-Z0-9]{6}$/.test(String(v || ""));
 
 // Campos que são de cada aparelho e não vão para a sala.
-const LOCAL_ONLY = ["saves", "roomId", "roomCode", "roomVersion", "roomMembers", "roomTurnUid", "roomOwnerUid", "party", "partyTurn", "updatedAt", "lastSaved", "autoMode"];
+const LOCAL_ONLY = ["saves", "roomSlots", "roomId", "roomCode", "roomVersion", "roomMembers", "roomTurnUid", "roomOwnerUid", "party", "partyTurn", "updatedAt", "lastSaved", "autoMode"];
 
 /** Campanha pronta para a sala: sem saves pessoais nem campos locais, com limite de tamanho. */
 export function roomCampaignPayload(camp = {}) {
@@ -51,8 +51,38 @@ export const cleanMember = (m = {}) => ({
   uid: String(m.uid || ""),
   name: clip(m.char_name ?? m.name, 60),
   concept: clip(m.char_concept ?? m.concept, 200),
+  role: clip(m.char_role ?? m.role, 80),
   seat: Number(m.seat) || 0,
 });
+
+/** Nome comparável: sem acento, minúsculo, espaços simples ("Tom  Cárlos" = "tom carlos"). */
+export const nameKey = (v) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+export const ROOM_MAX_SLOTS = 8;
+
+/** Vagas de personagem que o dono oferece: nome único, conceito e papel curtos. */
+export function cleanSlots(list = [], { exclude = [] } = {}) {
+  const taken = new Set(exclude.map(nameKey).filter(Boolean));
+  const out = [];
+  for (const raw of Array.isArray(list) ? list : []) {
+    const name = clip(raw?.name, 60);
+    const key = nameKey(name);
+    if (!key || taken.has(key)) continue;
+    taken.add(key);
+    out.push({ name, concept: clip(raw?.concept, 200), role: clip(raw?.role, 80) });
+    if (out.length >= ROOM_MAX_SLOTS) break;
+  }
+  return out;
+}
+
+/** Vagas que ainda ninguém pegou. */
+export function freeSlots(slots = [], members = []) {
+  const taken = new Set(members.map((m) => nameKey(m.name ?? m.char_name)));
+  return (Array.isArray(slots) ? slots : []).filter((s) => !taken.has(nameKey(s.name)));
+}
+
+/** O personagem deste aparelho numa sala. */
+export const myRoomMember = (camp = {}, uid = "") => (camp.roomMembers || []).find((m) => m.uid === uid) || null;
 
 /**
  * Campos locais que fazem a sala virar "grupo" na campanha deste aparelho:
@@ -64,16 +94,20 @@ export function roomPartyFields(room = {}, members = []) {
   const others = list.filter((m) => m !== owner);
   const roster = [owner, ...others].filter(Boolean);
   const turnIndex = Math.max(0, roster.findIndex((m) => m.uid === room.turn_uid));
-  return {
+  const fields = {
     roomId: room.id,
     roomCode: room.code,
     roomVersion: Number(room.version) || 1,
     roomOwnerUid: room.owner_uid,
     roomTurnUid: room.turn_uid || owner?.uid || "",
     roomMembers: roster,
-    party: others.map((m) => ({ id: m.uid, name: m.name, concept: m.concept })),
+    roomSlots: Array.isArray(room.slots) ? room.slots : undefined,
+    party: others.map((m) => ({ id: m.uid, name: m.name, concept: [m.role, m.concept].filter(Boolean).join(" — ") })),
     partyTurn: turnIndex,
   };
+  // Respostas curtas (jogada, vez) não trazem as vagas: mantém as que o aparelho já tem.
+  if (fields.roomSlots === undefined) delete fields.roomSlots;
+  return fields;
 }
 
 /** Quem joga agora numa sala (nome), para a tela. */

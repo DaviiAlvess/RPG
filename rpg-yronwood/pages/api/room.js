@@ -3,7 +3,7 @@
 // checa se ele é membro da sala (e se é a vez dele) e só então lê ou grava com a chave secreta.
 import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
 import { supabaseRest, httpError, netReason } from "../../lib/supabase-rest.mjs";
-import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember } from "../../lib/rooms.mjs";
+import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember, cleanSlots, freeSlots, nameKey } from "../../lib/rooms.mjs";
 
 export { supabaseRest };
 
@@ -12,10 +12,10 @@ export const config = { maxDuration: 30, api: { bodyParser: { sizeLimit: "4mb" }
 const clip = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 const eq = (v) => `eq.${encodeURIComponent(String(v))}`;
-const ROOM_FIELDS = "id,code,owner_uid,title,version,turn_uid,status,updated_at";
+const ROOM_FIELDS = "id,code,owner_uid,title,version,turn_uid,status,updated_at,slots";
 
 async function loadMembers(db, roomId) {
-  return (await db.select("rpg_room_members", `room_id=${eq(roomId)}&select=uid,char_name,char_concept,seat&order=seat.asc`)) || [];
+  return (await db.select("rpg_room_members", `room_id=${eq(roomId)}&select=uid,char_name,char_concept,char_role,seat&order=seat.asc`)) || [];
 }
 
 async function loadRoom(db, roomId, { withCampaign = true } = {}) {
@@ -44,14 +44,35 @@ export async function handleRoomAction(db, uid, body = {}) {
     let room = null;
     for (let i = 0; i < 5 && !room; i += 1) {
       try {
-        [room] = await db.insert("rpg_rooms", { code: newRoomCode(), owner_uid: uid, title: clip(body.title || campaign.world, 160), campaign, turn_uid: uid });
+        [room] = await db.insert("rpg_rooms", { code: newRoomCode(), owner_uid: uid, title: clip(body.title || campaign.world, 160), campaign, turn_uid: uid, slots: cleanSlots(body.slots, { exclude: [charName] }) });
       } catch (e) {
         if (e.code !== "CONFLICT") throw e; // código repetido: tenta outro
       }
     }
     if (!room) throw httpError(503, "Não foi possível criar a sala agora.", "ONLINE_ERROR");
-    await db.insert("rpg_room_members", { room_id: room.id, uid, char_name: charName, char_concept: clip(body.charConcept || campaign.charTitle, 200), seat: 0 });
+    await db.insert("rpg_room_members", { room_id: room.id, uid, char_name: charName, char_concept: clip(body.charConcept || campaign.charTitle, 200), char_role: clip(body.charRole, 80), seat: 0 });
     return view(room, await loadMembers(db, room.id));
+  }
+
+  // Antes de entrar: quem está na mesa e quais personagens ainda estão livres (sem a campanha).
+  if (action === "peek") {
+    const code = normalizeRoomCode(body.code);
+    if (!isRoomCode(code)) throw httpError(400, "Código de sala inválido.", "BAD_CODE");
+    const [found] = (await db.select("rpg_rooms", `code=${eq(code)}&select=${ROOM_FIELDS}`)) || [];
+    if (!found || found.status !== "open") throw httpError(404, "Sala não encontrada ou fechada.", "ROOM_NOT_FOUND");
+    const members = await loadMembers(db, found.id);
+    const list = members.map(cleanMember);
+    return {
+      room: { code: found.code, title: found.title },
+      // Sem uid: quem ainda não entrou só vê nomes e papéis.
+      members: members.map((m) => {
+        const c = cleanMember(m);
+        return { name: c.name, concept: c.concept, role: c.role, seat: c.seat, owner: m.uid === found.owner_uid };
+      }),
+      slots: freeSlots(found.slots, list),
+      isMember: members.some((m) => m.uid === uid),
+      full: members.length >= ROOM_MAX_PLAYERS,
+    };
   }
 
   if (action === "join") {
@@ -64,8 +85,26 @@ export async function handleRoomAction(db, uid, body = {}) {
       if (members.length >= ROOM_MAX_PLAYERS) throw httpError(409, `A sala já tem ${ROOM_MAX_PLAYERS} jogadores.`, "ROOM_FULL");
       const charName = clip(body.charName, 60);
       if (!charName) throw httpError(400, "Escolha o nome do seu personagem.", "NAME_REQUIRED");
+      // Cada jogador tem o próprio personagem: ninguém entra com um nome que já está na mesa.
+      if (members.some((m) => nameKey(m.char_name) === nameKey(charName))) {
+        throw httpError(409, `${charName} já é o personagem de outro jogador. Escolha outro.`, "NAME_TAKEN");
+      }
+      const slot = (Array.isArray(found.slots) ? found.slots : []).find((sl) => nameKey(sl?.name) === nameKey(charName));
       const seat = Math.max(-1, ...members.map((m) => m.seat)) + 1;
-      await db.insert("rpg_room_members", { room_id: found.id, uid, char_name: charName, char_concept: clip(body.charConcept, 200), seat });
+      try {
+        await db.insert("rpg_room_members", {
+          room_id: found.id,
+          uid,
+          char_name: slot ? clip(slot.name, 60) : charName,
+          char_concept: clip(body.charConcept || slot?.concept, 200),
+          char_role: clip(body.charRole || slot?.role, 80),
+          seat,
+        });
+      } catch (e) {
+        // Dois amigos entrando juntos no mesmo lugar: o segundo tenta de novo.
+        if (e.code === "CONFLICT") throw httpError(409, "Outro jogador entrou neste instante. Tente de novo.", "SEAT_CONFLICT");
+        throw e;
+      }
       // Avisa a mesa que alguém chegou (sobe a versão; ninguém perde jogada).
       await db.update("rpg_rooms", `id=${eq(found.id)}`, { version: found.version + 1, updated_at: now });
       found.version += 1;
@@ -109,10 +148,27 @@ export async function handleRoomAction(db, uid, body = {}) {
     return { room: { id: roomId, version: base + 1, turn_uid: turn, status: "open" }, members: members.map(cleanMember) };
   }
 
+  if (action === "setSlots") {
+    const members = await loadMembers(db, roomId);
+    requireMember(members, uid);
+    const room = await loadRoom(db, roomId, { withCampaign: false });
+    if (room.owner_uid !== uid) throw httpError(403, "Só quem criou a sala escolhe os personagens.", "OWNER_ONLY");
+    const slots = cleanSlots(body.slots, { exclude: members.map((m) => m.char_name) });
+    await db.update("rpg_rooms", `id=${eq(roomId)}`, { slots, version: room.version + 1, updated_at: now });
+    return { room: { id: roomId, version: room.version + 1, turn_uid: room.turn_uid, status: room.status, slots }, members: members.map(cleanMember) };
+  }
+
   if (action === "setTurn") {
     const members = await loadMembers(db, roomId);
     requireMember(members, uid);
     const room = await loadRoom(db, roomId, { withCampaign: false });
+    // Quem está na vez pode passar para o próximo; escolher qualquer um é só do dono.
+    if (body.pass) {
+      if (room.turn_uid !== uid && room.owner_uid !== uid) throw httpError(409, "Não é a sua vez.", "NOT_YOUR_TURN");
+      const target = nextTurnUid(members, room.turn_uid || uid);
+      await db.update("rpg_rooms", `id=${eq(roomId)}`, { turn_uid: target, version: room.version + 1, updated_at: now });
+      return { room: { id: roomId, version: room.version + 1, turn_uid: target, status: room.status }, members: members.map(cleanMember) };
+    }
     if (room.owner_uid !== uid) throw httpError(403, "Só quem criou a sala escolhe a vez.", "OWNER_ONLY");
     const target = String(body.turnUid || "");
     if (!members.some((m) => m.uid === target)) throw httpError(400, "Jogador não está na sala.", "NOT_MEMBER");

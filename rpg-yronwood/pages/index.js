@@ -39,7 +39,7 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
-import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload } from "../lib/rooms.mjs";
+import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload, myRoomMember } from "../lib/rooms.mjs";
 import { buildSaveBody, readLoadedCampaign, cloudStatusText, canGzip, readSaveMode, writeSaveMode } from "../lib/supa-saves-client.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
@@ -1429,8 +1429,14 @@ export default function RPG() {
     const cur = activeRef.current;
     if (!cur || !room || cur.roomId !== room.id) return;
     const fields = roomPartyFields({ ...room, code: room.code || cur.roomCode, owner_uid: room.owner_uid || cur.roomOwnerUid }, members || []);
+    const meUid = firebaseUserRef.current?.uid;
+    if (meUid && fields.roomTurnUid === meUid && cur.roomTurnUid && cur.roomTurnUid !== meUid) {
+      const me = myRoomMember(fields, meUid);
+      showNotification(`Sua vez${me?.name ? `, ${me.name}` : ""}! O que você faz?`, "success", { duration: 8000 });
+      try { navigator.vibrate?.([120, 60, 120]); } catch {}
+    }
     if (!room.campaign) {
-      const changed = fields.roomVersion !== cur.roomVersion || fields.roomTurnUid !== cur.roomTurnUid || JSON.stringify(fields.roomMembers) !== JSON.stringify(cur.roomMembers);
+      const changed = fields.roomVersion !== cur.roomVersion || fields.roomTurnUid !== cur.roomTurnUid || JSON.stringify(fields.roomMembers) !== JSON.stringify(cur.roomMembers) || ("roomSlots" in fields && JSON.stringify(fields.roomSlots) !== JSON.stringify(cur.roomSlots));
       if (changed) { const next = { ...cur, ...fields }; setActive(next); saveCamp(cur.id, next); }
       return;
     }
@@ -1567,7 +1573,9 @@ export default function RPG() {
     if (!active || active.roomId || roomBusy) return;
     setRoomBusy(true);
     try {
-      const data = await roomCall({ action: "create", campaign: roomSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world });
+      // O grupo montado neste aparelho vira as vagas que os amigos podem escolher.
+      const slots = (Array.isArray(active.party) ? active.party : []).map((p) => ({ name: p.name, concept: p.concept }));
+      const data = await roomCall({ action: "create", campaign: roomSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world, slots });
       const next = { ...active, ...roomPartyFields(data.room, data.members) };
       setActive(next);
       await saveCamp(active.id, next);
@@ -1578,11 +1586,14 @@ export default function RPG() {
     } finally { setRoomBusy(false); }
   };
 
-  const joinRoom = async ({ code, charName, charConcept }) => {
+  // Antes de entrar: quem está na mesa e quais personagens ainda estão livres.
+  const peekRoom = async (code) => roomCall({ action: "peek", code });
+
+  const joinRoom = async ({ code, charName, charConcept, charRole }) => {
     if (roomBusy) return;
     setRoomBusy(true);
     try {
-      const data = await roomCall({ action: "join", code, charName, charConcept });
+      const data = await roomCall({ action: "join", code, charName, charConcept, charRole });
       // Já tenho esta sala neste aparelho (sou o dono ou já entrei antes): só abre.
       let id = null;
       for (const s of idx) {
@@ -1632,12 +1643,27 @@ export default function RPG() {
     catch (error) { showNotification(error.message, "error"); }
   };
 
+  const passRoomTurn = async () => {
+    if (!active?.roomId) return;
+    try { const data = await roomCall({ action: "setTurn", roomId: active.roomId, pass: true }); await syncFromRoomRef.current({ ...data.room, code: active.roomCode, owner_uid: active.roomOwnerUid }, data.members); }
+    catch (error) { showNotification(error.message, "error"); }
+  };
+
+  const setRoomSlots = async (slots) => {
+    if (!active?.roomId) return false;
+    try {
+      const data = await roomCall({ action: "setSlots", roomId: active.roomId, slots });
+      await syncFromRoomRef.current({ ...data.room, code: active.roomCode, owner_uid: active.roomOwnerUid }, data.members);
+      return true;
+    } catch (error) { showNotification(error.message, "error"); return false; }
+  };
+
   const leaveRoom = async () => {
     if (!active?.roomId) return;
     const owner = active.roomOwnerUid === user?.uid;
     if (!confirm(owner ? "Fechar a sala? Os amigos não vão mais conseguir jogar nela (a história fica salva com você)." : "Sair da sala? A história fica salva neste aparelho, mas você não recebe mais as jogadas.")) return;
     try { await roomCall({ action: "leave", roomId: active.roomId }); } catch (error) { showNotification(error.message, "warning"); }
-    const { roomId, roomCode, roomVersion, roomMembers, roomTurnUid, roomOwnerUid, ...rest } = active;
+    const { roomId, roomCode, roomVersion, roomMembers, roomTurnUid, roomOwnerUid, roomSlots, ...rest } = active;
     const next = { ...rest, party: [], partyTurn: 0 };
     setActive(next);
     await saveCamp(active.id, next);
@@ -3255,7 +3281,7 @@ export default function RPG() {
             <button className="btn-secondary" type="button" onClick={startCreate}>Criar o meu</button>
             <button className="btn-secondary" type="button" onClick={() => setJoinRoomCode("")}><i className="ti ti-users-group" aria-hidden="true" /> Entrar numa sala</button>
           </div>
-          {joinRoomCode !== null ? <RoomJoinModal initialCode={joinRoomCode} busy={roomBusy} onJoin={joinRoom} onClose={() => { setJoinRoomCode(null); if (window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname); }} /> : null}
+          {joinRoomCode !== null ? <RoomJoinModal initialCode={joinRoomCode} busy={roomBusy} onPeek={peekRoom} onJoin={joinRoom} onClose={() => { setJoinRoomCode(null); if (window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname); }} /> : null}
         </>
       )}
 
@@ -3430,6 +3456,8 @@ export default function RPG() {
       onChangeSaveMode={changeSaveMode}
       onRetryCloud={retryCloudSave}
       onSyncStories={syncFromGame}
+      onPassRoomTurn={passRoomTurn}
+      onSetRoomSlots={setRoomSlots}
       syncInfo={syncInfo}
       onTestOnline={testOnline}
       onlineCheck={onlineCheck}

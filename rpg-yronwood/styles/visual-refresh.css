@@ -804,3 +804,27 @@ button:disabled { cursor: not-allowed; }
 /* Aviso de versão nova */
 .update-banner { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 9999; display: flex; align-items: center; gap: 12px; max-width: calc(100vw - 24px); padding: 10px 12px 10px 16px; border-radius: 14px; background: #2a2f38; border: 1px solid var(--accent, #c9a45c); box-shadow: 0 8px 28px rgba(0,0,0,.35); color: #f1ede4; font-size: 14px; }
 .update-banner button { flex-shrink: 0; padding: 7px 12px; border-radius: 10px; border: 0; background: var(--accent, #c9a45c); color: #1b1e24; font: inherit; font-weight: 600; cursor: pointer; }
+
+/* Mesa online: escolher personagem, vagas e vez */
+.room-peek { padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); font-size: 14px; }
+.room-peek ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.room-peek li { display: flex; align-items: center; gap: 6px; }
+.char-pick { border: 0; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.char-pick legend { font-weight: 600; margin-bottom: 6px; }
+.char-option { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; }
+.char-option.on { border-color: var(--accent, #c9a45c); background: rgba(201, 164, 92, .08); }
+.char-option input { margin-top: 3px; }
+.char-option > span { display: flex; flex-direction: column; gap: 2px; }
+.char-option em { font-style: normal; color: var(--text-secondary, inherit); }
+.char-option small { color: var(--text-secondary, inherit); font-size: 12.5px; }
+.char-new { display: flex; flex-direction: column; gap: 6px; padding: 4px 2px; }
+.role-ideas { display: flex; flex-wrap: wrap; gap: 6px; }
+.role-ideas .chip { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.role-ideas .chip.on { border-color: var(--accent, #c9a45c); background: rgba(201, 164, 92, .15); }
+.room-wait.my-turn { display: flex; align-items: center; gap: 8px; border-color: rgba(96, 168, 116, .55); background: rgba(96, 168, 116, .1); }
+.room-wait.my-turn > span { flex: 1; }
+.room-wait.my-turn .ti-player-play { color: #7fc493; }
+.my-char-card { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--accent, #c9a45c); margin-bottom: 14px; }
+.my-char-card p { margin: 6px 0 0; }
+.slot-editor { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+.slot-add { display: flex; flex-direction: column; gap: 6px; }

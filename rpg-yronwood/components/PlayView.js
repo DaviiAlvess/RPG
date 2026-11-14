@@ -22,7 +22,7 @@ import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { asCombat, asCombatEnded, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
 import { RoomPanel } from "./RoomJoin";
-import { isMyTurn, roomTurnName } from "../lib/rooms.mjs";
+import { isMyTurn, roomTurnName, myRoomMember } from "../lib/rooms.mjs";
 
 /** Botão de refazer na última resposta do Mestre, com o jeito da nova versão. */
 function RedoMenu({ styles = [], onRedo }) {
@@ -397,6 +397,7 @@ function getPanelSubtitle(panel, loading, statusText, connectionStatus, c, lastS
 export default function PlayView(props) {
   const [masterChatOpen, setMasterChatOpen] = useState(false);
   const [combatBarMode, setCombatBarModeState] = useState("full");
+  const roomMe = props.active?.roomId ? myRoomMember(props.active, props.myUid) : null;
   useEffect(() => { setCombatBarModeState(readCombatBarMode()); }, []);
   const setCombatBarMode = (mode) => {
     if (!COMBAT_BAR_MODES[mode]) return;
@@ -498,6 +499,8 @@ export default function PlayView(props) {
     onChangeSaveMode,
     onRetryCloud,
     onSyncStories,
+    onPassRoomTurn,
+    onSetRoomSlots,
     syncInfo,
     onTestOnline,
     onlineCheck,
@@ -937,7 +940,12 @@ export default function PlayView(props) {
               <CombatBar campaign={c} mode={combatBarMode} onMode={setCombatBarMode} onEnd={onEndCombat} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
               <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
               {c.roomId && !isMyTurn(c, myUid) ? (
-                <div className="room-wait" role="status"><i className="ti ti-hourglass" aria-hidden="true" /> Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>. A história atualiza sozinha quando ele jogar.</div>
+                <div className="room-wait" role="status"><i className="ti ti-hourglass" aria-hidden="true" /> Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>{roomMe ? <> · você é <strong>{roomMe.name}</strong></> : null}. A história atualiza sozinha quando ele jogar.</div>
+              ) : c.roomId && roomMe && (c.roomMembers || []).length > 1 ? (
+                <div className="room-wait my-turn" role="status">
+                  <i className="ti ti-player-play" aria-hidden="true" /> <span><strong>Sua vez</strong>, {roomMe.name}! Diga o que você faz.</span>
+                  {onPassRoomTurn ? <button type="button" className="btn-ghost" onClick={onPassRoomTurn} disabled={loading}>Passar a vez</button> : null}
+                </div>
               ) : null}
               <div className="chat-input-row">
                 {pendingTest && !props.failedAction ? <div className="pending-test-note" role="status">
@@ -967,10 +975,10 @@ export default function PlayView(props) {
                     autoMode
                       ? autoWaiting
                         ? "Clique em Intervir para agir manualmente."
-                        : `Modo auto ativo — ou fale/aja como ${c.charName || "o personagem"}.`
+                        : `Modo auto ativo — ou fale/aja como ${roomMe?.name || partyActor(c)?.name || c.charName || "o personagem"}.`
                       : selectedChatAbility
                         ? `Complete: Uso ${selectedChatAbility} para…`
-                      : `Fale ou aja como ${c.charName || "o personagem"}… Ex.: "Abra o portão."`
+                      : `Fale ou aja como ${roomMe?.name || partyActor(c)?.name || c.charName || "o personagem"}… Ex.: "Abra o portão."`
                   }
                   rows={2}
                 />
@@ -1092,6 +1100,14 @@ export default function PlayView(props) {
           </div>
 
           <div className={`panel ${playPanel === "sheet" ? "active" : ""}`}>
+            {roomMe && roomMe.uid !== c.roomOwnerUid ? (
+              <div className="my-char-card">
+                <div className="section-label">Seu personagem nesta mesa</div>
+                <strong>{roomMe.name}</strong>{roomMe.role ? <span> · {roomMe.role}</span> : null}
+                {roomMe.concept ? <p>{roomMe.concept}</p> : null}
+                <p className="settings-hint">A ficha completa abaixo (nível, atributos, vida) é de {c.charName || "personagem principal"}, o personagem de quem criou a sala.</p>
+              </div>
+            ) : null}
             <div>
               <div className="panel-title">Ficha do personagem</div>
               <div className="panel-sub">{c.charName || "Herói sem nome"}{c.charTitle ? ` · ${c.charTitle}` : ""}</div>
@@ -1678,7 +1694,7 @@ export default function PlayView(props) {
               </div>
               <div className="settings-block">
                 <div className="section-label">Jogar online com amigos</div>
-                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} serverStatus={serverOnline} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} />
+                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} serverStatus={serverOnline} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} onPass={onPassRoomTurn} onSetSlots={onSetRoomSlots} />
               </div>
               {!c.roomId ? (
                 <div className="settings-block">

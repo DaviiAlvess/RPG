@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleRoomAction, supabaseRest, onlineStatus } from '../pages/api/room.js';
-import { newRoomCode, roomCampaignPayload, nextTurnUid, roomPartyFields, isMyTurn, inviteLink, normalizeRoomCode } from '../lib/rooms.mjs';
+import { newRoomCode, roomCampaignPayload, nextTurnUid, roomPartyFields, isMyTurn, inviteLink, normalizeRoomCode, cleanSlots, freeSlots, nameKey, myRoomMember } from '../lib/rooms.mjs';
 import { partyActor, actorPrefix } from '../lib/play-extras.mjs';
 
 // Banco falso que entende o pedaço do PostgREST que a rota usa (eq., select, order).
@@ -138,4 +138,75 @@ test('salas: endereço do Supabase errado ou antigo não derruba o modo online',
   // nenhum endereço responde: erro claro com o motivo de cada um
   const dead = async () => { const e = new TypeError('fetch failed'); e.cause = { code: 'ENOTFOUND' }; throw e; };
   await assert.rejects(supabaseRest({ SUPABASE_SECRET_KEY: 'k' }, dead).select('rpg_rooms', 'select=id'), /não conseguiu alcançar o Supabase \(yjcxmuybnehbnndvqfyk\.supabase\.co: ENOTFOUND\)/);
+});
+
+test('mesa online: cada um escolhe o próprio personagem e tem a sua vez', async () => {
+  const db = fakeDb();
+  const camp = { id: 'c1', world: 'Springfield', charName: 'Tom Carlos', msgs: [], disp: [] };
+  const vagas = [{ name: 'Bart', concept: 'pestinha de skate', role: 'encrenqueiro' }, { name: 'Lisa', concept: 'gênio do sax', role: 'esperta' }, { name: 'tom cárlos' }];
+  const { room } = await handleRoomAction(db, 'dono', { action: 'create', campaign: camp, charName: 'Tom Carlos', slots: vagas });
+  // o personagem do dono nunca vira vaga
+  assert.deepEqual(db.tables.rpg_rooms[0].slots.map((s) => s.name), ['Bart', 'Lisa']);
+
+  // antes de entrar: vê a mesa e as vagas livres, sem uid de ninguém
+  let peek = await handleRoomAction(db, 'ana', { action: 'peek', code: room.code });
+  assert.equal(peek.isMember, false);
+  assert.deepEqual(peek.slots.map((s) => s.name), ['Bart', 'Lisa']);
+  assert.deepEqual(peek.members.map((m) => [m.name, m.owner]), [['Tom Carlos', true]]);
+  assert.ok(!JSON.stringify(peek).includes('dono'));
+  assert.equal(peek.room.campaign, undefined);
+
+  // Ana pega a vaga do Bart (vem com papel e conceito da vaga)
+  await handleRoomAction(db, 'ana', { action: 'join', code: room.code, charName: 'bart' });
+  const bart = db.tables.rpg_room_members.find((m) => m.uid === 'ana');
+  assert.equal(bart.char_name, 'Bart');
+  assert.equal(bart.char_role, 'encrenqueiro');
+  // Bia não pode ser o Bart nem o Tom Carlos (sem diferença de acento ou maiúscula)
+  await assert.rejects(handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'BART' }), /já é o personagem de outro jogador/);
+  await assert.rejects(handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'Tom Cárlos' }), /já é o personagem de outro jogador/);
+  // a vaga do Bart some da lista
+  peek = await handleRoomAction(db, 'bia', { action: 'peek', code: room.code });
+  assert.deepEqual(peek.slots.map((s) => s.name), ['Lisa']);
+  // Bia cria o próprio personagem
+  const joined = await handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'Milhouse', charConcept: 'melhor amigo azarado', charRole: 'apoio' });
+  assert.deepEqual(joined.members.map((m) => [m.name, m.role]), [['Tom Carlos', ''], ['Bart', 'encrenqueiro'], ['Milhouse', 'apoio']]);
+  // quem já está na sala volta sem escolher de novo
+  assert.equal((await handleRoomAction(db, 'ana', { action: 'peek', code: room.code })).isMember, true);
+  assert.equal((await handleRoomAction(db, 'ana', { action: 'join', code: room.code })).members.length, 3);
+
+  // vagas: só o dono mexe
+  await assert.rejects(handleRoomAction(db, 'ana', { action: 'setSlots', roomId: room.id, slots: [] }), /Só quem criou a sala/);
+  const changed = await handleRoomAction(db, 'dono', { action: 'setSlots', roomId: room.id, slots: [{ name: 'Lisa' }, { name: 'Bart' }, { name: 'Maggie', role: 'bebê' }] });
+  assert.deepEqual(changed.room.slots.map((s) => s.name), ['Lisa', 'Maggie'], 'personagem já em jogo não vira vaga');
+
+  // a vez: dono → Ana (Bart) → Bia (Milhouse) → dono
+  let r = db.tables.rpg_rooms[0];
+  assert.equal(r.turn_uid, 'dono');
+  await assert.rejects(handleRoomAction(db, 'ana', { action: 'setTurn', roomId: room.id, pass: true }), /Não é a sua vez/);
+  let passed = await handleRoomAction(db, 'dono', { action: 'setTurn', roomId: room.id, pass: true });
+  assert.equal(passed.room.turn_uid, 'ana');
+  passed = await handleRoomAction(db, 'ana', { action: 'setTurn', roomId: room.id, pass: true });
+  assert.equal(passed.room.turn_uid, 'bia');
+  // Ana não escolhe a vez de ninguém (só passa a própria)
+  await assert.rejects(handleRoomAction(db, 'ana', { action: 'setTurn', roomId: room.id, turnUid: 'ana' }), /Só quem criou a sala escolhe a vez/);
+
+  // em cada aparelho, o personagem é o do próprio jogador
+  const view = await handleRoomAction(db, 'bia', { action: 'get', roomId: room.id });
+  const fields = roomPartyFields(view.room, view.members);
+  assert.equal(myRoomMember(fields, 'bia').name, 'Milhouse');
+  assert.equal(myRoomMember(fields, 'ana').name, 'Bart');
+  assert.equal(isMyTurn(fields, 'bia'), true);
+  assert.equal(partyActor({ ...camp, ...fields }).name, 'Milhouse');
+  assert.deepEqual(fields.roomSlots.map((s) => s.name), ['Lisa', 'Maggie']);
+  // resposta curta (sem vagas) não apaga as vagas do aparelho
+  assert.equal('roomSlots' in roomPartyFields({ id: room.id, version: 9, turn_uid: 'dono' }, view.members), false);
+  // grupo leva o papel para o Mestre
+  assert.match(fields.party.find((p) => p.name === 'Bart').concept, /encrenqueiro — pestinha de skate/);
+});
+
+test('vagas e nomes: sem repetição nem acento fazendo diferença', () => {
+  assert.equal(nameKey('  Tom   CÁRLOS '), 'tom carlos');
+  assert.deepEqual(cleanSlots([{ name: 'Bart' }, { name: 'bárt' }, { name: '' }, { name: 'Lisa' }], { exclude: ['lisa'] }).map((s) => s.name), ['Bart']);
+  assert.equal(cleanSlots(Array.from({ length: 20 }, (_, i) => ({ name: `P${i}` }))).length, 8);
+  assert.deepEqual(freeSlots([{ name: 'Bart' }, { name: 'Lisa' }], [{ name: 'BART' }]).map((s) => s.name), ['Lisa']);
 });

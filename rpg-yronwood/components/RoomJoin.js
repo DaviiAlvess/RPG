@@ -229,7 +229,7 @@ export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, 
       ) : null}
       {owner && onSetSlots ? <SlotEditor campaign={c} onSave={onSetSlots} /> : null}
       <button type="button" className="settings-action" onClick={onLeave}>
-        <i className="ti ti-door-exit" /> <span>{owner ? "Fechar a sala" : "Sair da sala"}</span>
+        <i className="ti ti-door-exit" /> <span>{owner ? "Fechar a sala (acaba a mesa para todos)" : "Sair da mesa (seu personagem fica guardado)"}</span>
       </button>
     </div>
   );

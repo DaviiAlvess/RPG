@@ -787,3 +787,16 @@ button:disabled { cursor: not-allowed; }
 .save-mode-options .economy-setting { margin: 0; }
 .save-mode-pick { display: flex; align-items: center; gap: 8px; margin: 0 20px 12px; font-size: 14px; color: var(--text-secondary, inherit); }
 .save-mode-pick select { font: inherit; padding: 5px 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--text, inherit); }
+
+/* Sincronizar histórias */
+.library-tools { display: flex; align-items: center; gap: 10px; }
+.sync-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.sync-btn:hover, .sync-btn:focus-visible { border-color: var(--accent, #c9a45c); }
+.sync-btn:disabled { opacity: .7; cursor: default; }
+.ti.spin { display: inline-block; animation: sync-spin 1s linear infinite; }
+@keyframes sync-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ti.spin { animation: none; } }
+.sync-report { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: -10px 0 18px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); font-size: 13px; color: var(--text-secondary, inherit); }
+.sync-report strong { color: var(--text, inherit); }
+.sync-report .sync-bad { color: #e0a24a; }
+.sync-report .sync-muted { opacity: .8; }

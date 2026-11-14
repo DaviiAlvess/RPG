@@ -513,7 +513,6 @@ export default function RPG() {
   const supaQueueRef = useRef({ timer: null, pending: new Map(), running: null });
   const supaRunRef = useRef(null);
   const supaIndexRef = useRef(new Map());
-  const supaBackfillRef = useRef(false);
   const localFullWarnedRef = useRef(false);
   // Onde salvar (escolha do jogador neste aparelho): "cloud" ou "local".
   const [saveMode, setSaveModeState] = useState("cloud");
@@ -622,6 +621,17 @@ export default function RPG() {
     return data;
   }, [apiFetch]);
 
+  // Histórias deste aparelho: as da conta e as do índice antigo (de antes do login), se tiverem dados aqui.
+  const readDeviceStories = (userId) => {
+    const own = readLocalIndex(userId);
+    let legacy = [];
+    try {
+      const parsed = JSON.parse(localStorage.getItem(IDX_KEY) || "[]");
+      if (Array.isArray(parsed) && userId) legacy = parsed.filter((it) => it?.id != null && localStorage.getItem(campKey(it.id)));
+    } catch {}
+    return mergeCampaignIndex(legacy, own);
+  };
+
   const readLocalIndex = (userId) => {
     try {
       const parsed = JSON.parse(localStorage.getItem(idxKeyForUser(userId)) || "[]");
@@ -631,55 +641,112 @@ export default function RPG() {
     }
   };
 
+  const lastListRef = useRef(null);
   const reloadCampaigns = useCallback(async (userId) => {
-    const local = readLocalIndex(userId);
+    const local = readDeviceStories(userId);
     const fromFirebase = (async () => {
       try {
         const { cloudListCampaigns } = await import("../lib/rpg-cloud");
         const { ok, data, error } = await cloudListCampaigns();
-        if (ok && Array.isArray(data)) return data;
-        if (error) console.warn("Nuvem (Firebase):", error);
-      } catch (e) { console.warn("reloadCampaigns:", e); }
-      return null;
+        if (ok && Array.isArray(data)) return { items: data, error: "" };
+        return { items: null, error: error || "A nuvem do Firebase não respondeu." };
+      } catch (e) { return { items: null, error: e.message }; }
     })();
     const fromSupabase = savesCall({ action: "list" })
-      .then((r) => (Array.isArray(r.items) ? r.items : null))
-      .catch((e) => { console.warn("Nuvem (Supabase):", e.message); return null; });
-    const [fb, sb] = await Promise.all([fromFirebase, fromSupabase]);
-    if (sb) supaIndexRef.current = new Map(sb.map((i) => [String(i.id), i.updatedAt]));
-    const merged = mergeCampaignIndex(sb || [], mergeCampaignIndex(fb || [], local));
-    if (fb || sb) {
+      .then((r) => ({ items: Array.isArray(r.items) ? r.items : [], error: "" }))
+      .catch((e) => ({ items: null, error: e.message }));
+    // O Supabase costuma responder antes: mostra logo, sem esperar o Firebase.
+    const sb = await fromSupabase;
+    if (sb.items) {
+      supaIndexRef.current = new Map(sb.items.map((i) => [String(i.id), i.updatedAt]));
+      setIdx(mergeCampaignIndex(sb.items, local));
+      setCloudOk(true);
+    }
+    const fb = await fromFirebase;
+    const merged = mergeCampaignIndex(sb.items || [], mergeCampaignIndex(fb.items || [], local));
+    if (fb.items || sb.items) {
       try { localStorage.setItem(idxKeyForUser(userId), JSON.stringify(merged)); } catch {}
       setCloudOk(true);
     } else setCloudOk(false);
-    setIdx(fb || sb ? merged : local);
-    // Primeira vez nesta sessão: manda para o Supabase as histórias deste aparelho que ainda não estão lá.
-    if (sb && !supaBackfillRef.current && saveModeRef.current !== "local") {
-      supaBackfillRef.current = true;
-      let queued = 0;
-      for (const item of merged) {
-        if (queued >= 15) break;
-        let rec = null;
-        try { rec = JSON.parse(localStorage.getItem(campKey(item.id)) || "null"); } catch {}
-        if (!rec?.id) continue;
-        const there = supaIndexRef.current.get(String(item.id));
-        if (there && new Date(there).getTime() >= new Date(rec.updatedAt || 0).getTime()) continue;
-        supaQueueRef.current.pending.set(String(rec.id), rec);
-        queued++;
-      }
-      if (queued) setTimeout(() => supaRunRef.current?.(), 1500);
-    }
+    setIdx(fb.items || sb.items ? merged : local);
+    const result = { local, firebase: fb.items, firebaseError: fb.error, supabase: sb.items, supabaseError: sb.error, merged, at: Date.now() };
+    lastListRef.current = result;
+    return result;
   }, [savesCall]);
 
-  const migrateLocalCampaigns = useCallback(async (userId) => {
-    const keys = [idxKeyForUser(userId), IDX_KEY];
-    let summaries = [];
-    for (const key of keys) {
-      try {
-        const parsed = JSON.parse(localStorage.getItem(key) || "[]");
-        if (Array.isArray(parsed) && parsed.length) summaries = parsed;
-      } catch {}
+  // Manda para o Supabase tudo que ainda não está lá: histórias deste aparelho e as que só existem no Firebase.
+  const syncStoriesToSupabase = useCallback(async (list) => {
+    const report = { uploaded: 0, failed: 0, errors: [] };
+    if (!list?.supabase) return report;
+    const supaAt = new Map(list.supabase.map((i) => [String(i.id), new Date(i.updatedAt || 0).getTime()]));
+    const jobs = [];
+    for (const item of list.local || []) {
+      let rec = null;
+      try { rec = JSON.parse(localStorage.getItem(campKey(item.id)) || "null"); } catch {}
+      if (!rec) continue;
+      const at = new Date(rec.updatedAt || item.updatedAt || 0).getTime();
+      if (supaAt.has(String(item.id)) && supaAt.get(String(item.id)) >= at) continue;
+      jobs.push({ id: String(item.id), rec });
     }
+    for (const item of list.firebase || []) {
+      const id = String(item.id);
+      if (jobs.some((j) => j.id === id)) continue;
+      if (supaAt.has(id) && supaAt.get(id) >= new Date(item.updatedAt || 0).getTime()) continue;
+      jobs.push({ id, fromFirebase: true });
+    }
+    for (const job of jobs.slice(0, 40)) {
+      try {
+        let rec = job.rec;
+        if (!rec) {
+          const { cloudLoadCampaign } = await import("../lib/rpg-cloud");
+          const got = await cloudLoadCampaign(job.id);
+          rec = got.ok ? got.data : null;
+        }
+        if (!rec) { report.failed++; continue; }
+        const reply = await savesCall(await buildSaveBody({ ...rec, id: rec.id ?? job.id }));
+        if (reply.ok) { report.uploaded++; supaIndexRef.current.set(job.id, reply.updatedAt || rec.updatedAt); }
+        else if (!reply.conflict) report.failed++;
+      } catch (error) {
+        report.failed++;
+        if (!report.errors.includes(error.message)) report.errors.push(error.message);
+      }
+    }
+    return report;
+  }, [savesCall]);
+
+  // Botão "Sincronizar" da tela inicial e sincronização automática ao entrar.
+  const [syncInfo, setSyncInfo] = useState(null);
+  const syncStories = useCallback(async ({ silent = false } = {}) => {
+    const userId = getUserId(firebaseUserRef.current);
+    if (!userId) return null;
+    if (!silent) setSyncInfo({ running: true });
+    let list = await reloadCampaigns(userId);
+    let sent = { uploaded: 0, failed: 0, errors: [] };
+    if (saveModeRef.current !== "local") {
+      sent = await syncStoriesToSupabase(list);
+      if (sent.uploaded) list = await reloadCampaigns(userId);
+    }
+    const info = {
+      running: false,
+      at: Date.now(),
+      device: list.local.length,
+      supabase: list.supabase ? list.supabase.length : null,
+      supabaseError: list.supabaseError,
+      firebase: list.firebase ? list.firebase.length : null,
+      firebaseError: list.firebaseError,
+      total: list.merged.length,
+      uploaded: sent.uploaded,
+      failed: sent.failed,
+      errors: sent.errors,
+      localOnly: saveModeRef.current === "local",
+    };
+    setSyncInfo(info);
+    if (sent.failed) recordError(window.localStorage, { kind: "nuvem", code: "SYNC", message: `${sent.failed} história(s) não subiram para o Supabase. ${sent.errors.join(" · ")}`, where: "sincronizar" });
+    return info;
+  }, [reloadCampaigns, syncStoriesToSupabase]);
+
+  const migrateLocalCampaigns = useCallback(async (userId) => {
+    const summaries = readDeviceStories(userId);
     if (!summaries.length) return;
 
     const { cloudSaveCampaign } = await import("../lib/rpg-cloud");
@@ -745,16 +812,17 @@ export default function RPG() {
       const mode = readSaveMode(window.localStorage, userId);
       saveModeRef.current = mode;
       setSaveModeState(mode);
-      if (mode !== "local") await migrateLocalCampaigns(userId);
-      await reloadCampaigns(userId);
+      // Lista e sincronização primeiro (rápidas); a cópia para o Firebase vem depois, sem travar a tela.
+      await syncStories({ silent: true });
+      if (mode !== "local") void migrateLocalCampaigns(userId);
       const { cloudListTemplates } = await import("../lib/rpg-cloud");
       const tpl = await cloudListTemplates();
       if (tpl.ok) setUserTemplates(tpl.data);
       const { cloudHealthCheck } = await import("../lib/rpg-cloud");
       const h = await cloudHealthCheck();
-      setCloudOk(h.ok);
+      setCloudOk(h.ok || Boolean(lastListRef.current?.supabase));
     })();
-  }, [authReady, user, reloadCampaigns, migrateLocalCampaigns]);
+  }, [authReady, user, reloadCampaigns, migrateLocalCampaigns, syncStories]);
 
   useEffect(() => {
     if (authReady && !user && view !== "home") {
@@ -974,6 +1042,19 @@ export default function RPG() {
     saveQueue.current = result;
     return result;
   }, [user, buildCampaignSnapshot]);
+
+  const lastRefreshRef = useRef(0);
+  useEffect(() => {
+    const onShow = () => {
+      if (document.visibilityState !== "visible" || !firebaseUserRef.current || view !== "home") return;
+      if (Date.now() - lastRefreshRef.current < 20000) return;
+      lastRefreshRef.current = Date.now();
+      void reloadCampaigns(getUserId(firebaseUserRef.current));
+    };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", onShow);
+    return () => { document.removeEventListener("visibilitychange", onShow); window.removeEventListener("focus", onShow); };
+  }, [view, reloadCampaigns]);
 
   // Ao sair da aba, envia na hora o que estava esperando para o Supabase.
   useEffect(() => {
@@ -1396,9 +1477,8 @@ export default function RPG() {
       return;
     }
     showNotification("Nuvem ligada: as histórias voltam a ser salvas na nuvem.", "success");
-    supaBackfillRef.current = false;
     if (active) await saveCamp(active.id, active);
-    await reloadCampaigns(getUserId(user));
+    await syncStories({ silent: true });
   };
 
   // Testa cada peça do jogo online e explica o que falta.
@@ -3089,7 +3169,28 @@ export default function RPG() {
             </div>
           ) : null}
           <div className="camp-list">
-            <div className="library-heading"><div><h2>Suas aventuras</h2></div><span className="campaign-count">{idx.length} {idx.length === 1 ? "mundo" : "mundos"}</span></div>
+            <div className="library-heading">
+              <div><h2>Suas aventuras</h2></div>
+              <div className="library-tools">
+                <span className="campaign-count">{idx.length} {idx.length === 1 ? "mundo" : "mundos"}</span>
+                <button type="button" className="sync-btn" onClick={() => syncStories()} disabled={syncInfo?.running} title="Buscar as histórias da nuvem e enviar as deste aparelho">
+                  <i className={`ti ti-refresh${syncInfo?.running ? " spin" : ""}`} aria-hidden="true" /> {syncInfo?.running ? "Sincronizando…" : "Sincronizar"}
+                </button>
+              </div>
+            </div>
+            {syncInfo && !syncInfo.running ? (
+              <div className="sync-report" role="status">
+                <span>Neste aparelho: <strong>{syncInfo.device}</strong></span>
+                <span>Nuvem Supabase: <strong>{syncInfo.supabase ?? "erro"}</strong></span>
+                <span>Nuvem Firebase: <strong>{syncInfo.firebase ?? "erro"}</strong></span>
+                {syncInfo.uploaded ? <span>Enviadas agora: <strong>{syncInfo.uploaded}</strong></span> : null}
+                {syncInfo.failed ? <span className="sync-bad">Não subiram: <strong>{syncInfo.failed}</strong>{syncInfo.errors?.length ? ` (${syncInfo.errors[0]})` : ""}</span> : null}
+                {syncInfo.supabase == null && syncInfo.supabaseError ? <span className="sync-bad">Supabase: {syncInfo.supabaseError}</span> : null}
+                {syncInfo.firebase == null && syncInfo.firebaseError ? <span className="sync-muted">Firebase: {syncInfo.firebaseError}</span> : null}
+                {syncInfo.localOnly ? <span className="sync-muted">Modo "Só neste aparelho": nada foi enviado.</span> : null}
+                <span className="sync-muted">Conta: {user?.email}</span>
+              </div>
+            ) : null}
             {!idx.length ? (
               <div className="camp-empty">
                 <div className="camp-empty-txt">Ainda não há aventura.<br />Abra um RPG pronto ou crie o seu — continua de onde parou em qualquer aparelho.</div>

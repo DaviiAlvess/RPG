@@ -828,3 +828,15 @@ button:disabled { cursor: not-allowed; }
 .my-char-card p { margin: 6px 0 0; }
 .slot-editor { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
 .slot-add { display: flex; flex-direction: column; gap: 6px; }
+
+/* Retratos da mesa */
+.turn-face { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; vertical-align: middle; }
+.member-face { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; background: rgba(255,255,255,.06); }
+.portrait-pick { display: flex; gap: 12px; align-items: center; }
+.portrait-pick .portrait-preview { width: 96px; height: 96px; border-radius: 14px; object-fit: cover; background: rgba(255,255,255,.05); border: 1px solid var(--border); flex-shrink: 0; display: grid; place-items: center; overflow: hidden; }
+.portrait-pick .portrait-preview img { width: 100%; height: 100%; object-fit: cover; }
+.portrait-pick .portrait-actions { display: flex; flex-direction: column; gap: 6px; }
+.char-option .member-face { width: 44px; height: 44px; }
+
+.room-members li.away, .room-peek li.away { opacity: .65; }
+.room-peek li > span { display: inline; }

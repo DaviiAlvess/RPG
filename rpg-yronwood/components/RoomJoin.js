@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
 import { normalizeRoomCode, isRoomCode, inviteLink, roomTurnName, nameKey, freeSlots } from "../lib/rooms.mjs";
+import { memberPortraitUrl, PORTRAIT_STYLES, randomSeed } from "../lib/appearance.mjs";
+
+/** Rosto pequeno de um personagem da mesa (ou ícone, se não tiver retrato). */
+export function MemberFace({ photo, owner = false, size = 32 }) {
+  const [broken, setBroken] = useState(false);
+  if (!photo || broken) return <i className={`ti ${owner ? "ti-crown" : "ti-user"}`} aria-hidden="true" />;
+  return <img className="member-face" src={photo} alt="" width={size} height={size} style={{ width: size, height: size }} loading="lazy" onError={() => setBroken(true)} />;
+}
 
 // Sugestões de papel no grupo (o jogador pode escrever outro).
 const ROLE_IDEAS = ["Lutador", "Esperto", "Curandeiro", "Líder", "Explorador", "Falador", "Furtivo", "Místico"];
@@ -15,6 +23,15 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
   const [name, setName] = useState("");
   const [concept, setConcept] = useState("");
   const [role, setRole] = useState("");
+  const [appearance, setAppearance] = useState("");
+  const [style, setStyle] = useState("painted");
+  const [photo, setPhoto] = useState("");
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const makePortrait = (seed) => {
+    const url = memberPortraitUrl({ name, concept, role, look: appearance, style, world: info?.room?.title }, seed || randomSeed());
+    setPhotoLoading(true);
+    setPhoto(url);
+  };
 
   const look = async (value = code) => {
     if (!isRoomCode(value) || !onPeek) return;
@@ -45,8 +62,13 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
     if (!info) { look(); return; }
     if (info.isMember) { onJoin?.({ code }); return; }
     if (!ready) return;
-    if (slot) onJoin?.({ code, charName: slot.name });
-    else onJoin?.({ code, charName: name.trim(), charConcept: concept.trim(), charRole: role.trim() });
+    if (slot) {
+      const slotPhoto = slot.photo || memberPortraitUrl({ ...slot, world: info?.room?.title });
+      onJoin?.({ code, charName: slot.name, charLook: slot.look, charPhoto: slotPhoto });
+    } else {
+      const own = photo || memberPortraitUrl({ name, concept, role, look: appearance, style, world: info?.room?.title });
+      onJoin?.({ code, charName: name.trim(), charConcept: concept.trim(), charRole: role.trim(), charLook: appearance.trim(), charPhoto: own });
+    }
   };
 
   return (
@@ -70,12 +92,12 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
               <span>Mesa <strong>{info.room?.title || info.room?.code}</strong> · código {info.room?.code}</span>
               <ul>
                 {(info.members || []).map((m) => (
-                  <li key={m.seat}><i className={`ti ${m.owner ? "ti-crown" : "ti-user"}`} aria-hidden="true" /> <strong>{m.name}</strong>{m.role ? ` · ${m.role}` : ""}{m.owner ? " (criou a sala)" : ""}</li>
+                  <li key={m.seat} className={m.away ? "away" : ""}><MemberFace photo={m.photo} owner={m.owner} /> <span><strong>{m.name}</strong>{m.role ? ` · ${m.role}` : ""}{m.owner ? " (criou a sala)" : ""}{m.away ? " · fora da mesa" : ""}</span></li>
                 ))}
               </ul>
             </div>
             {info.isMember ? (
-              <p className="panel-sub">Você já está nesta mesa. É só voltar.</p>
+              <p className="panel-sub">Você tem um personagem guardado nesta mesa{info.myName ? <>: <strong>{info.myName}</strong></> : null}. Ao voltar, você entra no ponto em que a história está agora, com a sua ficha e o seu Sistema.</p>
             ) : info.full ? (
               <p className="room-warning" role="status">A mesa já está cheia.</p>
             ) : (
@@ -84,6 +106,7 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
                 {(info.slots || []).map((s) => (
                   <label key={s.name} className={`char-option ${pick === s.name ? "on" : ""}`}>
                     <input type="radio" name="char-pick" checked={pick === s.name} onChange={() => setPick(s.name)} />
+                    <MemberFace photo={s.photo || memberPortraitUrl({ ...s, world: info?.room?.title })} size={44} />
                     <span><span><strong>{s.name}</strong>{s.role ? <em> · {s.role}</em> : null}</span>{s.concept ? <small>{s.concept}</small> : null}</span>
                   </label>
                 ))}
@@ -105,6 +128,24 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
                         <button key={r} type="button" className={`chip ${nameKey(role) === nameKey(r) ? "on" : ""}`} onClick={() => setRole(r)}>{r}</button>
                       ))}
                     </div>
+                    <label className="auth-label" htmlFor="room-look">Aparência</label>
+                    <input id="room-look" className="auth-input" value={appearance} onChange={(e) => setAppearance(e.target.value)} maxLength={200} placeholder="Ex.: cabelo espetado, jaqueta de couro, cicatriz no queixo" />
+                    <div className="role-ideas" role="group" aria-label="Estilo do retrato">
+                      {Object.entries(PORTRAIT_STYLES).map(([key, st]) => (
+                        <button key={key} type="button" className={`chip ${style === key ? "on" : ""}`} onClick={() => { setStyle(key); setPhoto(""); }}>{st.label}</button>
+                      ))}
+                    </div>
+                    <div className="portrait-pick">
+                      <div className="portrait-preview">
+                        {photo ? <img src={photo} alt={`Retrato de ${name || "seu personagem"}`} onLoad={() => setPhotoLoading(false)} onError={() => setPhotoLoading(false)} /> : <i className="ti ti-user" aria-hidden="true" />}
+                      </div>
+                      <div className="portrait-actions">
+                        <button type="button" className="btn-secondary" onClick={() => makePortrait()} disabled={!name.trim() && !concept.trim() && !appearance.trim()}>
+                          <i className="ti ti-photo" aria-hidden="true" /> {photo ? "Outro rosto" : "Gerar retrato"}
+                        </button>
+                        <small className="settings-hint">{photoLoading ? "Desenhando… pode levar alguns segundos." : "O retrato aparece para a mesa ao lado das suas falas."}</small>
+                      </div>
+                    </div>
                   </div>
                 ) : null}
               </fieldset>
@@ -121,7 +162,7 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
 }
 
 /** Ajustes: criar a sala online desta campanha, convidar e ver quem está jogando. */
-export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, onCreate, onLeave, onSetTurn, onPass, onSetSlots, onNotify }) {
+export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, onCreate, onLeave, onSetTurn, onPass, onSetSlots, onRejoin, onNotify }) {
   const c = campaign || {};
   // O servidor já disse que as salas não funcionam: explica em vez de deixar o botão falhar.
   const rooms = serverStatus?.rooms;
@@ -137,6 +178,11 @@ export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, 
               ? <>As salas ainda não funcionam neste site: {rooms.detail}</>
               : <>As salas ainda não foram ligadas no servidor. Falta colocar a chave SUPABASE_SECRET_KEY na Vercel e publicar o site de novo.</>}
           </p>
+        ) : null}
+        {c.roomLeftCode && onRejoin ? (
+          <button type="button" className="settings-action" onClick={() => onRejoin(c.roomLeftCode)} disabled={busy || blocked}>
+            <i className="ti ti-door-enter" /> <span>Voltar para a mesa {c.roomLeftCode} (seu personagem está guardado)</span>
+          </button>
         ) : null}
         <button type="button" className="settings-action" onClick={onCreate} disabled={busy || blocked}>
           <i className="ti ti-world-share" /> <span>{busy ? "Criando sala…" : "Criar sala online desta campanha"}</span>
@@ -163,14 +209,21 @@ export function RoomPanel({ campaign, myUid, busy = false, serverStatus = null, 
       <button type="button" className="settings-action" onClick={share}><i className="ti ti-send" /> <span>Convidar amigos</span></button>
       <ul className="room-members">
         {(c.roomMembers || []).map((m) => (
-          <li key={m.uid} className={m.uid === c.roomTurnUid ? "turn" : ""}>
-            <i className={`ti ${m.uid === c.roomOwnerUid ? "ti-crown" : "ti-user"}`} aria-hidden="true" />
+          <li key={m.uid} className={m.uid === c.roomTurnUid && (c.roomMembers || []).length > 1 ? "turn" : ""}>
+            <MemberFace photo={m.uid === myUid ? (c.portraitUrl || m.photo) : m.photo} owner={m.uid === c.roomOwnerUid} />
             <span><strong>{m.name}</strong>{m.uid === myUid ? " (você)" : ""}{m.concept ? <small> — {m.concept}</small> : null}</span>
-            {m.uid === c.roomTurnUid ? <em>na vez</em> : owner ? <button type="button" className="btn-ghost" onClick={() => onSetTurn?.(m.uid)}>passar a vez</button> : null}
+            {(c.roomMembers || []).length < 2 ? null : m.uid === c.roomTurnUid ? <em>na vez</em> : owner ? <button type="button" className="btn-ghost" onClick={() => onSetTurn?.(m.uid)}>passar a vez</button> : null}
+          </li>
+        ))}
+        {(c.roomAway || []).map((m) => (
+          <li key={`away-${m.name}`} className="away">
+            <MemberFace photo={m.photo} />
+            <span><strong>{m.name}</strong>{m.role ? ` · ${m.role}` : ""}<small> — fora da mesa (personagem guardado)</small></span>
           </li>
         ))}
       </ul>
-      {turnName ? <p className="panel-sub">Agora é a vez de <strong>{turnName}</strong>.</p> : null}
+      {turnName && (c.roomMembers || []).length > 1 ? <p className="panel-sub">Agora é a vez de <strong>{turnName}</strong>.</p> : null}
+      {(c.roomMembers || []).length < 2 ? <p className="settings-hint">Por enquanto só você está na mesa. Quando alguém entrar, cada um joga na sua vez.</p> : null}
       {c.roomTurnUid === myUid && (c.roomMembers || []).length > 1 && onPass ? (
         <button type="button" className="settings-action" onClick={onPass}><i className="ti ti-player-track-next" /> <span>Passar a minha vez</span></button>
       ) : null}
@@ -190,6 +243,7 @@ function SlotEditor({ campaign, onSave }) {
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
   const [concept, setConcept] = useState("");
+  const [look, setLook] = useState("");
   const [saving, setSaving] = useState(false);
   const taken = new Set([...(c.roomMembers || []).map((m) => nameKey(m.name)), ...free.map((s) => nameKey(s.name))]);
   const clash = name.trim() && taken.has(nameKey(name));
@@ -197,7 +251,9 @@ function SlotEditor({ campaign, onSave }) {
   const add = async (e) => {
     e.preventDefault();
     if (!name.trim() || clash || saving) return;
-    if (await save([...free, { name: name.trim(), role: role.trim(), concept: concept.trim() }])) { setName(""); setRole(""); setConcept(""); }
+    const slot = { name: name.trim(), role: role.trim(), concept: concept.trim(), look: look.trim() };
+    slot.photo = memberPortraitUrl({ ...slot, world: c.world });
+    if (await save([...free, slot])) { setName(""); setRole(""); setConcept(""); setLook(""); }
   };
   return (
     <div className="slot-editor">
@@ -207,7 +263,7 @@ function SlotEditor({ campaign, onSave }) {
         <ul className="room-members">
           {free.map((s) => (
             <li key={s.name}>
-              <i className="ti ti-user-plus" aria-hidden="true" />
+              <MemberFace photo={s.photo} />
               <span><strong>{s.name}</strong>{s.role ? ` · ${s.role}` : ""}{s.concept ? <small> — {s.concept}</small> : null}</span>
               <button type="button" className="btn-ghost" disabled={saving} onClick={() => save(free.filter((x) => x.name !== s.name))} aria-label={`Tirar ${s.name} das vagas`}>tirar</button>
             </li>
@@ -218,6 +274,7 @@ function SlotEditor({ campaign, onSave }) {
         <input className="auth-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Nome do personagem" aria-label="Nome do personagem da vaga" />
         <input className="auth-input" value={role} onChange={(e) => setRole(e.target.value)} maxLength={80} placeholder="Papel (ex.: curandeira)" aria-label="Papel no grupo" />
         <input className="auth-input" value={concept} onChange={(e) => setConcept(e.target.value)} maxLength={200} placeholder="Quem é (opcional)" aria-label="Quem é o personagem" />
+        <input className="auth-input" value={look} onChange={(e) => setLook(e.target.value)} maxLength={200} placeholder="Aparência, para o retrato (opcional)" aria-label="Aparência do personagem" />
         {clash ? <p className="room-warning" role="alert">Já existe um personagem com esse nome na mesa.</p> : null}
         <button type="submit" className="settings-action" disabled={!name.trim() || clash || saving}><i className="ti ti-plus" /> <span>{saving ? "Salvando…" : "Adicionar vaga"}</span></button>
       </form>

@@ -39,7 +39,7 @@ import { resolveAutoAction, getLastGmText, planAutoStep, rollAutoD20, buildAutoT
 import { formatPlayerTurnDisplay, normalizeDialogueText, recentSpeakers } from "../lib/dialogueFormat";
 import { dramaPromptLines, dramaPatch, stripDramaTags } from "../lib/drama.mjs";
 import { loreContextFor, loreNotesLines, mergeLoreNotes, pendingLoreTopics, recentLoreText } from "../lib/lore-context.mjs";
-import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload, myRoomMember } from "../lib/rooms.mjs";
+import { roomPartyFields, isMyTurn, roomTurnName, normalizeRoomCode, isRoomCode, roomCampaignPayload, myRoomMember, withoutPersonal, personalSheet, freshSheetFor, isPortraitUrl, nameKey } from "../lib/rooms.mjs";
 import { buildSaveBody, readLoadedCampaign, cloudStatusText, canGzip, readSaveMode, writeSaveMode } from "../lib/supa-saves-client.mjs";
 import { RoomJoinModal } from "../components/RoomJoin";
 import { REDO_STYLES, redoNote, recordError, readErrorLog, clearErrorLog, errorReport, resolveCombat, stripCombatTags, combatPromptLines, partyPromptLines, partyRoster, actorPrefix, nextPartyTurn, asParty, updateNpcSeen } from "../lib/play-extras.mjs";
@@ -52,7 +52,7 @@ import { buildBookHtml } from "../lib/book-export.mjs";
 import { trackPlace, newAchievements, ACHIEVEMENTS } from "../lib/codex.mjs";
 import { readNarrationStream, visiblePartial } from "../lib/gm-stream.mjs";
 import { pacingDirection, paceCommandOf, paceDisplay, buildPaceMessage, didProgress } from "../lib/pacing.mjs";
-import { DEFAULT_SYSTEM_SHOP, applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary, parseChestRewards, mergeChestPool, needsRankExpansion, SYSTEM_RANKS as SYSTEM_RANKS_ORDER } from "../lib/game-system.mjs";
+import { DEFAULT_SYSTEM_SHOP, applySystemTags, buyItem, purchaseNote, systemPromptLines, stripSystemTags, openChest, chestNote, systemGenRequest, parseGeneratedSystem, grantReward, shopSearchRequest, parseShopSearch, shopExpandRequest, mergeShopItems, normalizeSystem, addToCart, removeFromCart, cartSummary, parseChestRewards, mergeChestPool, needsRankExpansion, defaultSystem, SYSTEM_RANKS as SYSTEM_RANKS_ORDER } from "../lib/game-system.mjs";
 // Telas usadas só às vezes carregam sob demanda: a página inicial abre mais rápido.
 const LoadingShell = ({ label }) => <div className="rpg-shell"><p className="settings-hint" style={{ padding: 24 }}>{label}</p></div>;
 const CreateWizard = dynamic(() => import("../components/CreateWizard"), { loading: () => <LoadingShell label="Abrindo a criação…" /> });
@@ -991,6 +991,25 @@ export default function RPG() {
   };
   const flushSupaSave = () => supaRunRef.current?.();
 
+  const lastSheetRef = useRef("");
+  const sheetTimerRef = useRef(null);
+  const sheetSyncRef = useRef(null);
+  sheetSyncRef.current = (snapshot) => {
+    if (!snapshot?.roomId) return;
+    const json = JSON.stringify(personalSheet(snapshot));
+    if (json === lastSheetRef.current) return;
+    clearTimeout(sheetTimerRef.current);
+    sheetTimerRef.current = setTimeout(async () => {
+      try {
+        const data = await roomCall({ action: "saveSheet", roomId: snapshot.roomId, sheet: personalSheet(snapshot) });
+        lastSheetRef.current = json;
+        await syncFromRoomRef.current({ ...data.room, code: snapshot.roomCode, owner_uid: snapshot.roomOwnerUid }, data.members);
+      } catch (error) {
+        recordError(window.localStorage, { kind: "online", code: error.code, message: error.message, where: "guardar ficha da mesa" });
+      }
+    }, 4000);
+  };
+
   const saveCamp = useCallback(async (id, d, { forceCloud = false } = {}) => {
     if (!user) return { ok: false, local: false };
     const persistId = id || d?.id;
@@ -998,6 +1017,7 @@ export default function RPG() {
     if (!snapshot) return { ok: false, local: false };
     let local = false;
     try { localStorage.setItem(campKey(snapshot.id), JSON.stringify(snapshot)); local = true; } catch {}
+    if (snapshot.roomId) sheetSyncRef.current?.(snapshot);
     // "Só neste aparelho": nada vai para a nuvem (a não ser que o jogador mande na mão).
     if (saveModeRef.current === "local" && !forceCloud) {
       cloudStateRef.current.local = local;
@@ -1428,19 +1448,31 @@ export default function RPG() {
   const syncFromRoom = async (room, members) => {
     const cur = activeRef.current;
     if (!cur || !room || cur.roomId !== room.id) return;
-    const fields = roomPartyFields({ ...room, code: room.code || cur.roomCode, owner_uid: room.owner_uid || cur.roomOwnerUid }, members || []);
     const meUid = firebaseUserRef.current?.uid;
-    if (meUid && fields.roomTurnUid === meUid && cur.roomTurnUid && cur.roomTurnUid !== meUid) {
+    const fields = roomPartyFields({ ...room, code: room.code || cur.roomCode, owner_uid: room.owner_uid || cur.roomOwnerUid }, members || [], meUid);
+    // "Sua vez!" só faz sentido com mais gente na mesa.
+    if (meUid && fields.roomTurnUid === meUid && cur.roomTurnUid && cur.roomTurnUid !== meUid && (fields.roomMembers || []).length > 1) {
       const me = myRoomMember(fields, meUid);
       showNotification(`Sua vez${me?.name ? `, ${me.name}` : ""}! O que você faz?`, "success", { duration: 8000 });
       try { navigator.vibrate?.([120, 60, 120]); } catch {}
     }
     if (!room.campaign) {
-      const changed = fields.roomVersion !== cur.roomVersion || fields.roomTurnUid !== cur.roomTurnUid || JSON.stringify(fields.roomMembers) !== JSON.stringify(cur.roomMembers) || ("roomSlots" in fields && JSON.stringify(fields.roomSlots) !== JSON.stringify(cur.roomSlots));
+      const changed = fields.roomVersion !== cur.roomVersion || fields.roomTurnUid !== cur.roomTurnUid || JSON.stringify(fields.roomMembers) !== JSON.stringify(cur.roomMembers)
+        || JSON.stringify(fields.roomAway) !== JSON.stringify(cur.roomAway)
+        || ("roomSlots" in fields && JSON.stringify(fields.roomSlots) !== JSON.stringify(cur.roomSlots))
+        || ("roomArrivals" in fields && JSON.stringify(fields.roomArrivals) !== JSON.stringify(cur.roomArrivals))
+        || ("roomStoryRev" in fields && fields.roomStoryRev !== cur.roomStoryRev);
       if (changed) { const next = { ...cur, ...fields }; setActive(next); saveCamp(cur.id, next); }
       return;
     }
-    const c = { ...cur, ...room.campaign, id: cur.id, saves: cur.saves || [], ...fields };
+    // A sala traz só a história; a ficha (vida, itens, Sistema, retrato…) é a deste aparelho.
+    let mine = personalSheet(cur);
+    const meMember = myRoomMember(fields, meUid);
+    if (meMember && nameKey(mine.charName) !== nameKey(meMember.name)) {
+      // Aparelho que ainda tinha a ficha de outro personagem: passa a usar a do próprio jogador.
+      mine = freshSheetFor(meMember, { systemOn: Boolean(room.campaign.systemOn || room.campaign.gameSystem?.enabled), defaultSystem });
+    }
+    const c = { ...cur, ...withoutPersonal(room.campaign), ...mine, id: cur.id, saves: cur.saves || [], ...fields };
     turnSnapshotRef.current = null;
     setActive(c);
     setMsgs(c.msgs || []);
@@ -1575,8 +1607,13 @@ export default function RPG() {
     try {
       // O grupo montado neste aparelho vira as vagas que os amigos podem escolher.
       const slots = (Array.isArray(active.party) ? active.party : []).map((p) => ({ name: p.name, concept: p.concept }));
-      const data = await roomCall({ action: "create", campaign: roomSnapshot(active), charName: active.charName, charConcept: active.charTitle, title: active.world, slots });
-      const next = { ...active, ...roomPartyFields(data.room, data.members) };
+      const data = await roomCall({
+        action: "create", campaign: roomSnapshot(active), title: active.world, slots,
+        charName: active.charName, charConcept: active.charTitle, charLook: active.charAppearanceNote,
+        charPhoto: isPortraitUrl(active.portraitUrl) ? active.portraitUrl : "",
+        sheet: personalSheet(active),
+      });
+      const next = { ...active, ...roomPartyFields(data.room, data.members, user?.uid) };
       setActive(next);
       await saveCamp(active.id, next);
       showNotification(`Sala criada! Código ${data.room.code}. Toque em "Convidar amigos".`, "success", { duration: 8000 });
@@ -1589,29 +1626,38 @@ export default function RPG() {
   // Antes de entrar: quem está na mesa e quais personagens ainda estão livres.
   const peekRoom = async (code) => roomCall({ action: "peek", code });
 
-  const joinRoom = async ({ code, charName, charConcept, charRole }) => {
+  const joinRoom = async ({ code, charName, charConcept, charRole, charLook, charPhoto }) => {
     if (roomBusy) return;
     setRoomBusy(true);
     try {
-      const data = await roomCall({ action: "join", code, charName, charConcept, charRole });
-      // Já tenho esta sala neste aparelho (sou o dono ou já entrei antes): só abre.
+      const data = await roomCall({ action: "join", code, charName, charConcept, charRole, charLook, charPhoto });
+      // Já tenho esta mesa neste aparelho (estou nela, ou saí e estou voltando)? Reaproveita o registro.
       let id = null;
+      let rec = null;
       for (const s of idx) {
-        const rec = await readCamp(s.id).catch(() => null);
-        if (rec?.roomId === data.room.id) { id = s.id; break; }
+        const r = await readCamp(s.id).catch(() => null);
+        if (r && (r.roomId === data.room.id || r.roomLeftId === data.room.id)) { id = s.id; rec = r; break; }
       }
-      if (!id) {
-        id = `room-${data.room.id}`;
-        const camp = { ...data.room.campaign, id, saves: [], ...roomPartyFields(data.room, data.members) };
-        const summary = { id, world: camp.world || data.room.title, charName: `${camp.charName || ""} · sala ${data.room.code}`, createdAt: Date.now(), updatedAt: Date.now() };
-        const next = [summary, ...idx.filter((s) => s.id !== id)];
-        setIdx(next); saveIdx(next);
-        await saveCamp(id, camp);
-      }
+      const fields = roomPartyFields(data.room, data.members, user?.uid);
+      // A história vem SEMPRE da mesa, no ponto em que ela está agora.
+      const story = withoutPersonal(data.room.campaign || {});
+      const me = myRoomMember(fields, user?.uid);
+      const localSheet = rec && me && nameKey(rec.charName) === nameKey(me.name) ? personalSheet(rec) : null;
+      const sheet = data.mySheet || localSheet || freshSheetFor(me, { systemOn: Boolean(story.systemOn), defaultSystem });
+      const isNew = !id;
+      if (!id) id = `room-${data.room.id}`;
+      const camp = { ...(rec || {}), ...story, ...sheet, id, saves: rec?.saves || [], ...fields };
+      delete camp.roomLeftId;
+      delete camp.roomLeftCode;
+      const summary = { id, world: camp.world || data.room.title, charName: `${camp.charName || "Você"} · mesa ${data.room.code}`, createdAt: rec?.createdAt || Date.now(), updatedAt: Date.now() };
+      const next = [summary, ...idx.filter((s) => s.id !== id)];
+      setIdx(next); saveIdx(next);
+      await saveCamp(id, camp);
+      if (!isNew) lastSheetRef.current = JSON.stringify(personalSheet(camp));
       setJoinRoomCode(null);
       if (typeof window !== "undefined" && window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname);
       await openCamp({ id });
-      showNotification("Você entrou na sala!", "success");
+      showNotification(data.mySheet || !isNew ? "Você voltou para a mesa, com o seu personagem." : "Você entrou na mesa!", "success");
     } catch (error) {
       recordError(window.localStorage, { kind: "online", code: error.code, message: error.message, where: "entrar na sala" });
       showNotification(error.message, "error");
@@ -1620,8 +1666,14 @@ export default function RPG() {
 
   const pushRoom = async (camp, { keepTurn = false } = {}) => {
     try {
-      const data = await roomCall({ action: "push", roomId: camp.roomId, baseVersion: camp.roomVersion, campaign: roomSnapshot(camp), keepTurn });
-      const fields = roomPartyFields({ id: camp.roomId, code: camp.roomCode, owner_uid: camp.roomOwnerUid, ...data.room }, data.members);
+      const data = await roomCall({
+        action: "push", roomId: camp.roomId, baseVersion: camp.roomVersion,
+        ...(camp.roomStoryRev != null ? { baseStoryRev: camp.roomStoryRev } : {}),
+        seenArrivals: (camp.roomArrivals || []).map((a) => a.id),
+        campaign: roomSnapshot(camp), keepTurn, sheet: personalSheet(camp),
+      });
+      lastSheetRef.current = JSON.stringify(personalSheet(camp));
+      const fields = roomPartyFields({ id: camp.roomId, code: camp.roomCode, owner_uid: camp.roomOwnerUid, ...data.room }, data.members, user?.uid);
       setActive((prev) => {
         if (!prev || prev.id !== camp.id) return prev;
         const next = { ...prev, ...fields };
@@ -1661,13 +1713,14 @@ export default function RPG() {
   const leaveRoom = async () => {
     if (!active?.roomId) return;
     const owner = active.roomOwnerUid === user?.uid;
-    if (!confirm(owner ? "Fechar a sala? Os amigos não vão mais conseguir jogar nela (a história fica salva com você)." : "Sair da sala? A história fica salva neste aparelho, mas você não recebe mais as jogadas.")) return;
-    try { await roomCall({ action: "leave", roomId: active.roomId }); } catch (error) { showNotification(error.message, "warning"); }
-    const { roomId, roomCode, roomVersion, roomMembers, roomTurnUid, roomOwnerUid, roomSlots, ...rest } = active;
-    const next = { ...rest, party: [], partyTurn: 0 };
+    if (!confirm(owner ? "Fechar a sala? Os amigos não vão mais conseguir jogar nela (a história fica salva com você)." : "Sair da mesa? Seu personagem e sua ficha ficam guardados, e você pode voltar quando quiser. Ao voltar, entra no ponto em que a mesa estiver.")) return;
+    try { await roomCall({ action: "leave", roomId: active.roomId, sheet: personalSheet(active) }); } catch (error) { showNotification(error.message, "warning"); }
+    const { roomId, roomCode, roomVersion, roomMembers, roomTurnUid, roomOwnerUid, roomSlots, roomAway, roomStoryRev, roomArrivals, ...rest } = active;
+    // Quem não é o dono pode voltar depois: o personagem e a ficha ficam guardados na mesa.
+    const next = { ...rest, party: [], partyTurn: 0, ...(owner ? {} : { roomLeftId: roomId, roomLeftCode: roomCode }) };
     setActive(next);
     await saveCamp(active.id, next);
-    showNotification(owner ? "Sala fechada." : "Você saiu da sala.", "info");
+    showNotification(owner ? "Sala fechada." : "Você saiu da mesa. Seu personagem fica guardado: dá para voltar em Ajustes.", "info", { duration: 8000 });
   };
 
   // Acompanha a mesa: a cada 5 s (e ao voltar para a aba) pergunta se houve jogada nova.
@@ -3134,6 +3187,16 @@ export default function RPG() {
   }
 
   // ═══ HOME ══════════════════════════════════════════════════════════
+  const joinModal = joinRoomCode !== null ? (
+    <RoomJoinModal
+      initialCode={joinRoomCode}
+      busy={roomBusy}
+      onPeek={peekRoom}
+      onJoin={joinRoom}
+      onClose={() => { setJoinRoomCode(null); if (window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname); }}
+    />
+  ) : null;
+
   if (view === "home") return (
     <div className="rpg-shell">
       <Head><title>Forja de Mundos — RPG</title></Head>
@@ -3281,7 +3344,7 @@ export default function RPG() {
             <button className="btn-secondary" type="button" onClick={startCreate}>Criar o meu</button>
             <button className="btn-secondary" type="button" onClick={() => setJoinRoomCode("")}><i className="ti ti-users-group" aria-hidden="true" /> Entrar numa sala</button>
           </div>
-          {joinRoomCode !== null ? <RoomJoinModal initialCode={joinRoomCode} busy={roomBusy} onPeek={peekRoom} onJoin={joinRoom} onClose={() => { setJoinRoomCode(null); if (window.location.search.includes("sala=")) window.history.replaceState(null, "", window.location.pathname); }} /> : null}
+          {joinModal}
         </>
       )}
 
@@ -3347,6 +3410,7 @@ export default function RPG() {
   // ═══ PLAY ══════════════════════════════════════════════════════════
   return (
     <>
+    {joinModal}
     <PlayView
         masterBusy={masterBusy}
         onAskMaster={askMaster}
@@ -3457,6 +3521,7 @@ export default function RPG() {
       onRetryCloud={retryCloudSave}
       onSyncStories={syncFromGame}
       onPassRoomTurn={passRoomTurn}
+      onRejoinRoom={(code) => setJoinRoomCode(code)}
       onSetRoomSlots={setRoomSlots}
       syncInfo={syncInfo}
       onTestOnline={testOnline}

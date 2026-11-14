@@ -182,3 +182,25 @@ export function npcPortraitUrl(name, facts, world, style = "painted") {
   ].filter(Boolean).join(", ");
   return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=256&height=256&nologo=true&seed=${hashSeed(`${lower(name)}|${lower(world)}`)}`;
 }
+
+/**
+ * Retrato de um jogador da mesa online, a partir do que ele descreveu (aparência, quem é, papel).
+ * Como os outros retratos, nunca usa o nome (evita sósias de pessoas reais).
+ */
+export function memberPortraitUrl(m = {}, seed) {
+  const look = clean(m.look, 200);
+  const concept = clean(m.concept, 160);
+  const role = clean(m.role, 60);
+  const style = PORTRAIT_STYLES[m.style] || PORTRAIT_STYLES.painted;
+  const w = clean(m.world, 60);
+  const prompt = [
+    `head and shoulders portrait of ${concept || role || "an adventurer"}`,
+    look ? `appearance: ${look}` : "",
+    role && concept ? `role: ${role}` : "",
+    w ? `${w} setting` : "fantasy setting",
+    style.prompt,
+    "expressive face, dramatic lighting, looking at viewer, plain dark background, no text, no watermark",
+  ].filter(Boolean).join(", ");
+  const s = Number(seed) || hashSeed(`${lower(m.name)}|${lower(m.world)}|${look}`);
+  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=384&height=384&nologo=true&seed=${s}`;
+}

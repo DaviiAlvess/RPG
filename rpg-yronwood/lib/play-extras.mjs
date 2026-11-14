@@ -255,14 +255,26 @@ export function actorPrefix(camp = {}, text = "") {
   return `[${actor.name}] ${String(text || "").replace(/^\[[^\]]{1,60}\]\s*/, "")}`;
 }
 
+/** Quem chegou, voltou ou saiu da mesa online desde a última cena. */
+export function roomArrivalLines(camp = {}) {
+  const list = Array.isArray(camp.roomArrivals) ? camp.roomArrivals.filter((a) => a?.name) : [];
+  if (!list.length) return [];
+  const told = list.map((a) => (a.kind === "saiu" ? `${a.name} saiu da mesa` : a.kind === "volta" ? `${a.name} voltou à mesa` : `${a.name} acabou de entrar na mesa`)).join("; ");
+  return [`MUDANÇAS NA MESA DESDE A ÚLTIMA CENA: ${told}. Encaixe isso na cena atual com naturalidade: quem entrou ou voltou aparece onde a história está agora (sem recomeçar nada); quem saiu se afasta de um jeito plausível e pode voltar depois.`];
+}
+
 export function partyPromptLines(camp = {}) {
   const roster = partyRoster(camp);
-  if (roster.length < 2) return [];
+  if (roster.length < 2) return roomArrivalLines(camp);
   const actor = partyActor(camp);
-  const next = roster[nextPartyTurn(camp)];
+  // Mesa online: o próximo é o do assento seguinte (a mesma ordem que o servidor usa para passar a vez).
+  const seats = Array.isArray(camp.roomMembers) ? [...camp.roomMembers].sort((a, b) => a.seat - b.seat) : [];
+  const after = seats.length > 1 ? seats[(seats.findIndex((m) => m.uid === camp.roomTurnUid) + 1) % seats.length] : null;
+  const next = after ? { name: after.name } : roster[nextPartyTurn(camp)];
   return [
     `GRUPO DE JOGADORES NA MESMA MESA (${roster.length}): ${roster.map((p) => `${p.name}${p.concept ? ` — ${p.concept}` : ""}`).join("; ")}.`,
     `Cada jogador controla SÓ o próprio personagem; o Mestre nunca fala, decide ou sente por nenhum deles. A ação deste turno é de ${actor.name} (vem marcada como [${actor.name}]). Narre a consequência para ${actor.name}, chame cada um pelo nome (não use "você" ambíguo), mostre como a cena toca os outros presentes e termine abrindo espaço para ${next.name}, que joga em seguida.`,
+    ...roomArrivalLines(camp),
   ];
 }
 

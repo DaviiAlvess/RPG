@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { handleRoomAction, supabaseRest, onlineStatus } from '../pages/api/room.js';
-import { newRoomCode, roomCampaignPayload, nextTurnUid, roomPartyFields, isMyTurn, inviteLink, normalizeRoomCode, cleanSlots, freeSlots, nameKey, myRoomMember } from '../lib/rooms.mjs';
+import { newRoomCode, roomCampaignPayload, nextTurnUid, roomPartyFields, isMyTurn, inviteLink, normalizeRoomCode, cleanSlots, freeSlots, nameKey, myRoomMember, withoutPersonal, personalSheet, freshSheetFor, roomPhotoFor, isPortraitUrl } from '../lib/rooms.mjs';
+import { partyPromptLines } from '../lib/play-extras.mjs';
+import { memberPortraitUrl } from '../lib/appearance.mjs';
 import { partyActor, actorPrefix } from '../lib/play-extras.mjs';
 
 // Banco falso que entende o pedaço do PostgREST que a rota usa (eq., select, order).
@@ -12,15 +14,16 @@ function fakeDb() {
   let n = 0;
   return {
     tables,
-    async select(t, q) { const f = parse(q); const rows = tables[t].filter((r) => match(r, f)); return /order=seat/.test(q) ? [...rows].sort((a, b) => a.seat - b.seat) : rows.map((r) => ({ ...r })); },
+    async select(t, q) { const f = parse(q); const rows = tables[t].filter((r) => match(r, f)); return (/order=seat/.test(q) ? [...rows].sort((a, b) => a.seat - b.seat) : rows).map((r) => ({ ...r })); },
     async insert(t, row) {
       if (t === 'rpg_rooms') {
         if (tables[t].some((r) => r.code === row.code)) { const e = new Error('dup'); e.code = 'CONFLICT'; throw e; }
-        const full = { id: `00000000-0000-0000-0000-${String(++n).padStart(12, '0')}`, version: 1, status: 'open', title: '', ...row };
+        const full = { id: `00000000-0000-0000-0000-${String(++n).padStart(12, '0')}`, version: 1, story_rev: 1, arrivals: [], slots: [], status: 'open', title: '', ...row };
         tables[t].push(full); return [{ ...full }];
       }
       if (tables[t].some((r) => r.room_id === row.room_id && (r.uid === row.uid || r.seat === row.seat))) { const e = new Error('dup'); e.code = 'CONFLICT'; throw e; }
-      tables[t].push({ ...row }); return [{ ...row }];
+      const full = { active: true, sheet: {}, char_photo: '', char_look: '', char_role: '', ...row };
+      tables[t].push(full); return [{ ...full }];
     },
     async update(t, q, patch) { const f = parse(q); const rows = tables[t].filter((r) => match(r, f)); rows.forEach((r) => Object.assign(r, patch)); return rows.map((r) => ({ ...r })); },
     async remove(t, q) { const f = parse(q); const keep = tables[t].filter((r) => !match(r, f)); const gone = tables[t].length - keep.length; tables[t] = keep; return Array(gone).fill({}); },
@@ -39,7 +42,9 @@ test('sala online: criar, convidar, revezar, conflito e sair', async () => {
   await assert.rejects(handleRoomAction(db, 'uid-amigo', { action: 'join', code: room.code }), /nome do seu personagem/);
   const joined = await handleRoomAction(db, 'uid-amigo', { action: 'join', code: room.code.toLowerCase(), charName: 'Rafa', charConcept: 'arqueira' });
   assert.equal(joined.members.length, 2);
-  assert.equal(joined.room.campaign.charName, 'Aldric Rivers');
+  // a sala leva só a história: a ficha do dono (nome, Sistema…) não vai para os outros
+  assert.equal(joined.room.campaign.charName, undefined);
+  assert.equal(joined.room.campaign.world, 'Westeros');
   await assert.rejects(handleRoomAction(db, 'estranho', { action: 'get', roomId: room.id }), /não está nesta sala/);
 
   // fora da vez: recusado
@@ -209,4 +214,142 @@ test('vagas e nomes: sem repetição nem acento fazendo diferença', () => {
   assert.deepEqual(cleanSlots([{ name: 'Bart' }, { name: 'bárt' }, { name: '' }, { name: 'Lisa' }], { exclude: ['lisa'] }).map((s) => s.name), ['Bart']);
   assert.equal(cleanSlots(Array.from({ length: 20 }, (_, i) => ({ name: `P${i}` }))).length, 8);
   assert.deepEqual(freeSlots([{ name: 'Bart' }, { name: 'Lisa' }], [{ name: 'BART' }]).map((s) => s.name), ['Lisa']);
+});
+
+test('mesa online: cada jogador tem a própria ficha, Sistema e retrato', async () => {
+  const db = fakeDb();
+  const foto = memberPortraitUrl({ name: 'Bart', look: 'cabelo espetado', concept: 'pestinha', world: 'Springfield' });
+  assert.ok(isPortraitUrl(foto));
+  assert.ok(!foto.includes('Bart'), 'o nome não entra no retrato');
+  const dono = {
+    id: 'c1', world: 'Springfield', charName: 'Tom Carlos', hp: 80, level: 4, experience: 120,
+    gameSystem: { enabled: true, points: 999, rank: 'C' }, items: [{ name: 'taco' }], masterChat: [{ role: 'user', text: 'segredo' }],
+    portraitUrl: 'https://image.pollinations.ai/prompt/x?seed=1', msgs: [{ role: 'user', content: 'oi' }], missions: [{ title: 'achar o Krusty' }],
+  };
+  const { room } = await handleRoomAction(db, 'dono', { action: 'create', campaign: dono, charName: 'Tom Carlos', sheet: personalSheet(dono) });
+  const salaGuardada = db.tables.rpg_rooms[0].campaign;
+  // a história vai para a sala; a ficha e o Sistema do dono não
+  assert.deepEqual(salaGuardada.missions, [{ title: 'achar o Krusty' }]);
+  for (const k of ['charName', 'hp', 'level', 'gameSystem', 'items', 'masterChat', 'portraitUrl']) assert.equal(salaGuardada[k], undefined, k);
+  assert.equal(salaGuardada.systemOn, true, 'a sala sabe que a história usa o Sistema');
+  // a ficha do dono fica guardada só na linha dele, e o retrato vira público
+  assert.equal(db.tables.rpg_room_members[0].sheet.gameSystem.points, 999);
+  assert.equal(db.tables.rpg_room_members[0].char_photo, dono.portraitUrl);
+
+  // Ana entra com retrato gerado
+  const joined = await handleRoomAction(db, 'ana', { action: 'join', code: room.code, charName: 'Bart', charLook: 'cabelo espetado', charPhoto: foto });
+  assert.equal(joined.mySheet, undefined, 'quem acabou de entrar ainda não tem ficha guardada');
+  assert.equal(joined.members.find((m) => m.name === 'Bart').photo, foto);
+  assert.ok(!JSON.stringify(joined).includes('999'), 'Ana não recebe a ficha do dono');
+  // retrato de fora do jogo é recusado
+  await handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'Lisa', charPhoto: 'https://evil.example/x.png' });
+  assert.equal(db.tables.rpg_room_members.find((m) => m.uid === 'bia').char_photo, '');
+
+  // a ficha inicial da Ana: dela, com Sistema zerado porque a história usa o Sistema
+  const fichaAna = freshSheetFor(joined.members.find((m) => m.name === 'Bart'), { systemOn: true, defaultSystem: () => ({ enabled: true, points: 0 }) });
+  assert.equal(fichaAna.charName, 'Bart');
+  assert.equal(fichaAna.gameSystem.points, 0);
+  assert.equal(fichaAna.portraitUrl, foto);
+
+  // Ana compra na loja fora da vez: guarda só a ficha dela
+  await handleRoomAction(db, 'ana', { action: 'saveSheet', roomId: room.id, sheet: { ...fichaAna, gameSystem: { enabled: true, points: 5 }, msgs: ['não é ficha'] } });
+  const linhaAna = db.tables.rpg_room_members.find((m) => m.uid === 'ana');
+  assert.equal(linhaAna.sheet.gameSystem.points, 5);
+  assert.equal(linhaAna.sheet.msgs, undefined, 'só campos da ficha entram');
+  assert.equal(db.tables.rpg_room_members[0].sheet.gameSystem.points, 999, 'a do dono não muda');
+  // cada um recebe só a própria ficha
+  assert.equal((await handleRoomAction(db, 'ana', { action: 'get', roomId: room.id })).mySheet.gameSystem.points, 5);
+  assert.equal((await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id })).mySheet.gameSystem.points, 999);
+  assert.equal((await handleRoomAction(db, 'ana', { action: 'join', code: room.code })).mySheet.charName, 'Bart', 'em outro aparelho, Ana recupera a ficha');
+  await assert.rejects(handleRoomAction(db, 'estranho', { action: 'saveSheet', roomId: room.id, sheet: {} }), /não está nesta sala/);
+
+  // no aparelho da Ana, ela é a principal e o dono vira grupo
+  const v = await handleRoomAction(db, 'ana', { action: 'get', roomId: room.id });
+  const local = { ...withoutPersonal(v.room.campaign), ...fichaAna, ...roomPartyFields(v.room, v.members, 'ana') };
+  assert.equal(local.charName, 'Bart');
+  assert.deepEqual(local.party.map((p) => p.name), ['Tom Carlos', 'Lisa']);
+  assert.equal(partyActor(local).name, 'Tom Carlos', 'é a vez do dono');
+  assert.equal(roomPhotoFor(local, 'bart'), foto);
+  // o Mestre sabe quem vem depois pela ordem da mesa (dono → Bart → Lisa)
+  assert.match(partyPromptLines(local).join(' '), /abrindo espaço para Bart/);
+  // retrato novo na ficha aparece para a mesa
+  const foto2 = memberPortraitUrl({ name: 'Bart', look: 'boné vermelho' }, 42);
+  const after = await handleRoomAction(db, 'ana', { action: 'saveSheet', roomId: room.id, sheet: { ...fichaAna, portraitUrl: foto2 } });
+  assert.equal(after.members.find((m) => m.name === 'Bart').photo, foto2);
+  assert.ok(after.room.version > v.room.version, 'a mesa fica sabendo do retrato novo');
+});
+
+test('mesa online: quem sai fica guardado, volta com o mesmo personagem e a vez pula quem está fora', async () => {
+  const db = fakeDb();
+  const { room } = await handleRoomAction(db, 'dono', { action: 'create', campaign: { world: 'Springfield', msgs: [] }, charName: 'Tom Carlos' });
+  await handleRoomAction(db, 'ana', { action: 'join', code: room.code, charName: 'Bart' });
+  await handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'Lisa' });
+  // vez da Ana; ela sai levando a ficha mais nova
+  await handleRoomAction(db, 'dono', { action: 'setTurn', roomId: room.id, turnUid: 'ana' });
+  const left = await handleRoomAction(db, 'ana', { action: 'leave', roomId: room.id, sheet: { charName: 'Bart', level: 3, gameSystem: { enabled: true, points: 40 } } });
+  assert.ok(left.left && left.saved);
+  const linha = db.tables.rpg_room_members.find((m) => m.uid === 'ana');
+  assert.equal(linha.active, false, 'não apaga: fica guardado');
+  assert.equal(linha.sheet.level, 3);
+  assert.equal(db.tables.rpg_rooms[0].turn_uid, 'bia', 'a vez pula para a próxima pessoa presente');
+  // fora da mesa: não joga nem passa a vez
+  await assert.rejects(handleRoomAction(db, 'ana', { action: 'push', roomId: room.id, baseVersion: db.tables.rpg_rooms[0].version, campaign: {} }), /não está nesta sala/);
+  // ninguém pega o personagem dela enquanto está fora
+  await assert.rejects(handleRoomAction(db, 'caio', { action: 'join', code: room.code, charName: 'bart' }), /já é o personagem de outro jogador/);
+  // a mesa mostra quem saiu; para a vez, só quem está presente
+  const view = await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id });
+  const fields = roomPartyFields(view.room, view.members, 'dono');
+  assert.deepEqual(fields.roomMembers.map((m) => m.name), ['Tom Carlos', 'Lisa']);
+  assert.deepEqual(fields.roomAway.map((m) => m.name), ['Bart']);
+  assert.equal(nextTurnUid(view.members, 'dono'), 'bia');
+  assert.equal(nextTurnUid(view.members, 'bia'), 'dono', 'pula a Ana que saiu');
+  // Ana volta: espiando, já sabe que tem personagem guardado
+  const peek = await handleRoomAction(db, 'ana', { action: 'peek', code: room.code });
+  assert.equal(peek.isMember, true);
+  assert.equal(peek.myName, 'Bart');
+  assert.equal(peek.members.find((m) => m.name === 'Bart').away, true);
+  const back = await handleRoomAction(db, 'ana', { action: 'join', code: room.code });
+  assert.equal(back.mySheet.level, 3, 'mesma ficha');
+  assert.equal(back.mySheet.gameSystem.points, 40, 'mesmo Sistema');
+  assert.equal(db.tables.rpg_room_members.find((m) => m.uid === 'ana').active, true);
+  assert.deepEqual(roomPartyFields(back.room, back.members, 'ana').roomMembers.map((m) => m.name), ['Tom Carlos', 'Bart', 'Lisa']);
+  // sozinho na mesa: a vez fica com quem está
+  await handleRoomAction(db, 'ana', { action: 'leave', roomId: room.id });
+  await handleRoomAction(db, 'bia', { action: 'leave', roomId: room.id });
+  const solo = roomPartyFields((await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id })).room, (await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id })).members, 'dono');
+  assert.equal(solo.roomMembers.length, 1);
+  assert.equal(solo.roomTurnUid, 'dono');
+  assert.equal(solo.party.length, 0, 'sem grupo: some a parte de passar a vez');
+});
+
+test('mesa online: entrar no meio da jogada de alguém não estraga a jogada, e o Mestre fica sabendo', async () => {
+  const db = fakeDb();
+  const { room } = await handleRoomAction(db, 'dono', { action: 'create', campaign: { world: 'Springfield', msgs: [{ c: 1 }] }, charName: 'Tom Carlos' });
+  let v = await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id });
+  const antes = roomPartyFields(v.room, v.members, 'dono');
+  assert.equal(antes.roomStoryRev, 1);
+  // o dono começa a jogar; enquanto o Mestre escreve, Ana entra (a mesa muda, a história não)
+  await handleRoomAction(db, 'ana', { action: 'join', code: room.code, charName: 'Bart' });
+  assert.equal(db.tables.rpg_rooms[0].arrivals.at(-1).name, 'Bart');
+  assert.equal(db.tables.rpg_rooms[0].arrivals.at(-1).kind, 'chegou');
+  // a jogada do dono entra mesmo assim (confere a história, não a mesa inteira)
+  const pushed = await handleRoomAction(db, 'dono', { action: 'push', roomId: room.id, baseVersion: antes.roomVersion, baseStoryRev: antes.roomStoryRev, campaign: { world: 'Springfield', msgs: [{ c: 1 }, { c: 2 }] }, seenArrivals: [] });
+  assert.equal(pushed.room.story_rev, 2);
+  assert.equal(pushed.room.turn_uid, 'ana', 'e a vez vai para quem acabou de chegar');
+  assert.equal(pushed.room.arrivals.length, 1, 'o aviso da Ana continua (o Mestre ainda não narrou)');
+  // Ana entra no ponto atual da mesa
+  v = await handleRoomAction(db, 'ana', { action: 'get', roomId: room.id });
+  assert.equal(v.room.campaign.msgs.length, 2);
+  // na vez da Ana, o Mestre recebe o aviso; depois da jogada, o aviso sai
+  const local = { ...withoutPersonal(v.room.campaign), charName: 'Bart', ...roomPartyFields(v.room, v.members, 'ana') };
+  assert.match(partyPromptLines(local).join(' '), /Bart acabou de entrar na mesa/);
+  const done = await handleRoomAction(db, 'ana', { action: 'push', roomId: room.id, baseStoryRev: local.roomStoryRev, campaign: { msgs: [1, 2, 3] }, seenArrivals: local.roomArrivals.map((a) => a.id) });
+  assert.deepEqual(done.room.arrivals, []);
+  // duas jogadas da mesma versão da história: a segunda é recusada
+  await assert.rejects(handleRoomAction(db, 'dono', { action: 'push', roomId: room.id, baseStoryRev: 2, campaign: {} }), /história andou/);
+  // sair também avisa o Mestre
+  await handleRoomAction(db, 'ana', { action: 'leave', roomId: room.id });
+  assert.equal(db.tables.rpg_rooms[0].arrivals.at(-1).kind, 'saiu');
+  const solo = await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id });
+  assert.match(partyPromptLines({ charName: 'Tom Carlos', ...roomPartyFields(solo.room, solo.members, 'dono') }).join(' '), /Bart saiu da mesa/);
 });

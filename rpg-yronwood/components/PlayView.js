@@ -22,7 +22,7 @@ import { chestStatus, asSystemSkills } from "../lib/game-system.mjs";
 import VoiceControl, { ListenButton } from "./VoiceControl";
 import { asCombat, asCombatEnded, combatActions, ENEMY_STATUSES, partyRoster, partyActor } from "../lib/play-extras.mjs";
 import { RoomPanel } from "./RoomJoin";
-import { isMyTurn, roomTurnName, myRoomMember } from "../lib/rooms.mjs";
+import { isMyTurn, roomTurnName, myRoomMember, roomPhotoFor, nameKey } from "../lib/rooms.mjs";
 
 /** Botão de refazer na última resposta do Mestre, com o jeito da nova versão. */
 function RedoMenu({ styles = [], onRedo }) {
@@ -500,6 +500,7 @@ export default function PlayView(props) {
     onRetryCloud,
     onSyncStories,
     onPassRoomTurn,
+    onRejoinRoom,
     onSetRoomSlots,
     syncInfo,
     onTestOnline,
@@ -598,9 +599,15 @@ export default function PlayView(props) {
 
   // Retrato de quem fala: o jogador ou um NPC conhecido desta história.
   const knownSpeakers = Object.keys({ ...(c.relationships || {}), ...(c.worldState?.npcs || {}) });
+  // Retrato de quem falou numa mensagem de jogador: na mesa online, cada um tem o seu.
+  const playerPhoto = (speaker) => {
+    if (!c.roomId || !speaker || nameKey(speaker) === nameKey(c.charName)) return c.portraitUrl || null;
+    return roomPhotoFor(c, speaker) || null;
+  };
   const portraitFor = (speaker, isPlayer) => {
     if (c.useImages === false) return null;
-    if (isPlayer) return c.portraitUrl || null;
+    if (isPlayer) return playerPhoto(speaker);
+    if (c.roomId && roomPhotoFor(c, speaker)) return roomPhotoFor(c, speaker);
     const key = String(speaker || "").trim().toLowerCase();
     const match = knownSpeakers.find((n) => n.toLowerCase() === key) || knownSpeakers.find((n) => n.toLowerCase().split(/\s+/).includes(key));
     return match ? npcPortraitUrl(match, c.worldState?.npcs?.[match] || "", c.world, c.portraitStyle) : null;
@@ -888,9 +895,9 @@ export default function PlayView(props) {
                       className={`msg ${isUser ? "user" : ""} ${isAuto ? "auto" : ""} ${isError ? "error" : ""} ${talky ? "scene-talk" : ""} ${message?.streaming ? "streaming" : ""}`}
                     >
                       {talky ? null : (
-                        isUser && c?.portraitUrl ? (
+                        isUser && c.useImages !== false && playerPhoto(message?.speaker) ? (
                           <div className="msg-avatar has-portrait">
-                            <img src={c.portraitUrl} alt="" width={34} height={34} />
+                            <img src={playerPhoto(message?.speaker)} alt="" width={34} height={34} />
                           </div>
                         ) : (
                           <div className={`msg-avatar ${isUser ? "" : "narrator"}`}>
@@ -940,10 +947,10 @@ export default function PlayView(props) {
               <CombatBar campaign={c} mode={combatBarMode} onMode={setCombatBarMode} onEnd={onEndCombat} onPick={(text) => { setInput(text); taRef.current?.focus(); }} />
               <PartyTurn campaign={c} onSetTurn={onSetPartyTurn} myUid={myUid} />
               {c.roomId && !isMyTurn(c, myUid) ? (
-                <div className="room-wait" role="status"><i className="ti ti-hourglass" aria-hidden="true" /> Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>{roomMe ? <> · você é <strong>{roomMe.name}</strong></> : null}. A história atualiza sozinha quando ele jogar.</div>
+                <div className="room-wait" role="status">{roomPhotoFor(c, roomTurnName(c)) ? <img className="turn-face" src={roomPhotoFor(c, roomTurnName(c))} alt="" width={28} height={28} /> : <i className="ti ti-hourglass" aria-hidden="true" />} Vez de <strong>{roomTurnName(c) || "outro jogador"}</strong>{roomMe ? <> · você é <strong>{roomMe.name}</strong></> : null}. A história atualiza sozinha quando ele jogar.</div>
               ) : c.roomId && roomMe && (c.roomMembers || []).length > 1 ? (
                 <div className="room-wait my-turn" role="status">
-                  <i className="ti ti-player-play" aria-hidden="true" /> <span><strong>Sua vez</strong>, {roomMe.name}! Diga o que você faz.</span>
+                  {c.portraitUrl && c.useImages !== false ? <img className="turn-face" src={c.portraitUrl} alt="" width={28} height={28} /> : <i className="ti ti-player-play" aria-hidden="true" />} <span><strong>Sua vez</strong>, {roomMe.name}! Diga o que você faz.</span>
                   {onPassRoomTurn ? <button type="button" className="btn-ghost" onClick={onPassRoomTurn} disabled={loading}>Passar a vez</button> : null}
                 </div>
               ) : null}
@@ -1100,14 +1107,7 @@ export default function PlayView(props) {
           </div>
 
           <div className={`panel ${playPanel === "sheet" ? "active" : ""}`}>
-            {roomMe && roomMe.uid !== c.roomOwnerUid ? (
-              <div className="my-char-card">
-                <div className="section-label">Seu personagem nesta mesa</div>
-                <strong>{roomMe.name}</strong>{roomMe.role ? <span> · {roomMe.role}</span> : null}
-                {roomMe.concept ? <p>{roomMe.concept}</p> : null}
-                <p className="settings-hint">A ficha completa abaixo (nível, atributos, vida) é de {c.charName || "personagem principal"}, o personagem de quem criou a sala.</p>
-              </div>
-            ) : null}
+            {c.roomId ? <p className="settings-hint">Mesa online: esta ficha, os itens e o Sistema são só seus. Os outros jogadores não veem.</p> : null}
             <div>
               <div className="panel-title">Ficha do personagem</div>
               <div className="panel-sub">{c.charName || "Herói sem nome"}{c.charTitle ? ` · ${c.charTitle}` : ""}</div>
@@ -1694,7 +1694,7 @@ export default function PlayView(props) {
               </div>
               <div className="settings-block">
                 <div className="section-label">Jogar online com amigos</div>
-                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} serverStatus={serverOnline} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} onPass={onPassRoomTurn} onSetSlots={onSetRoomSlots} />
+                <RoomPanel campaign={c} myUid={myUid} busy={roomBusy} serverStatus={serverOnline} onCreate={onCreateRoom} onLeave={onLeaveRoom} onSetTurn={onSetRoomTurn} onPass={onPassRoomTurn} onSetSlots={onSetRoomSlots} onRejoin={onRejoinRoom} />
               </div>
               {!c.roomId ? (
                 <div className="settings-block">

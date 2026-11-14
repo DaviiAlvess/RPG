@@ -1626,11 +1626,11 @@ export default function RPG() {
   // Antes de entrar: quem está na mesa e quais personagens ainda estão livres.
   const peekRoom = async (code) => roomCall({ action: "peek", code });
 
-  const joinRoom = async ({ code, charName, charConcept, charRole, charLook, charPhoto }) => {
+  const joinRoom = async ({ code, charName, charConcept, charRole, charLook, charPhoto, fromStory = false }) => {
     if (roomBusy) return;
     setRoomBusy(true);
     try {
-      const data = await roomCall({ action: "join", code, charName, charConcept, charRole, charLook, charPhoto });
+      const data = await roomCall({ action: "join", code, charName, charConcept, charRole, charLook, charPhoto, fromStory });
       // Já tenho esta mesa neste aparelho (estou nela, ou saí e estou voltando)? Reaproveita o registro.
       let id = null;
       let rec = null;

@@ -259,7 +259,12 @@ export function actorPrefix(camp = {}, text = "") {
 export function roomArrivalLines(camp = {}) {
   const list = Array.isArray(camp.roomArrivals) ? camp.roomArrivals.filter((a) => a?.name) : [];
   if (!list.length) return [];
-  const told = list.map((a) => (a.kind === "saiu" ? `${a.name} saiu da mesa` : a.kind === "volta" ? `${a.name} voltou à mesa` : `${a.name} acabou de entrar na mesa`)).join("; ");
+  const told = list.map((a) => (
+    a.kind === "saiu" ? `${a.name} saiu da mesa`
+      : a.kind === "volta" ? `${a.name} voltou à mesa`
+        : a.kind === "assumiu" ? `${a.name}, que já existia na história, agora é jogado por uma pessoa da mesa (o Mestre não fala, não decide e não sente mais por ${a.name}; mantenha o que já se sabe sobre ele)`
+          : `${a.name} acabou de entrar na mesa`
+  )).join("; ");
   return [`MUDANÇAS NA MESA DESDE A ÚLTIMA CENA: ${told}. Encaixe isso na cena atual com naturalidade: quem entrou ou voltou aparece onde a história está agora (sem recomeçar nada); quem saiu se afasta de um jeito plausível e pode voltar depois.`];
 }
 

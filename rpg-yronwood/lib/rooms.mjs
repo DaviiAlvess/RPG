@@ -148,6 +148,28 @@ export function freeSlots(slots = [], members = []) {
   return (Array.isArray(slots) ? slots : []).filter((s) => !taken.has(nameKey(s.name)));
 }
 
+/**
+ * Personagens que já existem na história (NPCs que o Mestre apresentou) e que alguém da mesa pode assumir.
+ * Tira quem já é de um jogador (ou está reservado); os vistos mais recentemente vêm primeiro.
+ */
+export function storyCharacters(story = {}, taken = [], { limit = 12 } = {}) {
+  const npcs = story.npcs ?? story.worldState?.npcs ?? {};
+  const rels = story.relationships ?? {};
+  const seen = story.npcSeen ?? {};
+  const blocked = new Set(taken.map(nameKey).filter(Boolean));
+  const out = [];
+  const add = (rawName, facts = "") => {
+    const name = clip(rawName, 60);
+    const key = nameKey(name);
+    if (!key || blocked.has(key) || out.some((c) => nameKey(c.name) === key)) return;
+    const parts = String(facts || "").split(";").map((x) => clip(x, 120)).filter(Boolean);
+    out.push({ name, role: clip(parts[0], 80), about: clip(parts.slice(0, 3).join("; "), 200), facts: clip(facts, 400), turn: Number(seen[name]?.turn) || 0 });
+  };
+  for (const [name, facts] of Object.entries(npcs && typeof npcs === "object" ? npcs : {})) add(name, facts);
+  for (const name of Object.keys(rels && typeof rels === "object" ? rels : {})) add(name, "");
+  return out.sort((a, b) => b.turn - a.turn).slice(0, limit).map(({ turn, ...c }) => c);
+}
+
 /** O personagem deste aparelho numa sala. */
 export const myRoomMember = (camp = {}, uid = "") => (camp.roomMembers || []).find((m) => m.uid === uid) || null;
 
@@ -170,7 +192,7 @@ export function roomPartyFields(room = {}, members = [], myUid = "") {
     roomCode: room.code,
     roomVersion: Number(room.version) || 1,
     roomStoryRev: room.story_rev != null ? Number(room.story_rev) || 1 : undefined,
-    roomArrivals: Array.isArray(room.arrivals) ? room.arrivals.filter((a) => a && a.name).map((a) => ({ id: String(a.id), name: clip(a.name, 60), kind: ["chegou", "volta", "saiu"].includes(a.kind) ? a.kind : "chegou" })) : undefined,
+    roomArrivals: Array.isArray(room.arrivals) ? room.arrivals.filter((a) => a && a.name).map((a) => ({ id: String(a.id), name: clip(a.name, 60), kind: ["chegou", "volta", "saiu", "assumiu"].includes(a.kind) ? a.kind : "chegou" })) : undefined,
     roomOwnerUid: room.owner_uid,
     roomTurnUid: room.turn_uid || owner?.uid || "",
     roomMembers: list,

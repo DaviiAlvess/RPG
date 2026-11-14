@@ -3,7 +3,8 @@
 // checa se ele é membro da sala (e se é a vez dele) e só então lê ou grava com a chave secreta.
 import { bearerToken, takeRateLimit, verifyIdToken } from "../../lib/verify-id-token.mjs";
 import { supabaseRest, httpError, netReason } from "../../lib/supabase-rest.mjs";
-import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember, cleanSlots, freeSlots, nameKey, cleanSheet, isPortraitUrl } from "../../lib/rooms.mjs";
+import { ROOM_MAX_PLAYERS, isRoomCode, newRoomCode, nextTurnUid, normalizeRoomCode, roomCampaignPayload, cleanMember, cleanSlots, freeSlots, nameKey, cleanSheet, isPortraitUrl, storyCharacters } from "../../lib/rooms.mjs";
+import { npcPortraitUrl } from "../../lib/appearance.mjs";
 
 export { supabaseRest };
 
@@ -13,6 +14,15 @@ const clip = (v, n) => String(v || "").replace(/\s+/g, " ").trim().slice(0, n);
 
 const eq = (v) => `eq.${encodeURIComponent(String(v))}`;
 const ROOM_FIELDS = "id,code,owner_uid,title,version,turn_uid,status,updated_at,slots,story_rev,arrivals";
+// Só o pedaço da história que a tela de entrar precisa (sem baixar a campanha inteira).
+const STORY_PEEK = "story_npcs:campaign->worldState->npcs,story_rel:campaign->relationships,story_seen:campaign->npcSeen,story_world:campaign->world,story_style:campaign->portraitStyle";
+const storyPeek = (row = {}) => ({
+  npcs: row.story_npcs ?? row.campaign?.worldState?.npcs ?? {},
+  relationships: row.story_rel ?? row.campaign?.relationships ?? {},
+  npcSeen: row.story_seen ?? row.campaign?.npcSeen ?? {},
+  world: row.story_world ?? row.campaign?.world ?? row.title ?? "",
+  portraitStyle: row.story_style ?? row.campaign?.portraitStyle ?? "",
+});
 
 async function loadMembers(db, roomId) {
   return (await db.select("rpg_room_members", `room_id=${eq(roomId)}&select=uid,char_name,char_concept,char_role,char_photo,char_look,seat,active&order=seat.asc`)) || [];
@@ -84,10 +94,13 @@ export async function handleRoomAction(db, uid, body = {}) {
   if (action === "peek") {
     const code = normalizeRoomCode(body.code);
     if (!isRoomCode(code)) throw httpError(400, "Código de sala inválido.", "BAD_CODE");
-    const [found] = (await db.select("rpg_rooms", `code=${eq(code)}&select=${ROOM_FIELDS}`)) || [];
+    const [found] = (await db.select("rpg_rooms", `code=${eq(code)}&select=${ROOM_FIELDS},${STORY_PEEK}`)) || [];
     if (!found || found.status !== "open") throw httpError(404, "Sala não encontrada ou fechada.", "ROOM_NOT_FOUND");
     const members = await loadMembers(db, found.id);
     const list = members.map(cleanMember);
+    const story = storyPeek(found);
+    const takenNames = [...list.map((m) => m.name), ...(Array.isArray(found.slots) ? found.slots.map((sl) => sl?.name) : [])];
+    const storyChars = storyCharacters(story, takenNames).map((ch) => ({ name: ch.name, role: ch.role, about: ch.about, photo: npcPortraitUrl(ch.name, ch.facts, story.world, story.portraitStyle || "painted") }));
     return {
       room: { code: found.code, title: found.title },
       // Sem uid: quem ainda não entrou só vê nomes e papéis.
@@ -96,6 +109,7 @@ export async function handleRoomAction(db, uid, body = {}) {
         return { name: c.name, concept: c.concept, role: c.role, photo: c.photo, seat: c.seat, owner: m.uid === found.owner_uid, away: !c.active };
       }),
       slots: freeSlots(found.slots, list),
+      storyChars,
       isMember: members.some((m) => m.uid === uid),
       myName: cleanMember(members.find((m) => m.uid === uid) || {}).name || "",
       full: present(members).length >= ROOM_MAX_PLAYERS && !members.some((m) => m.uid === uid),
@@ -130,14 +144,18 @@ export async function handleRoomAction(db, uid, body = {}) {
         throw httpError(409, `${charName} já é o personagem de outro jogador. Escolha outro.`, "NAME_TAKEN");
       }
       const slot = (Array.isArray(found.slots) ? found.slots : []).find((sl) => nameKey(sl?.name) === nameKey(charName));
+      // Personagem que já existe na história (NPC): o jogador assume, com o que a história já sabe dele.
+      const fromStory = !slot && body.fromStory
+        ? storyCharacters(storyPeek(found), members.map((m) => m.char_name), { limit: 200 }).find((ch) => nameKey(ch.name) === nameKey(charName))
+        : null;
       const seat = Math.max(-1, ...members.map((m) => m.seat)) + 1;
       try {
         await db.insert("rpg_room_members", {
           room_id: found.id,
           uid,
-          char_name: slot ? clip(slot.name, 60) : charName,
-          char_concept: clip(body.charConcept || slot?.concept, 200),
-          char_role: clip(body.charRole || slot?.role, 80),
+          char_name: slot ? clip(slot.name, 60) : fromStory ? fromStory.name : charName,
+          char_concept: clip(body.charConcept || slot?.concept || fromStory?.about, 200),
+          char_role: clip(body.charRole || slot?.role || fromStory?.role, 80),
           char_look: clip(body.charLook || slot?.look, 200),
           char_photo: photoOf(body.charPhoto || slot?.photo),
           seat,
@@ -148,7 +166,7 @@ export async function handleRoomAction(db, uid, body = {}) {
         throw e;
       }
       // Avisa a mesa e o Mestre que alguém chegou (sobe a versão; a jogada de quem está na vez não se perde).
-      const arrivals = withArrival(found.arrivals, { name: slot ? clip(slot.name, 60) : charName, kind: "chegou" }, now);
+      const arrivals = withArrival(found.arrivals, { name: slot ? clip(slot.name, 60) : fromStory ? fromStory.name : charName, kind: fromStory ? "assumiu" : "chegou" }, now);
       await db.update("rpg_rooms", `id=${eq(found.id)}`, { version: found.version + 1, arrivals, updated_at: now });
       found.version += 1;
       found.arrivals = arrivals;

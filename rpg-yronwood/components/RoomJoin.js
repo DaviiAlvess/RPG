@@ -40,7 +40,7 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
     try {
       const found = await onPeek(value);
       setInfo(found);
-      setPick(found.slots?.length ? found.slots[0].name : NEW_CHAR);
+      setPick(found.slots?.length ? found.slots[0].name : found.storyChars?.length ? `story:${found.storyChars[0].name}` : NEW_CHAR);
     } catch (e) {
       setInfo(null);
       setError(e.message || "Não deu para achar a sala.");
@@ -54,7 +54,8 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
   const taken = new Set((info?.members || []).map((m) => nameKey(m.name)));
   const clash = pick === NEW_CHAR && name.trim() && taken.has(nameKey(name));
   const slot = (info?.slots || []).find((s) => s.name === pick);
-  const ready = Boolean(info) && !info.full && (info.isMember || slot || (pick === NEW_CHAR && name.trim() && !clash));
+  const storyChar = (info?.storyChars || []).find((ch) => `story:${ch.name}` === pick);
+  const ready = Boolean(info) && !info.full && (info.isMember || slot || storyChar || (pick === NEW_CHAR && name.trim() && !clash));
 
   const submit = (e) => {
     e.preventDefault();
@@ -62,7 +63,9 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
     if (!info) { look(); return; }
     if (info.isMember) { onJoin?.({ code }); return; }
     if (!ready) return;
-    if (slot) {
+    if (storyChar) {
+      onJoin?.({ code, charName: storyChar.name, charConcept: storyChar.about, charRole: storyChar.role, charPhoto: storyChar.photo, fromStory: true });
+    } else if (slot) {
       const slotPhoto = slot.photo || memberPortraitUrl({ ...slot, world: info?.room?.title });
       onJoin?.({ code, charName: slot.name, charLook: slot.look, charPhoto: slotPhoto });
     } else {
@@ -103,6 +106,7 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
             ) : (
               <fieldset className="char-pick">
                 <legend>Escolha o seu personagem</legend>
+                {(info.slots || []).length ? <p className="char-pick-group">Personagens preparados por quem criou a sala</p> : null}
                 {(info.slots || []).map((s) => (
                   <label key={s.name} className={`char-option ${pick === s.name ? "on" : ""}`}>
                     <input type="radio" name="char-pick" checked={pick === s.name} onChange={() => setPick(s.name)} />
@@ -110,6 +114,15 @@ export function RoomJoinModal({ initialCode = "", busy = false, onPeek, onJoin, 
                     <span><span><strong>{s.name}</strong>{s.role ? <em> · {s.role}</em> : null}</span>{s.concept ? <small>{s.concept}</small> : null}</span>
                   </label>
                 ))}
+                {(info.storyChars || []).length ? <p className="char-pick-group">Personagens que já estão na história</p> : null}
+                {(info.storyChars || []).map((ch) => (
+                  <label key={`story-${ch.name}`} className={`char-option ${pick === `story:${ch.name}` ? "on" : ""}`}>
+                    <input type="radio" name="char-pick" checked={pick === `story:${ch.name}`} onChange={() => setPick(`story:${ch.name}`)} />
+                    <MemberFace photo={ch.photo} size={44} />
+                    <span><span><strong>{ch.name}</strong>{ch.role ? <em> · {ch.role}</em> : null}</span>{ch.about ? <small>{ch.about}</small> : null}<small>Você assume este personagem; o Mestre para de jogar por ele.</small></span>
+                  </label>
+                ))}
+                {(info.storyChars || []).length || (info.slots || []).length ? <p className="char-pick-group">Ou um personagem novo</p> : null}
                 <label className={`char-option ${pick === NEW_CHAR ? "on" : ""}`}>
                   <input type="radio" name="char-pick" checked={pick === NEW_CHAR} onChange={() => setPick(NEW_CHAR)} />
                   <span><strong>Criar meu próprio personagem</strong><small>Com nome, jeito e papel no grupo.</small></span>

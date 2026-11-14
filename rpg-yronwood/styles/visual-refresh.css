@@ -840,3 +840,5 @@ button:disabled { cursor: not-allowed; }
 
 .room-members li.away, .room-peek li.away { opacity: .65; }
 .room-peek li > span { display: inline; }
+
+.char-pick-group { margin: 6px 0 0; font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-secondary, inherit); }

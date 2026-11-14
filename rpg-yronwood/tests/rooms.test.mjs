@@ -353,3 +353,34 @@ test('mesa online: entrar no meio da jogada de alguém não estraga a jogada, e 
   const solo = await handleRoomAction(db, 'dono', { action: 'get', roomId: room.id });
   assert.match(partyPromptLines({ charName: 'Tom Carlos', ...roomPartyFields(solo.room, solo.members, 'dono') }).join(' '), /Bart saiu da mesa/);
 });
+
+test('mesa online: quem entra pode assumir um personagem que já existe na história', async () => {
+  const db = fakeDb();
+  const story = {
+    world: 'Springfield', msgs: [],
+    worldState: { npcs: { 'Bart Simpson': 'pestinha; sarcástico, fala rápido; escola; pichou o muro', 'Diretor Skinner': 'diretor; tenso; escola', 'Tom Carlos': 'erro: é o personagem do dono' } },
+    relationships: { 'Nelson': 'Hostil', 'Bart Simpson': 'Amigável' },
+    npcSeen: { 'Diretor Skinner': { turn: 9 }, 'Bart Simpson': { turn: 3 } },
+  };
+  const { room } = await handleRoomAction(db, 'dono', { action: 'create', campaign: story, charName: 'Tom Carlos', slots: [{ name: 'Nelson', role: 'valentão' }] });
+  const peek = await handleRoomAction(db, 'ana', { action: 'peek', code: room.code });
+  // da história: sem o personagem do dono, sem vaga repetida, sem duplicar, visto por último primeiro
+  assert.deepEqual(peek.storyChars.map((c) => c.name), ['Diretor Skinner', 'Bart Simpson']);
+  const bart = peek.storyChars.find((c) => c.name === 'Bart Simpson');
+  assert.equal(bart.role, 'pestinha');
+  assert.match(bart.about, /sarcástico/);
+  assert.ok(isPortraitUrl(bart.photo), 'mesmo retrato que a história já usa');
+  // Ana assume o Bart
+  const joined = await handleRoomAction(db, 'ana', { action: 'join', code: room.code, charName: 'bart simpson', fromStory: true, charPhoto: bart.photo });
+  const linha = db.tables.rpg_room_members.find((m) => m.uid === 'ana');
+  assert.equal(linha.char_name, 'Bart Simpson', 'usa o nome como está na história');
+  assert.equal(linha.char_role, 'pestinha');
+  assert.match(linha.char_concept, /sarcástico/);
+  assert.equal(db.tables.rpg_rooms[0].arrivals.at(-1).kind, 'assumiu');
+  // o Mestre é avisado que não joga mais pelo Bart
+  const fields = roomPartyFields(joined.room, joined.members, 'dono');
+  assert.match(partyPromptLines({ charName: 'Tom Carlos', ...fields }).join(' '), /Bart Simpson, que já existia na história, agora é jogado por uma pessoa da mesa/);
+  // ninguém mais pode pegar o Bart
+  assert.deepEqual((await handleRoomAction(db, 'bia', { action: 'peek', code: room.code })).storyChars.map((c) => c.name), ['Diretor Skinner']);
+  await assert.rejects(handleRoomAction(db, 'bia', { action: 'join', code: room.code, charName: 'Bart Simpson', fromStory: true }), /já é o personagem de outro jogador/);
+});

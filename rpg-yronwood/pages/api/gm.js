@@ -19,6 +19,17 @@ const fallbackModels = () => [
   "gemini-flash-lite-latest",
   "gemini-2.5-flash",
 ];
+// Modelo que demorou demais: vai para o fim da fila por alguns minutos (o reserva, mais rápido, assume).
+const slowModels = new Map();
+export const SLOW_MODEL_MS = 5 * 60 * 1000;
+export function markSlowModel(model, ms = SLOW_MODEL_MS) { slowModels.set(String(model), Date.now() + ms); }
+export function orderModels(list) {
+  const now = Date.now();
+  const isSlow = (m) => (slowModels.get(String(m)) || 0) > now;
+  return [...list.filter((m) => !isSlow(m)), ...list.filter(isSlow)];
+}
+// Tempo total de um pedido (o servidor pode ir até 120 s; a margem fica para responder).
+export const HANDLER_BUDGET_MS = 110000;
 export const GM_DEADLINE_MS = 50000;
 export const MAX_DEADLINE_MS = 52000;
 const MIN_ATTEMPTS = 1;
@@ -141,7 +152,7 @@ export function joinContinuation(partial, more) {
 }
 
 
-export const config = { maxDuration: 60, api: { bodyParser: { sizeLimit: "2mb" }, responseLimit: false } };
+export const config = { maxDuration: 120, api: { bodyParser: { sizeLimit: "2mb" }, responseLimit: false } };
 
 // ─── Texto em tempo real (streaming) ──────────────────────────────────
 /** Separa eventos "data: {...}" de um trecho de SSE. Devolve { events, rest }. */
@@ -171,7 +182,7 @@ const sseWrite = (res, payload) => {
  * aí o cliente usa o caminho normal, com todas as tentativas e o rodízio de chaves.
  */
 async function streamNarration(res, body, modelo, keys) {
-  const models = [...new Set([modelName(modelo), ...fallbackModels()])];
+  const models = orderModels([...new Set([modelName(modelo), ...fallbackModels()])]);
   let modelIdx = 0;
   const startedAt = Date.now();
   const deadline = startedAt + GM_DEADLINE_MS;
@@ -199,8 +210,14 @@ async function streamNarration(res, body, modelo, keys) {
       upstream = await open(true);
       // Modelo que não aceita a configuração de raciocínio: repete sem ela.
       if (upstream.status === 400 && addsThinking(body, models[modelIdx])) upstream = await open(false);
-    } catch {
+    } catch (err) {
       clearTimeout(timer);
+      if (err?.name === "AbortError" && modelIdx < models.length - 1) {
+        // O modelo não começou a responder a tempo: tenta já o próximo (mais rápido), com a mesma chave.
+        markSlowModel(models[modelIdx]);
+        modelIdx += 1;
+        continue;
+      }
       tried.add(key);
       continue;
     }
@@ -324,6 +341,7 @@ export function readGmRequestBody(raw) {
 }
 
 export default async function handler(req, res) {
+  const handlerStartedAt = Date.now();
   // GEMINI_NARRATOR_MODEL troca o narrador; GEMINI_MODEL vira a reserva logo atrás dele.
   const MODELO_GM = modelName(process.env.GEMINI_NARRATOR_MODEL || DEFAULT_NARRATOR_MODEL);
   const MODELO_LORE = modelName(process.env.GEMINI_LORE_MODEL || process.env.GEMINI_NARRATOR_MODEL || DEFAULT_NARRATOR_MODEL);
@@ -406,12 +424,14 @@ export default async function handler(req, res) {
 
   const chamarGemini = async (body, modelo) => {
     const maxAttempts = Math.min(Math.max(chavesUnicas.length, MIN_ATTEMPTS), MAX_ATTEMPTS_CAP);
-    const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS);
+    const leftInRequest = handlerStartedAt + HANDLER_BUDGET_MS - Date.now();
+    if (leftInRequest < 8000) throw Object.assign(new Error("O Mestre demorou para responder. Tente de novo; o que já foi combinado permanece."), { status: 504, code: "TIMEOUT" });
+    const deadlineMs = Math.min(MAX_DEADLINE_MS, GM_DEADLINE_MS, leftInRequest);
     // Do not divide the budget by every key: a long narrate (identity + lore +
     // intervenção do Mestre) often needs 15–30s on lite. Starving the first call
     // to ~5–12s is what surfaces "O Mestre demorou para responder".
     const perRequestMs = Math.min(PER_REQUEST_MS, Math.max(MIN_PER_REQUEST_MS, deadlineMs - 4000));
-    const models = [...new Set([modelName(modelo), ...fallbackModels()])];
+    const models = orderModels([...new Set([modelName(modelo), ...fallbackModels()])]);
     let modelIdx = 0;
     let apiVersion = "v1beta";
     let lastError = null;
@@ -594,6 +614,11 @@ export default async function handler(req, res) {
         if (err.fatal) throw err;
         triedThisCall.add(apiKey);
         const timedOut = err.name === "AbortError";
+        if (timedOut && modelPos < models.length - 1) {
+          // Demorou demais: o próximo pedido vai direto para o modelo seguinte.
+          markSlowModel(modeloAtual);
+          modelIdx = Math.max(modelIdx, modelPos + 1);
+        }
         const networkErr = new Error(timedOut
           ? "O Mestre demorou para responder. Tente novamente; o que já foi combinado permanece."
           : "Não foi possível conectar ao Mestre. Tente novamente.");
@@ -616,7 +641,8 @@ export default async function handler(req, res) {
   const chamarGeminiComBusca = async (body, modelo) => {
     try {
       return await chamarGemini(withGoogleSearch(body), modelo);
-    } catch {
+    } catch (error) {
+      if (handlerStartedAt + HANDLER_BUDGET_MS - Date.now() < 15000) throw error;
       return chamarGemini(body, modelo);
     }
   };
